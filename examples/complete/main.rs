@@ -3,7 +3,7 @@
 use data::{make_tree, TreeNode, Visitable};
 use eframe::egui;
 use egui::Ui;
-use egui_ltreeview::v2::TreeViewBuilder;
+use egui_ltreeview::TreeViewBuilder;
 use visitor::{
     DropAllowedVisitor, InsertNodeVisitor, RemoveNodeVisitor, SearchVisitor, TreeViewVisitor,
 };
