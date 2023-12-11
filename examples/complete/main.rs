@@ -49,6 +49,13 @@ fn show_tree(ui: &mut Ui, tree: &mut TreeNode) {
         tree.walk(&mut TreeViewVisitor { builder: root });
     });
 
+    if let Some(selected_id) = tree_res.selected_node {
+        SearchVisitor::new(selected_id, |selected| {
+            ui.label(format!("selected: {}", selected.name()));
+        })
+        .search_in(tree);
+    }
+
     if let Some(drop_action) = &tree_res.drag_drop_action {
         // Test if drop is valid
         let drop_allowed = {

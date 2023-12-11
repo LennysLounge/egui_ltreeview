@@ -94,9 +94,6 @@ impl<'a> TreeViewBuilder<'a> {
             },
         );
 
-        state.was_dragged_last_frame = drag.is_some();
-        store(ui, base_id, state);
-
         let drag_drop_action =
             drag.zip(drop)
                 .map(|(drag_id, (drop_id, position))| DragDropAction {
@@ -105,6 +102,10 @@ impl<'a> TreeViewBuilder<'a> {
                     position,
                 });
         let dropped = ui.ctx().input(|i| i.pointer.any_released()) && drag_drop_action.is_some();
+        let selected_node = state.selected;
+
+        state.was_dragged_last_frame = drag.is_some();
+        store(ui, base_id, state);
 
         TreeViewResponse {
             response: res.response,
@@ -112,6 +113,7 @@ impl<'a> TreeViewBuilder<'a> {
             drag_drop_action,
             _id: base_id,
             drop_marker_idx,
+            selected_node,
         }
     }
 
@@ -408,6 +410,8 @@ pub struct TreeViewResponse {
     pub drag_drop_action: Option<DragDropAction>,
     /// `true` if a drag and drop was performed
     pub dropped: bool,
+    /// Id of the selected node.
+    pub selected_node: Option<Uuid>,
     _id: Id,
     drop_marker_idx: ShapeIdx,
 }
