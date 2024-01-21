@@ -40,13 +40,13 @@ impl eframe::App for MyApp {
     }
 }
 
-fn show_node(builder: &mut TreeViewBuilder, node: &Node) {
+fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
     match node {
         Node::Directory(dir) => show_dir(builder, dir),
         Node::File(file) => show_file(builder, file),
     }
 }
-fn show_dir(builder: &mut TreeViewBuilder, dir: &Directory) {
+fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.dir(&dir.id, |ui| {
         ui.label(&dir.name);
     });
@@ -57,7 +57,7 @@ fn show_dir(builder: &mut TreeViewBuilder, dir: &Directory) {
 
     builder.close_dir();
 }
-fn show_file(builder: &mut TreeViewBuilder, file: &File) {
+fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
     builder.leaf(&file.id, |ui| {
         ui.label(&file.name);
     });

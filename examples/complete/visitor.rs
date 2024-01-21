@@ -41,7 +41,7 @@ impl NodeVisitor for PrintTreeListing {
 }
 
 pub struct TreeViewVisitor<'a> {
-    pub builder: TreeViewBuilder<'a>,
+    pub builder: TreeViewBuilder<'a, Uuid>,
 }
 impl NodeVisitor for TreeViewVisitor<'_> {
     fn visit_dir(&mut self, dir: &Directory) -> ControlFlow<()> {
@@ -103,7 +103,7 @@ impl NodeVisitorMut for RemoveNodeVisitor {
 
 pub struct InsertNodeVisitor {
     pub target_id: Uuid,
-    pub position: DropPosition,
+    pub position: DropPosition<Uuid>,
     // Option so we can leave an empty spot without moving any part of the parent struct.
     pub node: Option<TreeNode>,
 }
