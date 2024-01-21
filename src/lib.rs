@@ -1,12 +1,14 @@
+mod row;
+
 use egui::{
     self,
     epaint::{self, RectShape},
     layers::ShapeIdx,
     pos2,
     util::id_type_map::SerializableAny,
-    vec2, CursorIcon, Id, InnerResponse, LayerId, Layout, Order, PointerButton, Pos2, Rangef, Rect,
-    Response, Sense, Shape, Stroke, Ui, Vec2,
+    Id, Layout, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
+use row::{DropQuarter, Row, RowResponse};
 
 /// Contains information about a drag and drop that the
 /// tree view produced.
@@ -130,35 +132,26 @@ where
         }
     }
 
-    pub fn leaf(
-        &mut self,
-        id: &NodeIdType,
-        mut add_content: impl FnMut(&mut Ui),
-    ) -> Option<Response> {
+    pub fn leaf(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) -> Option<Response> {
         if !self.parent_dir_is_open() {
             return None;
         }
 
-        let mut row_config = Row {
+        let row_config = Row {
             id: *id,
             drop_on_allowed: false,
             is_open: false,
-            add_content: &mut add_content,
-            add_icon: None,
+            is_dir: false,
             depth: self.stack.len(),
         };
-        let row_response = self.row(&mut row_config);
+        let row_response = self.row(&row_config, add_content, None);
 
         self.push_child_node_position(row_response.visual.rect.center());
 
         Some(row_response.interaction)
     }
 
-    pub fn dir(
-        &mut self,
-        id: &NodeIdType,
-        mut add_content: impl FnMut(&mut Ui),
-    ) -> Option<Response> {
+    pub fn dir(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) -> Option<Response> {
         if !self.parent_dir_is_open() {
             self.stack.push(DirectoryState {
                 is_open: false,
@@ -182,12 +175,11 @@ where
             icon_res
         };
 
-        let mut node_config = Row {
+        let row_config = Row {
             id: *id,
             drop_on_allowed: true,
             is_open: open,
-            add_content: &mut add_content,
-            add_icon: Some(&mut add_icon),
+            is_dir: true,
             depth: self.stack.len(),
         };
 
@@ -196,7 +188,7 @@ where
             visual,
             icon,
             ..
-        } = self.row(&mut node_config);
+        } = self.row(&row_config, add_content, Some(&mut add_icon));
 
         if interaction.double_clicked() {
             open = !open;
@@ -279,8 +271,13 @@ where
         self.stack.pop();
     }
 
-    fn row(&mut self, row_config: &mut Row<NodeIdType>) -> RowResponse {
-        let row_response = row_config.row(self.ui);
+    fn row(
+        &mut self,
+        row_config: &Row<NodeIdType>,
+        mut add_label: impl FnMut(&mut Ui),
+        mut add_icon: Option<&mut dyn FnMut(&mut Ui) -> Response>,
+    ) -> RowResponse {
+        let row_response = row_config.show(self.ui, &mut add_label, &mut add_icon);
 
         if row_response.interaction.clicked() {
             *self.selected = Some(row_config.id);
@@ -474,184 +471,6 @@ impl<NodeIdType> TreeViewResponse<NodeIdType> {
     pub fn remove_drop_marker(&self, ui: &mut Ui) {
         ui.painter().set(self.drop_marker_idx, Shape::Noop);
     }
-}
-
-struct Row<'a, NodeIdType> {
-    id: NodeIdType,
-    depth: usize,
-    drop_on_allowed: bool,
-    is_open: bool,
-    add_content: &'a mut dyn FnMut(&mut Ui),
-    add_icon: Option<&'a mut dyn FnMut(&mut Ui) -> Response>,
-}
-
-impl<NodeIdType> Row<'_, NodeIdType>
-where
-    NodeIdType: Clone + std::hash::Hash,
-{
-    fn row(&mut self, ui: &mut Ui) -> RowResponse {
-        // Load row data
-        let row_id = ui.id().with(self.id.clone()).with("row");
-        let row_rect = load(ui, row_id).unwrap_or(Rect::NOTHING);
-
-        // Interact with the row
-        let interaction = interact(ui, row_rect, row_id, Sense::click_and_drag());
-
-        let was_dragged = self.drag(ui, &interaction);
-        let drop_target = self.drop(ui, &interaction);
-
-        let (row_response, icon_response) = self.draw_row(ui);
-
-        store(ui, row_id, row_response.rect);
-
-        RowResponse {
-            interaction,
-            visual: row_response,
-            icon: icon_response,
-            was_dragged,
-            drop_quarter: drop_target,
-        }
-    }
-    /// Draw the content as a drag overlay if it is beeing dragged.
-    fn drag(&mut self, ui: &mut Ui, interaction: &Response) -> bool {
-        if !interaction.dragged_by(PointerButton::Primary)
-            && !interaction.drag_released_by(PointerButton::Primary)
-        {
-            return false;
-        }
-
-        //*self.drag = Some(self.id);
-        ui.ctx().set_cursor_icon(CursorIcon::Alias);
-
-        let drag_source_id = ui.make_persistent_id("Drag source");
-        let drag_offset = if interaction.drag_started_by(PointerButton::Primary) {
-            let drag_offset = ui
-                .ctx()
-                .pointer_latest_pos()
-                .map(|pointer_pos| interaction.rect.min - pointer_pos)
-                .unwrap_or(Vec2::ZERO);
-            store(ui, drag_source_id, drag_offset);
-            drag_offset
-        } else {
-            load(ui, drag_source_id).unwrap_or(Vec2::ZERO)
-        };
-
-        // Paint the content to a new layer for the drag overlay.
-        let layer_id = LayerId::new(Order::Tooltip, drag_source_id);
-
-        let background_rect = ui
-            .child_ui(ui.available_rect_before_wrap(), *ui.layout())
-            .with_layer_id(layer_id, |ui| {
-                let background_position = ui.painter().add(Shape::Noop);
-
-                let (row, _) = self.draw_row(ui);
-
-                ui.painter().set(
-                    background_position,
-                    epaint::RectShape::new(
-                        row.rect,
-                        ui.visuals().widgets.active.rounding,
-                        ui.visuals().selection.bg_fill.linear_multiply(0.4),
-                        Stroke::NONE,
-                    ),
-                );
-                row.rect
-            })
-            .inner;
-
-        // Move layer to the drag position
-        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-            let delta = pointer_pos - background_rect.min + drag_offset;
-            ui.ctx().translate_layer(layer_id, delta);
-        }
-
-        true
-    }
-
-    fn drop(&self, ui: &mut Ui, interaction: &Response) -> Option<DropQuarter> {
-        // For some reason we cannot use the provided interation response
-        // because once a row is dragged all other rows dont offer any hover information.
-        // To fix this we interaction with only hover again.
-        let cursor_y = {
-            let Some(Pos2 { y, .. }) = interact(
-                ui,
-                interaction.rect,
-                ui.make_persistent_id("Drop target"),
-                Sense::hover(),
-            )
-            .hover_pos() else {
-                return None;
-            };
-            y
-        };
-
-        DropQuarter::new(interaction.rect.y_range(), cursor_y)
-    }
-
-    fn draw_row(&mut self, ui: &mut Ui) -> (Response, Option<Response>) {
-        let InnerResponse {
-            inner: icon_response,
-            response: row_response,
-        } = ui.horizontal(|ui| {
-            ui.add_space(ui.spacing().indent * self.depth as f32);
-
-            let icon_pos = ui.cursor().min;
-            if self.add_icon.is_some() {
-                ui.add_space(ui.spacing().icon_width);
-            };
-            (self.add_content)(ui);
-            ui.add_space(ui.available_width());
-
-            self.add_icon.as_mut().map(|add_icon| {
-                let (small_rect, _) = ui.spacing().icon_rectangles(Rect::from_min_size(
-                    icon_pos,
-                    vec2(ui.spacing().icon_width, ui.min_size().y),
-                ));
-                ui.allocate_ui_at_rect(small_rect, |ui| add_icon(ui)).inner
-            })
-        });
-
-        let background_rect = row_response
-            .rect
-            .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
-
-        (row_response.with_new_rect(background_rect), icon_response)
-    }
-}
-
-enum DropQuarter {
-    Top,
-    MiddleTop,
-    MiddleBottom,
-    Bottom,
-}
-
-impl DropQuarter {
-    fn new(range: Rangef, cursor_pos: f32) -> Option<DropQuarter> {
-        pub const DROP_LINE_HOVER_HEIGHT: f32 = 5.0;
-
-        let h0 = range.min;
-        let h1 = range.min + DROP_LINE_HOVER_HEIGHT;
-        let h2 = (range.min + range.max) / 2.0;
-        let h3 = range.max - DROP_LINE_HOVER_HEIGHT;
-        let h4 = range.max;
-
-        match cursor_pos {
-            y if y >= h0 && y < h1 => Some(Self::Top),
-            y if y >= h1 && y < h2 => Some(Self::MiddleTop),
-            y if y >= h2 && y < h3 => Some(Self::MiddleBottom),
-            y if y >= h3 && y < h4 => Some(Self::Bottom),
-            _ => None,
-        }
-    }
-}
-
-struct RowResponse {
-    interaction: Response,
-    visual: Response,
-    icon: Option<Response>,
-    was_dragged: bool,
-    drop_quarter: Option<DropQuarter>,
 }
 
 fn load<T: SerializableAny>(ui: &mut Ui, id: Id) -> Option<T> {
