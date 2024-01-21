@@ -19,7 +19,7 @@ where
         &self,
         ui: &mut Ui,
         add_label: &mut dyn FnMut(&mut Ui),
-        add_icon: &mut Option<&mut dyn FnMut(&mut Ui) -> Response>,
+        add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
     ) -> RowResponse {
         // Load row data
         let row_id = ui.id().with(self.id.clone()).with("row");
@@ -31,16 +31,15 @@ where
         let was_dragged = self.drag(ui, &interaction, add_label, add_icon);
         let drop_target = self.drop(ui, &interaction);
 
-        let (row_response, closer_response, icon_response) =
-            self.draw_row(ui, add_label, add_icon);
+        let (row_response, closer_response, label_rect) = self.draw_row(ui, add_label, add_icon);
 
         crate::store(ui, row_id, row_response.rect);
 
         RowResponse {
             interaction,
             visual: row_response,
-            icon: icon_response,
             closer: closer_response,
+            label_rect,
             was_dragged,
             drop_quarter: drop_target,
         }
@@ -51,7 +50,7 @@ where
         ui: &mut Ui,
         interaction: &Response,
         add_label: &mut dyn FnMut(&mut Ui),
-        add_icon: &mut Option<&mut dyn FnMut(&mut Ui) -> Response>,
+        add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
     ) -> bool {
         if !interaction.dragged_by(PointerButton::Primary)
             && !interaction.drag_released_by(PointerButton::Primary)
@@ -131,10 +130,10 @@ where
         &self,
         ui: &mut Ui,
         add_label: &mut dyn FnMut(&mut Ui),
-        add_icon: &mut Option<&mut dyn FnMut(&mut Ui) -> Response>,
-    ) -> (Response, Option<Response>, Option<Response>) {
+        add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
+    ) -> (Response, Option<Response>, Rect) {
         let InnerResponse {
-            inner: (closer_response, icon_response),
+            inner: (closer_response, label_rect_min),
             response: row_response,
         } = ui.horizontal(|ui| {
             ui.add_space(ui.spacing().indent * self.depth as f32);
@@ -150,40 +149,52 @@ where
                 ui.add_space(ui.spacing().icon_width);
             };
 
+            let label_rect_min = if self.is_dir {
+                closer_pos.x
+            } else {
+                icon_pos.x
+            };
+
             (add_label)(ui);
             ui.add_space(ui.available_width());
 
             let closer_response = self.is_dir.then(|| {
-                let (small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
+                let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
                     closer_pos,
                     vec2(ui.spacing().icon_width, ui.min_size().y),
                 ));
-                ui.allocate_ui_at_rect(small_rect, |ui| {
+                ui.allocate_ui_at_rect(_small_rect, |ui| {
                     let icon_id = ui.make_persistent_id(self.id).with("icon");
                     let openness = ui.ctx().animate_bool(icon_id, self.is_open);
                     let icon_res = ui.allocate_rect(ui.max_rect(), Sense::click());
                     egui::collapsing_header::paint_default_icon(ui, openness, &icon_res);
                     icon_res
-                }).inner
+                })
+                .inner
             });
-            let icon_response = add_icon.as_mut().map(|add_icon| {
-                let (small_rect, _) = ui.spacing().icon_rectangles(Rect::from_min_size(
+            add_icon.as_mut().map(|add_icon| {
+                let (_small_rect, rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
                     icon_pos,
                     vec2(ui.spacing().icon_width, ui.min_size().y),
                 ));
-                ui.allocate_ui_at_rect(small_rect, |ui| add_icon(ui)).inner
+                ui.allocate_ui_at_rect(rect, |ui| add_icon(ui)).response
             });
-            (closer_response, icon_response)
+            (closer_response, label_rect_min)
         });
 
         let background_rect = row_response
             .rect
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
+        let label_rect = {
+            let mut rect = background_rect.clone();
+            rect.min.x = label_rect_min;
+            rect
+        };
 
         (
             row_response.with_new_rect(background_rect),
             closer_response,
-            icon_response,
+            label_rect,
         )
     }
 }
@@ -220,11 +231,13 @@ pub struct RowResponse {
     pub interaction: Response,
     /// Response for the visual of the row.
     pub visual: Response,
-    /// Response of the icon if one is present.
-    pub icon: Option<Response>,
     /// Response of the closer used for directories.
     /// `None` if the row is not a directory.
     pub closer: Option<Response>,
+    /// The rectangle for the label. Includes the closer,
+    /// the icon and the label itself but does not stretch
+    /// the entire row.
+    pub label_rect: Rect,
     /// Wether the row was dragged or not.
     pub was_dragged: bool,
     /// `Some` if the row is target for a drop and what quarter

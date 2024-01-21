@@ -48,7 +48,6 @@ impl eframe::App for MyApp {
                     |mut builder| {
                         builder.leaf(&self.settings_id, |ui| {
                             ui.horizontal(|ui| {
-                                ui.add_space(ui.spacing().indent);
                                 ui.label("Settings");
                             });
                         });

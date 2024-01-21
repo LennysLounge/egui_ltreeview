@@ -144,9 +144,17 @@ where
             is_dir: false,
             depth: self.stack.len(),
         };
-        let row_response = self.row(&row_config, add_content, None);
 
-        self.push_child_node_position(row_response.visual.rect.center());
+        let mut add_icon = |ui: &mut Ui| {
+            ui.painter().rect_filled(
+                ui.available_rect_before_wrap(),
+                egui::Rounding::ZERO,
+                egui::Color32::GREEN,
+            );
+        };
+        let row_response = self.row(&row_config, add_content, Some(&mut add_icon));
+
+        self.push_child_node_position(row_response.label_rect.left_center());
 
         Some(row_response.interaction)
     }
@@ -175,12 +183,21 @@ where
             depth: self.stack.len(),
         };
 
+        let mut add_icon = |ui: &mut Ui| {
+            ui.painter().rect_filled(
+                ui.available_rect_before_wrap(),
+                egui::Rounding::ZERO,
+                egui::Color32::BLUE,
+            );
+        };
+
         let RowResponse {
             interaction,
             visual,
             closer,
+            label_rect,
             ..
-        } = self.row(&row_config, add_content, None);
+        } = self.row(&row_config, add_content, Some(&mut add_icon));
 
         if interaction.double_clicked() {
             open = !open;
@@ -192,7 +209,7 @@ where
             *self.selected = Some(*id);
         }
 
-        self.push_child_node_position(visual.rect.center());
+        self.push_child_node_position(label_rect.left_center());
 
         self.ui.data_mut(|d| d.insert_persisted(dir_id, open));
 
@@ -240,7 +257,7 @@ where
 
                 for child_pos in current_dir.child_node_positions.iter() {
                     let p1 = pos2(p1.x, child_pos.y);
-                    let p2 = pos2(p1.x + self.ui.spacing().indent / 2.0, p1.y);
+                    let p2 = *child_pos;
                     self.ui
                         .painter()
                         .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
@@ -267,7 +284,7 @@ where
         &mut self,
         row_config: &Row<NodeIdType>,
         mut add_label: impl FnMut(&mut Ui),
-        mut add_icon: Option<&mut dyn FnMut(&mut Ui) -> Response>,
+        mut add_icon: Option<&mut dyn FnMut(&mut Ui)>,
     ) -> RowResponse {
         let row_response = row_config.show(self.ui, &mut add_label, &mut add_icon);
 
