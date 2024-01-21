@@ -58,6 +58,12 @@ impl TreeView {
         self
     }
 
+    /// Set the row layout for this tree.
+    pub fn row_layout(mut self, layout: RowLayout) -> Self {
+        self.settings.row_layout = layout;
+        self
+    }
+
     /// Start displaying the tree view.
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
@@ -141,6 +147,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
 struct TreeViewSettings {
     override_indent: Option<f32>,
     vline_style: VLineStyle,
+    row_layout: RowLayout,
 }
 
 /// Style of the vertical line to show the indentation level.
@@ -153,6 +160,32 @@ pub enum VLineStyle {
     /// A vline is show with horizontal hooks to the child nodes of the directory.
     #[default]
     Hook,
+}
+
+/// How rows in the tree are layed out.
+///
+/// Each row in the tree is made up of three elements. A closer,
+/// an icon and a label. The layout of these elements is controlled
+/// by this value.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub enum RowLayout {
+    /// No icons are displayed.
+    /// Directories only show the closer and the label.
+    /// Leaves only show the label and allocate no additional space for a closer.
+    /// Labels between leaves and directories do not align.
+    Compact,
+    /// The labels of leaves and directories are aligned.
+    /// Icons are displayed for leaves only.
+    CompactAlignedLables,
+    /// The icons of leaves and directories are aligned.
+    /// If a leaf or directory does not show an icon, the label will fill the
+    /// space. Lables between leaves and directories can be misaligned.
+    #[default]
+    AlignedIcons,
+    /// The labels of leaves and directories are alignd.
+    /// If a leaf or directory does not show an icon, the label will not fill
+    /// the space.
+    AlignedIconsAndLabels,
 }
 
 pub struct TreeViewResponse<NodeIdType> {
@@ -362,7 +395,7 @@ where
         mut add_label: impl FnMut(&mut Ui),
         mut add_icon: Option<&mut dyn FnMut(&mut Ui)>,
     ) -> RowResponse {
-        let row_response = row_config.show(self.ui, &mut add_label, &mut add_icon);
+        let row_response = row_config.show(self.ui, &self.settings, &mut add_label, &mut add_icon);
 
         if row_response.interaction.clicked() {
             *self.selected = Some(row_config.id);

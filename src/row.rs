@@ -3,6 +3,8 @@ use egui::{
     Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 
+use crate::{RowLayout, TreeViewSettings};
+
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
     pub depth: f32,
@@ -15,9 +17,10 @@ impl<NodeIdType> Row<NodeIdType>
 where
     NodeIdType: Clone + Copy + std::hash::Hash,
 {
-    pub fn show(
+    pub(crate) fn show(
         &self,
         ui: &mut Ui,
+        settings: &TreeViewSettings,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
     ) -> RowResponse {
@@ -28,10 +31,11 @@ where
         // Interact with the row
         let interaction = crate::interact(ui, row_rect, row_id, Sense::click_and_drag());
 
-        let was_dragged = self.drag(ui, &interaction, add_label, add_icon);
+        let was_dragged = self.drag(ui, settings, &interaction, add_label, add_icon);
         let drop_target = self.drop(ui, &interaction);
 
-        let (row_response, closer_response, label_rect) = self.draw_row(ui, add_label, add_icon);
+        let (row_response, closer_response, label_rect) =
+            self.draw_row(ui, settings, add_label, add_icon);
 
         crate::store(ui, row_id, row_response.rect);
 
@@ -48,6 +52,7 @@ where
     fn drag(
         &self,
         ui: &mut Ui,
+        settings: &TreeViewSettings,
         interaction: &Response,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
@@ -82,7 +87,7 @@ where
             .with_layer_id(layer_id, |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _) = self.draw_row(ui, add_label, add_icon);
+                let (row, _, _) = self.draw_row(ui, settings, add_label, add_icon);
 
                 ui.painter().set(
                     background_position,
@@ -129,57 +134,74 @@ where
     fn draw_row(
         &self,
         ui: &mut Ui,
+        settings: &TreeViewSettings,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
     ) -> (Response, Option<Response>, Rect) {
+        let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
+            RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
+            RowLayout::CompactAlignedLables => {
+                (self.is_dir, self.is_dir, !self.is_dir, !self.is_dir && add_icon.is_some())
+            }
+            RowLayout::AlignedIcons => (true, self.is_dir, add_icon.is_some(), add_icon.is_some()),
+            RowLayout::AlignedIconsAndLabels => (true, self.is_dir, true, add_icon.is_some()),
+        };
+
         let InnerResponse {
             inner: (closer_response, label_rect_min),
             response: row_response,
         } = ui.horizontal(|ui| {
             ui.add_space(self.depth);
-
             // The closer and the icon should be drawn vertically centered to the label.
             // To do this we first have to draw the label and then the closer and icon
             // to get the correct position.
             let closer_pos = ui.cursor().min;
-            ui.add_space(ui.spacing().icon_width);
+            if reserve_closer {
+                ui.add_space(ui.spacing().icon_width);
+            }
 
             let icon_pos = ui.cursor().min;
-            if add_icon.is_some() {
+            if reserve_icon {
                 ui.add_space(ui.spacing().icon_width);
             };
 
-            let label_rect_min = if self.is_dir {
-                closer_pos.x
-            } else {
-                icon_pos.x
-            };
-
+            let label_pos = ui.cursor().min;
             (add_label)(ui);
             ui.add_space(ui.available_width());
 
-            let closer_response = self.is_dir.then(|| {
+            let closer_response = if draw_closer {
                 let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
                     closer_pos,
                     vec2(ui.spacing().icon_width, ui.min_size().y),
                 ));
-                ui.allocate_ui_at_rect(_small_rect, |ui| {
+                let res = ui.allocate_ui_at_rect(_small_rect, |ui| {
                     let icon_id = ui.make_persistent_id(self.id).with("icon");
                     let openness = ui.ctx().animate_bool(icon_id, self.is_open);
                     let icon_res = ui.allocate_rect(ui.max_rect(), Sense::click());
                     egui::collapsing_header::paint_default_icon(ui, openness, &icon_res);
                     icon_res
-                })
-                .inner
-            });
-            add_icon.as_mut().map(|add_icon| {
-                let (_small_rect, rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
-                    icon_pos,
-                    vec2(ui.spacing().icon_width, ui.min_size().y),
-                ));
-                ui.allocate_ui_at_rect(rect, |ui| add_icon(ui)).response
-            });
-            (closer_response, label_rect_min)
+                });
+                Some(res.inner)
+            } else {
+                None
+            };
+            if draw_icon {
+                add_icon.as_mut().map(|add_icon| {
+                    let (_small_rect, rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
+                        icon_pos,
+                        vec2(ui.spacing().icon_width, ui.min_size().y),
+                    ));
+                    ui.allocate_ui_at_rect(rect, |ui| add_icon(ui)).response
+                });
+            }
+            let label_rect_min = if draw_closer {
+                closer_pos
+            } else if draw_icon {
+                icon_pos
+            } else {
+                label_pos
+            };
+            (closer_response, label_rect_min.x)
         });
 
         let background_rect = row_response

@@ -2,7 +2,7 @@
 mod data;
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
-use egui_ltreeview::{TreeView, TreeViewBuilder, VLineStyle};
+use egui_ltreeview::{RowLayout, TreeView, TreeViewBuilder, VLineStyle};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -31,6 +31,7 @@ struct MyApp {
 struct Settings {
     override_indent: Option<f32>,
     vline_style: VLineStyle,
+    row_layout: RowLayout,
 }
 
 impl Default for MyApp {
@@ -53,6 +54,7 @@ impl eframe::App for MyApp {
                 let response = TreeView::new(ui.make_persistent_id("Names tree view"))
                     .override_indent(self.settings.override_indent)
                     .vline_style(self.settings.vline_style)
+                    .row_layout(self.settings.row_layout)
                     .show(ui, |mut builder| {
                         builder.leaf(&self.settings_id, |ui| {
                             ui.horizontal(|ui| {
@@ -161,5 +163,34 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
                 ui.selectable_value(&mut settings.vline_style, VLineStyle::VLine, "VLine");
                 ui.selectable_value(&mut settings.vline_style, VLineStyle::Hook, "Hook");
             });
+        ui.end_row();
+
+        ui.label("Row layout");
+        egui::ComboBox::from_id_source("row layout combo box")
+            .selected_text(match settings.row_layout {
+                RowLayout::Compact => "Compact",
+                RowLayout::CompactAlignedLables => "CompactAlignedLables",
+                RowLayout::AlignedIcons => "AlignedIcons",
+                RowLayout::AlignedIconsAndLabels => "AlignedLabels",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut settings.row_layout, RowLayout::Compact, "Compact");
+                ui.selectable_value(
+                    &mut settings.row_layout,
+                    RowLayout::CompactAlignedLables,
+                    "Compact aligned lables",
+                );
+                ui.selectable_value(
+                    &mut settings.row_layout,
+                    RowLayout::AlignedIcons,
+                    "Aligned icons",
+                );
+                ui.selectable_value(
+                    &mut settings.row_layout,
+                    RowLayout::AlignedIconsAndLabels,
+                    "Aligned icons and labels",
+                );
+            });
+        ui.end_row();
     });
 }
