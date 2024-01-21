@@ -2,6 +2,7 @@ use egui::{
     self,
     epaint::{self, RectShape},
     layers::ShapeIdx,
+    pos2,
     util::id_type_map::SerializableAny,
     vec2, CursorIcon, Id, InnerResponse, LayerId, Layout, Order, PointerButton, Pos2, Rangef, Rect,
     Response, Sense, Shape, Stroke, Ui, Vec2,
@@ -50,13 +51,14 @@ struct DirectoryState<NodeIdType> {
     id: NodeIdType,
     /// If directory is expanded
     is_open: bool,
-    /// If a directory is dragged, dropping is disallowed for any of
-    /// its child nodes.
+    /// Wether dropping on this or any of its child nodes is allowed.
     drop_forbidden: bool,
     /// The rectangle of the row.
     row_rect: Rect,
     /// The rectangle of the icon.
     icon_rect: Rect,
+    /// Positions of each child node of this directory.
+    child_node_positions: Vec<Pos2>,
 }
 pub struct TreeViewBuilder<'a, NodeIdType> {
     ui: &'a mut Ui,
@@ -147,6 +149,8 @@ where
         };
         let row_response = self.row(&mut row_config);
 
+        self.push_child_node_position(row_response.visual.rect.center());
+
         Some(row_response.interaction)
     }
 
@@ -162,6 +166,7 @@ where
                 drop_forbidden: true,
                 row_rect: Rect::NOTHING,
                 icon_rect: Rect::NOTHING,
+                child_node_positions: Vec::new(),
             });
             return None;
         }
@@ -203,6 +208,8 @@ where
             *self.selected = Some(*id);
         }
 
+        self.push_child_node_position(visual.rect.center());
+
         self.ui.data_mut(|d| d.insert_persisted(dir_id, open));
 
         //self.stack.push(self.current_dir.clone());
@@ -212,6 +219,7 @@ where
             drop_forbidden: self.parent_dir_drop_forbidden() || self.is_dragged(id),
             row_rect: visual.rect,
             icon_rect: icon.rect,
+            child_node_positions: Vec::new(),
         });
         Some(interaction)
     }
@@ -242,9 +250,30 @@ where
                 p1.y += self.ui.spacing().item_spacing.y;
                 let mut p2 = p1.clone();
                 p2.y = self.ui.cursor().min.y - self.ui.spacing().item_spacing.y;
-                self.ui
-                    .painter()
-                    .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+                // self.ui
+                //     .painter()
+                //     .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+
+                for child_pos in current_dir.child_node_positions.iter() {
+                    let p1 = pos2(p1.x, child_pos.y);
+                    let p2 = pos2(p1.x + self.ui.spacing().item_spacing.x, p1.y);
+                    self.ui
+                        .painter()
+                        .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+                    // self.ui.painter().circle_filled(
+                    //     pos2(p1.x, child_pos.y),
+                    //     3.0,
+                    //     self.ui.visuals().widgets.noninteractive.bg_stroke.color,
+                    // );
+                }
+                if let Some(last_child_pos) = current_dir.child_node_positions.last() {
+                    let mut p1 = current_dir.icon_rect.center_bottom();
+                    p1.y += self.ui.spacing().item_spacing.y;
+                    let p2 = pos2(p1.x, last_child_pos.y);
+                    self.ui
+                        .painter()
+                        .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+                }
             }
         }
         self.stack.pop();
@@ -419,6 +448,12 @@ where
 
     fn is_dragged(&self, id: &NodeIdType) -> bool {
         self.drag.as_ref().is_some_and(|drag_id| drag_id == id)
+    }
+
+    fn push_child_node_position(&mut self, pos: Pos2) {
+        if let Some(parent_dir) = self.stack.last_mut() {
+            parent_dir.child_node_positions.push(pos);
+        }
     }
 }
 
