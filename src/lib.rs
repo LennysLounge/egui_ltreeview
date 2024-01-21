@@ -256,7 +256,7 @@ where
 
                 for child_pos in current_dir.child_node_positions.iter() {
                     let p1 = pos2(p1.x, child_pos.y);
-                    let p2 = pos2(p1.x + self.ui.spacing().item_spacing.x, p1.y);
+                    let p2 = pos2(p1.x + self.ui.spacing().indent / 2.0, p1.y);
                     self.ui
                         .painter()
                         .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);

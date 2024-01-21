@@ -1,3 +1,7 @@
+#[path = "data.rs"]
+mod data;
+use data::*;
+
 use egui_ltreeview::TreeViewBuilder;
 use uuid::Uuid;
 
@@ -61,51 +65,4 @@ fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
     builder.leaf(&file.id, |ui| {
         ui.label(&file.name);
     });
-}
-
-enum Node {
-    Directory(Directory),
-    File(File),
-}
-struct Directory {
-    id: Uuid,
-    name: String,
-    children: Vec<Node>,
-}
-struct File {
-    id: Uuid,
-    name: String,
-}
-
-impl Node {
-    fn dir(name: &'static str, children: Vec<Node>) -> Self {
-        Node::Directory(Directory {
-            id: Uuid::new_v4(),
-            name: String::from(name),
-            children,
-        })
-    }
-    fn file(name: &'static str) -> Self {
-        Node::File(File {
-            id: Uuid::new_v4(),
-            name: String::from(name),
-        })
-    }
-}
-fn make_tree() -> Node {
-    Node::dir(
-        "Root",
-        vec![
-            Node::dir(
-                "Foo",
-                vec![
-                    Node::file("Ava"),
-                    Node::dir("baz", vec![Node::file("Benjamin"), Node::file("Charlotte")]),
-                ],
-            ),
-            Node::file("Daniel"),
-            Node::file("Emma"),
-            Node::dir("bar", vec![Node::file("Finn"), Node::file("Grayson")]),
-        ],
-    )
 }
