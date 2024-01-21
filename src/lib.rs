@@ -6,7 +6,7 @@ use egui::{
     layers::ShapeIdx,
     pos2,
     util::id_type_map::SerializableAny,
-    Id, Layout, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    vec2, Id, Layout, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 use row::{DropQuarter, Row, RowResponse};
 
@@ -49,6 +49,12 @@ impl TreeView {
     /// Defaults to `None`.
     pub fn override_indent(mut self, indent: Option<f32>) -> Self {
         self.settings.override_indent = indent;
+        self
+    }
+
+    /// Set the style of the vline to show the indentation level.
+    pub fn vline_style(mut self, style: VLineStyle) -> Self {
+        self.settings.vline_style = style;
         self
     }
 
@@ -134,6 +140,19 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
 #[derive(Default)]
 struct TreeViewSettings {
     override_indent: Option<f32>,
+    vline_style: VLineStyle,
+}
+
+/// Style of the vertical line to show the indentation level.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub enum VLineStyle {
+    /// No vline is shown.
+    None,
+    /// A single vertical line is show for the full hight of the directory.
+    VLine,
+    /// A vline is show with horizontal hooks to the child nodes of the directory.
+    #[default]
+    Hook,
 }
 
 pub struct TreeViewResponse<NodeIdType> {
@@ -300,33 +319,37 @@ where
 
         if let Some(current_dir) = self.parent_dir() {
             if current_dir.is_open {
-                let mut p1 = current_dir.icon_rect.center_bottom();
-                p1.y += self.ui.spacing().item_spacing.y;
-                let mut p2 = p1.clone();
-                p2.y = self.ui.cursor().min.y - self.ui.spacing().item_spacing.y;
-                // self.ui
-                //     .painter()
-                //     .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+                let top = current_dir.icon_rect.center_bottom()
+                    + vec2(0.0, self.ui.spacing().item_spacing.y);
 
-                for child_pos in current_dir.child_node_positions.iter() {
-                    let p1 = pos2(p1.x, child_pos.y);
-                    let p2 = *child_pos;
-                    self.ui
-                        .painter()
-                        .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
-                    // self.ui.painter().circle_filled(
-                    //     pos2(p1.x, child_pos.y),
-                    //     3.0,
-                    //     self.ui.visuals().widgets.noninteractive.bg_stroke.color,
-                    // );
-                }
-                if let Some(last_child_pos) = current_dir.child_node_positions.last() {
-                    let mut p1 = current_dir.icon_rect.center_bottom();
-                    p1.y += self.ui.spacing().item_spacing.y;
-                    let p2 = pos2(p1.x, last_child_pos.y);
-                    self.ui
-                        .painter()
-                        .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+                let bottom = match self.settings.vline_style {
+                    VLineStyle::None => top.clone(),
+                    VLineStyle::VLine => pos2(
+                        top.x,
+                        self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
+                    ),
+                    VLineStyle::Hook => pos2(
+                        top.x,
+                        current_dir
+                            .child_node_positions
+                            .last()
+                            .map(|pos| pos.y)
+                            .unwrap_or(top.y),
+                    ),
+                };
+                self.ui.painter().line_segment(
+                    [top, bottom],
+                    self.ui.visuals().widgets.noninteractive.bg_stroke,
+                );
+                if matches!(self.settings.vline_style, VLineStyle::Hook) {
+                    for child_pos in current_dir.child_node_positions.iter() {
+                        let p1 = pos2(top.x, child_pos.y);
+                        let p2 = *child_pos;
+                        self.ui.painter().line_segment(
+                            [p1, p2],
+                            self.ui.visuals().widgets.noninteractive.bg_stroke,
+                        );
+                    }
                 }
             }
         }

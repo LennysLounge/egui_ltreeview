@@ -2,7 +2,7 @@
 mod data;
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
-use egui_ltreeview::{TreeView, TreeViewBuilder};
+use egui_ltreeview::{TreeView, TreeViewBuilder, VLineStyle};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -30,6 +30,7 @@ struct MyApp {
 #[derive(Default)]
 struct Settings {
     override_indent: Option<f32>,
+    vline_style: VLineStyle,
 }
 
 impl Default for MyApp {
@@ -51,6 +52,7 @@ impl eframe::App for MyApp {
                 ui.allocate_space(vec2(ui.available_width(), 0.0));
                 let response = TreeView::new(ui.make_persistent_id("Names tree view"))
                     .override_indent(self.settings.override_indent)
+                    .vline_style(self.settings.vline_style)
                     .show(ui, |mut builder| {
                         builder.leaf(&self.settings_id, |ui| {
                             ui.horizontal(|ui| {
@@ -108,11 +110,13 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.end_row();
 
         ui.label("Item spacing:");
-        let mut spacing = ui.ctx().style().spacing.item_spacing;
-        ui.add(DragValue::new(&mut spacing.x));
-        ui.add(DragValue::new(&mut spacing.y));
-        ui.ctx().style_mut(|style| {
-            style.spacing.item_spacing = spacing;
+        ui.horizontal(|ui| {
+            let mut spacing = ui.ctx().style().spacing.item_spacing;
+            ui.add(DragValue::new(&mut spacing.x));
+            ui.add(DragValue::new(&mut spacing.y));
+            ui.ctx().style_mut(|style| {
+                style.spacing.item_spacing = spacing;
+            });
         });
         ui.end_row();
 
@@ -122,22 +126,40 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.end_row();
 
         ui.label("Override indent");
-        let mut override_enabled = settings.override_indent.is_some();
-        if ui.checkbox(&mut override_enabled, "").changed() {
-            if override_enabled {
-                settings.override_indent = Some(ui.spacing().indent);
-            } else {
-                settings.override_indent = None;
-            }
-        };
-        ui.add_enabled_ui(override_enabled, |ui| {
-            let mut override_indent_value = settings.override_indent.unwrap_or(ui.spacing().indent);
-            let res = ui.add(
-                egui::DragValue::new(&mut override_indent_value).clamp_range(0.0..=f32::INFINITY),
-            );
-            if res.changed() && override_enabled {
-                settings.override_indent = Some(override_indent_value);
-            }
+        ui.horizontal(|ui| {
+            let mut override_enabled = settings.override_indent.is_some();
+            if ui.checkbox(&mut override_enabled, "").changed() {
+                if override_enabled {
+                    settings.override_indent = Some(ui.spacing().indent);
+                } else {
+                    settings.override_indent = None;
+                }
+            };
+            ui.add_enabled_ui(override_enabled, |ui| {
+                let mut override_indent_value =
+                    settings.override_indent.unwrap_or(ui.spacing().indent);
+                let res = ui.add(
+                    egui::DragValue::new(&mut override_indent_value)
+                        .clamp_range(0.0..=f32::INFINITY),
+                );
+                if res.changed() && override_enabled {
+                    settings.override_indent = Some(override_indent_value);
+                }
+            });
         });
+        ui.end_row();
+
+        ui.label("Vline style");
+        egui::ComboBox::from_id_source("vline style combo box")
+            .selected_text(match settings.vline_style {
+                VLineStyle::None => "None",
+                VLineStyle::VLine => "VLine",
+                VLineStyle::Hook => "Hook",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut settings.vline_style, VLineStyle::None, "None");
+                ui.selectable_value(&mut settings.vline_style, VLineStyle::VLine, "VLine");
+                ui.selectable_value(&mut settings.vline_style, VLineStyle::Hook, "Hook");
+            });
     });
 }
