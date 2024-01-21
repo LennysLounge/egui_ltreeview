@@ -31,58 +31,40 @@ pub enum DropPosition<NodeIdType> {
     Before(NodeIdType),
 }
 
-#[derive(Clone)]
-struct TreeViewBuilderState<NodeIdType> {
-    // Id of the node that was selected last frame.
-    selected: Option<NodeIdType>,
-    // True if something was dragged last frame.
-    was_dragged_last_frame: bool,
+pub struct TreeView {
+    id: Id,
+    settings: TreeViewSettings,
 }
-impl<NodeIdType> Default for TreeViewBuilderState<NodeIdType> {
-    fn default() -> Self {
+impl TreeView {
+    pub fn new(id: Id) -> Self {
         Self {
-            selected: Default::default(),
-            was_dragged_last_frame: Default::default(),
+            id,
+            settings: TreeViewSettings::default(),
         }
     }
-}
 
-#[derive(Clone)]
-struct DirectoryState<NodeIdType> {
-    /// Id of the directory node.
-    id: NodeIdType,
-    /// If directory is expanded
-    is_open: bool,
-    /// Wether dropping on this or any of its child nodes is allowed.
-    drop_forbidden: bool,
-    /// The rectangle of the row.
-    row_rect: Rect,
-    /// The rectangle of the icon.
-    icon_rect: Rect,
-    /// Positions of each child node of this directory.
-    child_node_positions: Vec<Pos2>,
-}
-pub struct TreeViewBuilder<'a, NodeIdType> {
-    ui: &'a mut Ui,
-    selected: &'a mut Option<NodeIdType>,
-    drag: &'a mut Option<NodeIdType>,
-    drop: &'a mut Option<(NodeIdType, DropPosition<NodeIdType>)>,
-    stack: Vec<DirectoryState<NodeIdType>>,
-    background_idx: ShapeIdx,
-    drop_marker_idx: ShapeIdx,
-    was_dragged_last_frame: bool,
-}
+    /// Override the indent value from the current ui style with this value.
+    ///
+    /// If `None`, the value of the current ui style is used.  
+    /// Defaults to `None`.
+    pub fn override_indent(mut self, indent: Option<f32>) -> Self {
+        self.settings.override_indent = indent;
+        self
+    }
 
-impl<'a, NodeIdType> TreeViewBuilder<'a, NodeIdType>
-where
-    NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + 'static,
-{
-    pub fn new(
+    /// Start displaying the tree view.
+    ///
+    /// Construct the tree view using the [`TreeViewBuilder`] by addind
+    /// directories or leaves to the tree.
+    pub fn show<NodeIdType>(
+        self,
         ui: &mut Ui,
-        base_id: Id,
-        mut add_content: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
-    ) -> TreeViewResponse<NodeIdType> {
-        let mut state = load(ui, base_id).unwrap_or(TreeViewBuilderState::default());
+        mut build_tree_view: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
+    ) -> TreeViewResponse<NodeIdType>
+    where
+        NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + 'static,
+    {
+        let mut state = load(ui, self.id).unwrap_or(TreeViewState::default());
         let mut drag = None;
         let mut drop = None;
         let background_idx = ui.painter().add(Shape::Noop);
@@ -93,7 +75,7 @@ where
             Layout::top_down(egui::Align::Min),
             |ui| {
                 ui.add_space(ui.spacing().item_spacing.y * 0.5);
-                add_content(TreeViewBuilder {
+                build_tree_view(TreeViewBuilder {
                     ui,
                     selected: &mut state.selected,
                     drag: &mut drag,
@@ -102,6 +84,7 @@ where
                     background_idx,
                     drop_marker_idx,
                     was_dragged_last_frame: state.was_dragged_last_frame,
+                    settings: self.settings,
                 });
                 // Add negative space because the place will add the item spacing on top of this.
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
@@ -120,18 +103,95 @@ where
         let selected_node = state.selected;
 
         state.was_dragged_last_frame = drag.is_some();
-        store(ui, base_id, state);
+        store(ui, self.id, state);
 
         TreeViewResponse {
             response: res.response,
             dropped,
             drag_drop_action,
-            _id: base_id,
             drop_marker_idx,
             selected_node,
         }
     }
+}
 
+#[derive(Clone)]
+struct TreeViewState<NodeIdType> {
+    // Id of the node that was selected last frame.
+    selected: Option<NodeIdType>,
+    // True if something was dragged last frame.
+    was_dragged_last_frame: bool,
+}
+impl<NodeIdType> Default for TreeViewState<NodeIdType> {
+    fn default() -> Self {
+        Self {
+            selected: Default::default(),
+            was_dragged_last_frame: Default::default(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct TreeViewSettings {
+    override_indent: Option<f32>,
+}
+
+pub struct TreeViewResponse<NodeIdType> {
+    pub response: Response,
+    /// If a row was dragged in the tree this will contain information about
+    /// who was dragged to who and at what position.
+    pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
+    /// `true` if a drag and drop was performed
+    pub dropped: bool,
+    /// Id of the selected node.
+    pub selected_node: Option<NodeIdType>,
+    drop_marker_idx: ShapeIdx,
+}
+impl<NodeIdType> TreeViewResponse<NodeIdType> {
+    /// Remove the drop marker from the tree view.
+    ///
+    /// Use this to remove the drop marker if a proposed drag and drop action
+    /// is disallowed.
+    pub fn remove_drop_marker(&self, ui: &mut Ui) {
+        ui.painter().set(self.drop_marker_idx, Shape::Noop);
+    }
+}
+
+#[derive(Clone)]
+struct DirectoryState<NodeIdType> {
+    /// Id of the directory node.
+    id: NodeIdType,
+    /// If directory is expanded
+    is_open: bool,
+    /// Wether dropping on this or any of its child nodes is allowed.
+    drop_forbidden: bool,
+    /// The rectangle of the row.
+    row_rect: Rect,
+    /// The rectangle of the icon.
+    icon_rect: Rect,
+    /// Positions of each child node of this directory.
+    child_node_positions: Vec<Pos2>,
+}
+
+/// The builder used to construct the tree view.
+///
+/// Use this to add directories or leaves to the tree.
+pub struct TreeViewBuilder<'a, NodeIdType> {
+    ui: &'a mut Ui,
+    selected: &'a mut Option<NodeIdType>,
+    drag: &'a mut Option<NodeIdType>,
+    drop: &'a mut Option<(NodeIdType, DropPosition<NodeIdType>)>,
+    stack: Vec<DirectoryState<NodeIdType>>,
+    background_idx: ShapeIdx,
+    drop_marker_idx: ShapeIdx,
+    was_dragged_last_frame: bool,
+    settings: TreeViewSettings,
+}
+
+impl<'a, NodeIdType> TreeViewBuilder<'a, NodeIdType>
+where
+    NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + 'static,
+{
     pub fn leaf(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) -> Option<Response> {
         if !self.parent_dir_is_open() {
             return None;
@@ -142,7 +202,11 @@ where
             drop_on_allowed: false,
             is_open: false,
             is_dir: false,
-            depth: self.stack.len(),
+            depth: self.stack.len() as f32
+                * self
+                    .settings
+                    .override_indent
+                    .unwrap_or(self.ui.spacing().indent),
         };
 
         let mut add_icon = |ui: &mut Ui| {
@@ -180,7 +244,11 @@ where
             drop_on_allowed: true,
             is_open: open,
             is_dir: true,
-            depth: self.stack.len(),
+            depth: self.stack.len() as f32
+                * self
+                    .settings
+                    .override_indent
+                    .unwrap_or(self.ui.spacing().indent),
         };
 
         let mut add_icon = |ui: &mut Ui| {
@@ -460,25 +528,6 @@ where
         if let Some(parent_dir) = self.stack.last_mut() {
             parent_dir.child_node_positions.push(pos);
         }
-    }
-}
-
-pub struct TreeViewResponse<NodeIdType> {
-    pub response: Response,
-    /// If a row was dragged in the tree this will contain information about
-    /// who was dragged to who and at what position.
-    pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
-    /// `true` if a drag and drop was performed
-    pub dropped: bool,
-    /// Id of the selected node.
-    pub selected_node: Option<NodeIdType>,
-    _id: Id,
-    drop_marker_idx: ShapeIdx,
-}
-impl<NodeIdType> TreeViewResponse<NodeIdType> {
-    /// Remove the drop marker from the tree view.
-    pub fn remove_drop_marker(&self, ui: &mut Ui) {
-        ui.painter().set(self.drop_marker_idx, Shape::Noop);
     }
 }
 

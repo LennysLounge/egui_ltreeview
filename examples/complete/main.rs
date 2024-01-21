@@ -3,7 +3,7 @@
 use data::{make_tree, TreeNode, Visitable};
 use eframe::egui;
 use egui::Ui;
-use egui_ltreeview::TreeViewBuilder;
+use egui_ltreeview::TreeView;
 use visitor::{
     DropAllowedVisitor, InsertNodeVisitor, RemoveNodeVisitor, SearchVisitor, TreeViewVisitor,
 };
@@ -45,8 +45,8 @@ impl eframe::App for MyApp {
 }
 
 fn show_tree(ui: &mut Ui, tree: &mut TreeNode) {
-    let tree_res = TreeViewBuilder::new(ui, ui.make_persistent_id("tree view"), |root| {
-        tree.walk(&mut TreeViewVisitor { builder: root });
+    let tree_res = TreeView::new(ui.make_persistent_id("tree view")).show(ui, |build| {
+        tree.walk(&mut TreeViewVisitor { builder: build });
     });
 
     if let Some(selected_id) = tree_res.selected_node {

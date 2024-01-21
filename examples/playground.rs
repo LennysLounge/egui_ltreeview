@@ -2,7 +2,7 @@
 mod data;
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
-use egui_ltreeview::TreeViewBuilder;
+use egui_ltreeview::{TreeView, TreeViewBuilder};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -24,6 +24,12 @@ struct MyApp {
     tree: Node,
     settings_id: Uuid,
     selected_node: Option<Uuid>,
+    settings: Settings,
+}
+
+#[derive(Default)]
+struct Settings {
+    override_indent: Option<f32>,
 }
 
 impl Default for MyApp {
@@ -32,6 +38,7 @@ impl Default for MyApp {
             tree: make_tree(),
             settings_id: Uuid::new_v4(),
             selected_node: None,
+            settings: Settings::default(),
         }
     }
 }
@@ -42,23 +49,21 @@ impl eframe::App for MyApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.allocate_space(vec2(ui.available_width(), 0.0));
-                let response = TreeViewBuilder::new(
-                    ui,
-                    ui.make_persistent_id("Names tree view"),
-                    |mut builder| {
+                let response = TreeView::new(ui.make_persistent_id("Names tree view"))
+                    .override_indent(self.settings.override_indent)
+                    .show(ui, |mut builder| {
                         builder.leaf(&self.settings_id, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label("Settings");
                             });
                         });
                         show_node(&mut builder, &self.tree);
-                    },
-                );
+                    });
                 self.selected_node = response.selected_node;
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.selected_node == Some(self.settings_id) {
-                show_settings(ui);
+                show_settings(ui, &mut self.settings);
             } else {
                 ui.label("Center");
             }
@@ -89,7 +94,7 @@ fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
     });
 }
 
-fn show_settings(ui: &mut Ui) {
+fn show_settings(ui: &mut Ui, settings: &mut Settings) {
     egui::Grid::new("settings grid").show(ui, |ui| {
         ui.strong("Egui:");
         ui.end_row();
@@ -110,5 +115,29 @@ fn show_settings(ui: &mut Ui) {
             style.spacing.item_spacing = spacing;
         });
         ui.end_row();
+
+        ui.end_row();
+
+        ui.strong("Tree view settings");
+        ui.end_row();
+
+        ui.label("Override indent");
+        let mut override_enabled = settings.override_indent.is_some();
+        if ui.checkbox(&mut override_enabled, "").changed() {
+            if override_enabled {
+                settings.override_indent = Some(ui.spacing().indent);
+            } else {
+                settings.override_indent = None;
+            }
+        };
+        ui.add_enabled_ui(override_enabled, |ui| {
+            let mut override_indent_value = settings.override_indent.unwrap_or(ui.spacing().indent);
+            let res = ui.add(
+                egui::DragValue::new(&mut override_indent_value).clamp_range(0.0..=f32::INFINITY),
+            );
+            if res.changed() && override_enabled {
+                settings.override_indent = Some(override_indent_value);
+            }
+        });
     });
 }

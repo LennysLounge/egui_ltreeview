@@ -2,7 +2,7 @@
 mod data;
 use data::*;
 
-use egui_ltreeview::TreeViewBuilder;
+use egui_ltreeview::{TreeView, TreeViewBuilder};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -33,13 +33,9 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            TreeViewBuilder::new(
-                ui,
-                ui.make_persistent_id("Names tree view"),
-                |mut builder| {
-                    show_node(&mut builder, &self.tree);
-                },
-            );
+            TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |mut builder| {
+                show_node(&mut builder, &self.tree);
+            });
         });
     }
 }

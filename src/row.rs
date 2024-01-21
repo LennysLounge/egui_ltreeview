@@ -5,7 +5,7 @@ use egui::{
 
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
-    pub depth: usize,
+    pub depth: f32,
     pub drop_on_allowed: bool,
     pub is_open: bool,
     pub is_dir: bool,
@@ -136,7 +136,7 @@ where
             inner: (closer_response, label_rect_min),
             response: row_response,
         } = ui.horizontal(|ui| {
-            ui.add_space(ui.spacing().indent * self.depth as f32);
+            ui.add_space(self.depth);
 
             // The closer and the icon should be drawn vertically centered to the label.
             // To do this we first have to draw the label and then the closer and icon
