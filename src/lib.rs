@@ -209,14 +209,7 @@ where
                     .unwrap_or(self.ui.spacing().indent),
         };
 
-        let mut add_icon = |ui: &mut Ui| {
-            ui.painter().rect_filled(
-                ui.available_rect_before_wrap(),
-                egui::Rounding::ZERO,
-                egui::Color32::GREEN,
-            );
-        };
-        let row_response = self.row(&row_config, add_content, Some(&mut add_icon));
+        let row_response = self.row(&row_config, add_content, None);
 
         self.push_child_node_position(row_response.label_rect.left_center());
 
@@ -251,21 +244,13 @@ where
                     .unwrap_or(self.ui.spacing().indent),
         };
 
-        let mut add_icon = |ui: &mut Ui| {
-            ui.painter().rect_filled(
-                ui.available_rect_before_wrap(),
-                egui::Rounding::ZERO,
-                egui::Color32::BLUE,
-            );
-        };
-
         let RowResponse {
             interaction,
             visual,
             closer,
             label_rect,
             ..
-        } = self.row(&row_config, add_content, Some(&mut add_icon));
+        } = self.row(&row_config, add_content, None);
 
         if interaction.double_clicked() {
             open = !open;
