@@ -13,7 +13,7 @@ pub struct Row<NodeIdType> {
 
 impl<NodeIdType> Row<NodeIdType>
 where
-    NodeIdType: Clone + std::hash::Hash,
+    NodeIdType: Clone + Copy + std::hash::Hash,
 {
     pub fn show(
         &self,
@@ -31,7 +31,8 @@ where
         let was_dragged = self.drag(ui, &interaction, add_label, add_icon);
         let drop_target = self.drop(ui, &interaction);
 
-        let (row_response, icon_response) = self.draw_row(ui, add_label, add_icon);
+        let (row_response, closer_response, icon_response) =
+            self.draw_row(ui, add_label, add_icon);
 
         crate::store(ui, row_id, row_response.rect);
 
@@ -39,6 +40,7 @@ where
             interaction,
             visual: row_response,
             icon: icon_response,
+            closer: closer_response,
             was_dragged,
             drop_quarter: drop_target,
         }
@@ -81,7 +83,7 @@ where
             .with_layer_id(layer_id, |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _) = self.draw_row(ui, add_label, add_icon);
+                let (row, _, _) = self.draw_row(ui, add_label, add_icon);
 
                 ui.painter().set(
                     background_position,
@@ -130,34 +132,59 @@ where
         ui: &mut Ui,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui) -> Response>,
-    ) -> (Response, Option<Response>) {
+    ) -> (Response, Option<Response>, Option<Response>) {
         let InnerResponse {
-            inner: icon_response,
+            inner: (closer_response, icon_response),
             response: row_response,
         } = ui.horizontal(|ui| {
             ui.add_space(ui.spacing().indent * self.depth as f32);
+
+            // The closer and the icon should be drawn vertically centered to the label.
+            // To do this we first have to draw the label and then the closer and icon
+            // to get the correct position.
+            let closer_pos = ui.cursor().min;
+            ui.add_space(ui.spacing().icon_width);
 
             let icon_pos = ui.cursor().min;
             if add_icon.is_some() {
                 ui.add_space(ui.spacing().icon_width);
             };
+
             (add_label)(ui);
             ui.add_space(ui.available_width());
 
-            add_icon.as_mut().map(|add_icon| {
+            let closer_response = self.is_dir.then(|| {
+                let (small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
+                    closer_pos,
+                    vec2(ui.spacing().icon_width, ui.min_size().y),
+                ));
+                ui.allocate_ui_at_rect(small_rect, |ui| {
+                    let icon_id = ui.make_persistent_id(self.id).with("icon");
+                    let openness = ui.ctx().animate_bool(icon_id, self.is_open);
+                    let icon_res = ui.allocate_rect(ui.max_rect(), Sense::click());
+                    egui::collapsing_header::paint_default_icon(ui, openness, &icon_res);
+                    icon_res
+                }).inner
+            });
+            let icon_response = add_icon.as_mut().map(|add_icon| {
                 let (small_rect, _) = ui.spacing().icon_rectangles(Rect::from_min_size(
                     icon_pos,
                     vec2(ui.spacing().icon_width, ui.min_size().y),
                 ));
                 ui.allocate_ui_at_rect(small_rect, |ui| add_icon(ui)).inner
-            })
+            });
+            (closer_response, icon_response)
         });
 
         let background_rect = row_response
             .rect
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
 
-        (row_response.with_new_rect(background_rect), icon_response)
+        (
+            row_response.with_new_rect(background_rect),
+            closer_response,
+            icon_response,
+        )
     }
 }
 
@@ -189,9 +216,19 @@ impl DropQuarter {
 }
 
 pub struct RowResponse {
+    /// Response that is used for interacting with the row.
     pub interaction: Response,
+    /// Response for the visual of the row.
     pub visual: Response,
+    /// Response of the icon if one is present.
     pub icon: Option<Response>,
+    /// Response of the closer used for directories.
+    /// `None` if the row is not a directory.
+    pub closer: Option<Response>,
+    /// Wether the row was dragged or not.
     pub was_dragged: bool,
+    /// `Some` if the row is target for a drop and what quarter
+    /// of the row is targeted for the drop.
+    /// `None` otherwise.
     pub drop_quarter: Option<DropQuarter>,
 }

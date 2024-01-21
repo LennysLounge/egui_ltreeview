@@ -167,14 +167,6 @@ where
         let dir_id = self.ui.id().with(id).with("dir");
         let mut open = load(self.ui, dir_id).unwrap_or(true);
 
-        let mut add_icon = |ui: &mut Ui| {
-            let icon_id = ui.make_persistent_id(id).with("icon");
-            let openness = ui.ctx().animate_bool(icon_id, open);
-            let icon_res = ui.allocate_rect(ui.max_rect(), Sense::click());
-            egui::collapsing_header::paint_default_icon(ui, openness, &icon_res);
-            icon_res
-        };
-
         let row_config = Row {
             id: *id,
             drop_on_allowed: true,
@@ -186,16 +178,16 @@ where
         let RowResponse {
             interaction,
             visual,
-            icon,
+            closer,
             ..
-        } = self.row(&row_config, add_content, Some(&mut add_icon));
+        } = self.row(&row_config, add_content, None);
 
         if interaction.double_clicked() {
             open = !open;
         }
 
-        let icon = icon.expect("Icon response is not available");
-        if icon.clicked() {
+        let closer = closer.expect("Closer response should be availabel for dirs");
+        if closer.clicked() {
             open = !open;
             *self.selected = Some(*id);
         }
@@ -210,7 +202,7 @@ where
             id: *id,
             drop_forbidden: self.parent_dir_drop_forbidden() || self.is_dragged(id),
             row_rect: visual.rect,
-            icon_rect: icon.rect,
+            icon_rect: closer.rect,
             child_node_positions: Vec::new(),
         });
         Some(interaction)
