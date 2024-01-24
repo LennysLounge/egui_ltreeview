@@ -1,8 +1,9 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, PointerButton, Rangef, Rect, Response, Shape, Stroke, Ui, Vec2
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, PointerButton,
+    Rangef, Rect, Response, Shape, Stroke, Ui, Vec2,
 };
 
-use crate::{Interaction, RowLayout, TreeViewSettings};
+use crate::{Interaction, RowLayout, TreeViewState, TreeViewSettings};
 
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
@@ -21,7 +22,7 @@ where
         &self,
         ui: &mut Ui,
         settings: &TreeViewSettings,
-        interaction: &Interaction,
+        state: &TreeViewState<NodeIdType>,
         row_response: &Response,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
@@ -30,7 +31,7 @@ where
         ui.ctx().set_cursor_icon(CursorIcon::Alias);
 
         let drag_source_id = ui.make_persistent_id("Drag source");
-        let drag_offset = if interaction.response.drag_started_by(PointerButton::Primary) {
+        let drag_offset = if state.response.drag_started_by(PointerButton::Primary) {
             let drag_offset = ui
                 .ctx()
                 .pointer_latest_pos()
@@ -50,7 +51,7 @@ where
             .with_layer_id(layer_id, |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _) = self.draw_row(ui, interaction, settings, add_label, add_icon);
+                let (row, _, _) = self.draw_row(ui, state, settings, add_label, add_icon);
 
                 ui.painter().set(
                     background_position,
@@ -77,7 +78,7 @@ where
     pub(crate) fn draw_row(
         &self,
         ui: &mut Ui,
-        interaction: &Interaction,
+        interaction: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
@@ -124,7 +125,8 @@ where
                 let res = ui.allocate_ui_at_rect(_small_rect, |ui| {
                     let icon_id = Id::new(self.id).with("tree view closer icon");
                     let openness = ui.ctx().animate_bool(icon_id, self.is_open);
-                    paint_default_icon(ui, openness, &ui.max_rect(), interaction);
+                    let closer_interaction = interaction.interact(&ui.max_rect());
+                    paint_default_icon(ui, openness, &ui.max_rect(), &closer_interaction);
                     ui.allocate_space(ui.available_size_before_wrap());
                 });
                 Some(res.response)
@@ -169,14 +171,13 @@ where
 
 /// Paint the arrow icon that indicated if the region is open or not
 fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, interaction: &Interaction) {
-    let visuals =
-        if interaction.mouse_over(rect) && interaction.response.is_pointer_button_down_on() {
-            ui.visuals().widgets.active
-        } else if interaction.mouse_over(rect) {
-            ui.visuals().widgets.hovered
-        } else {
-            ui.visuals().widgets.inactive
-        };
+    let visuals = if interaction.hovered {
+        ui.visuals().widgets.active
+    } else if interaction.hovered {
+        ui.visuals().widgets.hovered
+    } else {
+        ui.visuals().widgets.inactive
+    };
 
     // Draw a pointy triangle arrow:
     let rect = Rect::from_center_size(rect.center(), vec2(rect.width(), rect.height()) * 0.75);

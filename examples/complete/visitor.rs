@@ -1,5 +1,6 @@
 use std::{any::Any, ops::ControlFlow};
 
+use egui::Ui;
 use egui_ltreeview::{DropPosition, TreeViewBuilder};
 use uuid::Uuid;
 
@@ -45,14 +46,9 @@ pub struct TreeViewVisitor<'a> {
 }
 impl NodeVisitor for TreeViewVisitor<'_> {
     fn visit_dir(&mut self, dir: &Directory) -> ControlFlow<()> {
-        let res = self.builder.dir(&dir.id, |ui| {
+        self.builder.dir(&dir.id, |ui| {
             ui.label(&dir.name);
         });
-        if let Some(res) = res {
-            res.context_menu(|ui| {
-                ui.label("Contex menu of a dir");
-            });
-        }
         ControlFlow::Continue(())
     }
 
@@ -62,13 +58,32 @@ impl NodeVisitor for TreeViewVisitor<'_> {
     }
 
     fn visit_file(&mut self, file: &File) -> ControlFlow<()> {
-        let res = self.builder.leaf(&file.id, |ui| {
+        self.builder.leaf(&file.id, |ui| {
             ui.label(&file.name);
         });
-        if let Some(res) = res {
-            res.context_menu(|ui| {
-                ui.label("Contex menu of a leaf");
-            });
+        ControlFlow::Continue(())
+    }
+}
+
+pub struct TreeViewContextMenu<'a> {
+    pub target_id: Uuid,
+    pub ui: &'a mut Ui,
+}
+impl NodeVisitor for TreeViewContextMenu<'_> {
+    fn visit_dir(&mut self, dir: &Directory) -> ControlFlow<()> {
+        if dir.id == self.target_id {
+            self.ui.label("Contex menu of a dir");
+        }
+        ControlFlow::Continue(())
+    }
+
+    fn leave_dir(&mut self, _dir: &Directory) -> ControlFlow<()> {
+        ControlFlow::Continue(())
+    }
+
+    fn visit_file(&mut self, file: &File) -> ControlFlow<()> {
+        if file.id == self.target_id {
+            self.ui.label("Contex menu of a leaf");
         }
         ControlFlow::Continue(())
     }
