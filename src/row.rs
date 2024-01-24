@@ -1,9 +1,9 @@
 use egui::{
-    epaint, vec2, CursorIcon, InnerResponse, LayerId, Order, PointerButton, Pos2, Rangef, Rect,
-    Response, Sense, Shape, Stroke, Ui, Vec2,
+    epaint, vec2, CursorIcon, InnerResponse, LayerId, Order, PointerButton, Rangef, Rect, Response,
+    Sense, Shape, Stroke, Ui, Vec2,
 };
 
-use crate::{RowLayout, TreeViewSettings};
+use crate::{Interaction, RowLayout, TreeViewSettings};
 
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
@@ -17,61 +17,25 @@ impl<NodeIdType> Row<NodeIdType>
 where
     NodeIdType: Clone + Copy + std::hash::Hash,
 {
-    pub(crate) fn show(
-        &self,
-        ui: &mut Ui,
-        settings: &TreeViewSettings,
-        add_label: &mut dyn FnMut(&mut Ui),
-        add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
-    ) -> RowResponse {
-        // Load row data
-        let row_id = ui.id().with(self.id.clone()).with("row");
-        let row_rect = crate::load(ui, row_id).unwrap_or(Rect::NOTHING);
-
-        // Interact with the row
-        let interaction = crate::interact(ui, row_rect, row_id, Sense::click_and_drag());
-
-        let was_dragged = self.drag(ui, settings, &interaction, add_label, add_icon);
-        let drop_target = self.drop(ui, &interaction);
-
-        let (row_response, closer_response, label_rect) =
-            self.draw_row(ui, settings, add_label, add_icon);
-
-        crate::store(ui, row_id, row_response.rect);
-
-        RowResponse {
-            interaction,
-            visual: row_response,
-            closer: closer_response,
-            label_rect,
-            was_dragged,
-            drop_quarter: drop_target,
-        }
-    }
     /// Draw the content as a drag overlay if it is beeing dragged.
-    fn drag(
+    pub(crate) fn draw_row_dragged(
         &self,
         ui: &mut Ui,
         settings: &TreeViewSettings,
-        interaction: &Response,
+        interaction: &Interaction,
+        row_response: &Response,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
     ) -> bool {
-        if !interaction.dragged_by(PointerButton::Primary)
-            && !interaction.drag_released_by(PointerButton::Primary)
-        {
-            return false;
-        }
-
         //*self.drag = Some(self.id);
         ui.ctx().set_cursor_icon(CursorIcon::Alias);
 
         let drag_source_id = ui.make_persistent_id("Drag source");
-        let drag_offset = if interaction.drag_started_by(PointerButton::Primary) {
+        let drag_offset = if interaction.response.drag_started_by(PointerButton::Primary) {
             let drag_offset = ui
                 .ctx()
                 .pointer_latest_pos()
-                .map(|pointer_pos| interaction.rect.min - pointer_pos)
+                .map(|pointer_pos| row_response.rect.min - pointer_pos)
                 .unwrap_or(Vec2::ZERO);
             crate::store(ui, drag_source_id, drag_offset);
             drag_offset
@@ -104,34 +68,14 @@ where
 
         // Move layer to the drag position
         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-            let delta = pointer_pos - background_rect.min + drag_offset;
+            let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
             ui.ctx().translate_layer(layer_id, delta);
         }
 
         true
     }
 
-    fn drop(&self, ui: &mut Ui, interaction: &Response) -> Option<DropQuarter> {
-        // For some reason we cannot use the provided interation response
-        // because once a row is dragged all other rows dont offer any hover information.
-        // To fix this we interaction with only hover again.
-        let cursor_y = {
-            let Some(Pos2 { y, .. }) = crate::interact(
-                ui,
-                interaction.rect,
-                ui.make_persistent_id("Drop target"),
-                Sense::hover(),
-            )
-            .hover_pos() else {
-                return None;
-            };
-            y
-        };
-
-        DropQuarter::new(interaction.rect.y_range(), cursor_y)
-    }
-
-    fn draw_row(
+    pub(crate) fn draw_row(
         &self,
         ui: &mut Ui,
         settings: &TreeViewSettings,
@@ -140,9 +84,12 @@ where
     ) -> (Response, Option<Response>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
             RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
-            RowLayout::CompactAlignedLables => {
-                (self.is_dir, self.is_dir, !self.is_dir, !self.is_dir && add_icon.is_some())
-            }
+            RowLayout::CompactAlignedLables => (
+                self.is_dir,
+                self.is_dir,
+                !self.is_dir,
+                !self.is_dir && add_icon.is_some(),
+            ),
             RowLayout::AlignedIcons => (true, self.is_dir, add_icon.is_some(), add_icon.is_some()),
             RowLayout::AlignedIconsAndLabels => (true, self.is_dir, true, add_icon.is_some()),
         };
@@ -229,7 +176,7 @@ pub enum DropQuarter {
 }
 
 impl DropQuarter {
-    fn new(range: Rangef, cursor_pos: f32) -> Option<DropQuarter> {
+    pub fn new(range: Rangef, cursor_pos: f32) -> Option<DropQuarter> {
         pub const DROP_LINE_HOVER_HEIGHT: f32 = 5.0;
 
         let h0 = range.min;
@@ -246,24 +193,4 @@ impl DropQuarter {
             _ => None,
         }
     }
-}
-
-pub struct RowResponse {
-    /// Response that is used for interacting with the row.
-    pub interaction: Response,
-    /// Response for the visual of the row.
-    pub visual: Response,
-    /// Response of the closer used for directories.
-    /// `None` if the row is not a directory.
-    pub closer: Option<Response>,
-    /// The rectangle for the label. Includes the closer,
-    /// the icon and the label itself but does not stretch
-    /// the entire row.
-    pub label_rect: Rect,
-    /// Wether the row was dragged or not.
-    pub was_dragged: bool,
-    /// `Some` if the row is target for a drop and what quarter
-    /// of the row is targeted for the drop.
-    /// `None` otherwise.
-    pub drop_quarter: Option<DropQuarter>,
 }
