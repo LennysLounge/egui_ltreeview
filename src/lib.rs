@@ -85,7 +85,14 @@ impl TreeView {
         ui.painter().rect_stroke(
             state.rect,
             egui::Rounding::ZERO,
-            egui::Stroke::new(1.0, egui::Color32::BLACK),
+            egui::Stroke::new(
+                1.0,
+                if ui.memory(|m| m.has_focus(self.id)) {
+                    egui::Color32::WHITE
+                } else {
+                    egui::Color32::BLACK
+                },
+            ),
         );
 
         let interaction = Interaction {
@@ -348,7 +355,7 @@ where
             open = !open;
         }
 
-        if closer.clicked() {
+        if self.interaction.clicked(&closer.rect) {
             open = !open;
             *self.selected = Some(*id);
         }
@@ -432,8 +439,13 @@ where
         mut add_label: impl FnMut(&mut Ui),
         mut add_icon: Option<&mut dyn FnMut(&mut Ui)>,
     ) -> (Response, Option<Response>) {
-        let (row_response, closer_response, label_rect) =
-            row_config.draw_row(self.ui, &self.settings, &mut add_label, &mut add_icon);
+        let (row_response, closer_response, label_rect) = row_config.draw_row(
+            self.ui,
+            &self.interaction,
+            &self.settings,
+            &mut add_label,
+            &mut add_icon,
+        );
 
         if self.interaction.clicked(&row_response.rect) {
             *self.selected = Some(row_config.id);

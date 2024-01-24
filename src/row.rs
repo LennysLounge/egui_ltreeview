@@ -1,6 +1,5 @@
 use egui::{
-    epaint, vec2, CursorIcon, InnerResponse, LayerId, Order, PointerButton, Rangef, Rect, Response,
-    Sense, Shape, Stroke, Ui, Vec2,
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, PointerButton, Rangef, Rect, Response, Shape, Stroke, Ui, Vec2
 };
 
 use crate::{Interaction, RowLayout, TreeViewSettings};
@@ -51,7 +50,7 @@ where
             .with_layer_id(layer_id, |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _) = self.draw_row(ui, settings, add_label, add_icon);
+                let (row, _, _) = self.draw_row(ui, interaction, settings, add_label, add_icon);
 
                 ui.painter().set(
                     background_position,
@@ -78,6 +77,7 @@ where
     pub(crate) fn draw_row(
         &self,
         ui: &mut Ui,
+        interaction: &Interaction,
         settings: &TreeViewSettings,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
@@ -122,13 +122,12 @@ where
                     vec2(ui.spacing().icon_width, ui.min_size().y),
                 ));
                 let res = ui.allocate_ui_at_rect(_small_rect, |ui| {
-                    let icon_id = ui.make_persistent_id(self.id).with("icon");
+                    let icon_id = Id::new(self.id).with("tree view closer icon");
                     let openness = ui.ctx().animate_bool(icon_id, self.is_open);
-                    let icon_res = ui.allocate_rect(ui.max_rect(), Sense::click());
-                    egui::collapsing_header::paint_default_icon(ui, openness, &icon_res);
-                    icon_res
+                    paint_default_icon(ui, openness, &ui.max_rect(), interaction);
+                    ui.allocate_space(ui.available_size_before_wrap());
                 });
-                Some(res.inner)
+                Some(res.response)
             } else {
                 None
             };
@@ -166,6 +165,34 @@ where
             label_rect,
         )
     }
+}
+
+/// Paint the arrow icon that indicated if the region is open or not
+fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, interaction: &Interaction) {
+    let visuals =
+        if interaction.mouse_over(rect) && interaction.response.is_pointer_button_down_on() {
+            ui.visuals().widgets.active
+        } else if interaction.mouse_over(rect) {
+            ui.visuals().widgets.hovered
+        } else {
+            ui.visuals().widgets.inactive
+        };
+
+    // Draw a pointy triangle arrow:
+    let rect = Rect::from_center_size(rect.center(), vec2(rect.width(), rect.height()) * 0.75);
+    let rect = rect.expand(visuals.expansion);
+    let mut points = vec![rect.left_top(), rect.right_top(), rect.center_bottom()];
+    use std::f32::consts::TAU;
+    let rotation = emath::Rot2::from_angle(remap(openness, 0.0..=1.0, -TAU / 4.0..=0.0));
+    for p in &mut points {
+        *p = rect.center() + rotation * (*p - rect.center());
+    }
+
+    ui.painter().add(Shape::convex_polygon(
+        points,
+        visuals.fg_stroke.color,
+        Stroke::NONE,
+    ));
 }
 
 pub enum DropQuarter {
