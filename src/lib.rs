@@ -95,7 +95,10 @@ impl TreeView {
 
         if ui.memory(|m| m.has_focus(self.id)) {
             if state.peristant.selected == None {
-                state.peristant.selected = state.node_order.first().map(|n| n.node_id);
+                state.peristant.selected = state
+                    .peristant
+                    .dragged
+                    .or(state.node_order.first().map(|n| n.node_id));
             }
             ui.input(|i| {
                 for event in i.events.iter() {

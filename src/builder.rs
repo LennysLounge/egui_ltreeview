@@ -162,8 +162,7 @@ where
 
         if let Some(current_dir) = self.parent_dir() {
             if current_dir.is_open {
-                let top = current_dir.icon_rect.center_bottom()
-                    + vec2(0.0, self.ui.spacing().item_spacing.y);
+                let top = current_dir.icon_rect.center_bottom() + vec2(0.0, 2.0);
 
                 let bottom = match self.settings.vline_style {
                     VLineStyle::None => top.clone(),
@@ -187,7 +186,7 @@ where
                 if matches!(self.settings.vline_style, VLineStyle::Hook) {
                     for child_pos in current_dir.child_node_positions.iter() {
                         let p1 = pos2(top.x, child_pos.y);
-                        let p2 = *child_pos;
+                        let p2 = *child_pos + vec2(-2.0, 0.0);
                         self.ui.painter().line_segment(
                             [p1, p2],
                             self.ui.visuals().widgets.noninteractive.bg_stroke,
