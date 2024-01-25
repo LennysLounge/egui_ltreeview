@@ -41,7 +41,7 @@ where
 
 impl<'a, NodeIdType> TreeViewBuilder<'a, NodeIdType>
 where
-    NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + 'static,
+    NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
 {
     pub(crate) fn new(
         ui: &'a mut Ui,
@@ -74,12 +74,6 @@ where
                     .unwrap_or(self.ui.spacing().indent),
         };
         self.row(&row_config, add_label, None);
-
-        self.state.node_order.push(NodeOrder {
-            depth: self.stack.len(),
-            node_id: *id,
-            id: None,
-        });
     }
 
     pub fn dir(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) {
@@ -95,8 +89,16 @@ where
             return;
         }
 
-        let dir_id = self.ui.id().with(id).with("dir");
-        let mut open = crate::load(self.ui, dir_id).unwrap_or(true);
+        let mut open = self
+            .state
+            .peristant
+            .dir_states
+            .get(id)
+            .copied()
+            .unwrap_or(true);
+
+        // let dir_id = self.ui.id().with(id).with("dir");
+        // let mut open = crate::load(self.ui, dir_id).unwrap_or(true);
 
         let row_config = Row {
             id: *id,
@@ -121,16 +123,17 @@ where
         let closer_interaction = self.state.interact(&closer.rect);
         if closer_interaction.clicked {
             open = !open;
-            self.state.selected = Some(*id);
+            self.state.peristant.selected = Some(*id);
         }
 
-        self.state.node_order.push(NodeOrder {
-            depth: self.stack.len(),
-            node_id: *id,
-            id: Some(dir_id),
-        });
+        self.state
+            .peristant
+            .dir_states
+            .entry(*id)
+            .and_modify(|e| *e = open)
+            .or_insert(open);
 
-        self.ui.data_mut(|d| d.insert_persisted(dir_id, open));
+        //self.ui.data_mut(|d| d.insert_persisted(dir_id, open));
 
         //self.stack.push(self.current_dir.clone());
         self.stack.push(DirectoryState {
@@ -219,7 +222,7 @@ where
         let row_interaction = self.state.interact(&row_response.rect);
 
         if row_interaction.clicked {
-            self.state.selected = Some(row_config.id);
+            self.state.peristant.selected = Some(row_config.id);
         }
         if self.is_selected(&row_config.id) {
             self.ui.painter().set(
@@ -237,10 +240,10 @@ where
             );
         }
         if row_interaction.right_clicked {
-            self.state.context_menu_node = Some(row_config.id);
+            self.state.peristant.context_menu = Some(row_config.id);
         }
         if row_interaction.drag_started {
-            self.state.dragged = Some(row_config.id);
+            self.state.peristant.dragged = Some(row_config.id);
         }
         if self.is_dragged(&row_config.id) {
             row_config.draw_row_dragged(
@@ -261,6 +264,11 @@ where
             self.do_drop(&row_config, &row_response, drop_quarter);
         }
 
+        self.state.node_order.push(NodeOrder {
+            depth: self.stack.len(),
+            node_id: row_config.id,
+        });
+
         self.push_child_node_position(label_rect.left_center());
 
         (row_response, closer_response)
@@ -275,7 +283,7 @@ where
         if !self.ui.ctx().memory(|m| m.is_anything_being_dragged()) {
             return;
         }
-        if self.state.dragged.is_none() {
+        if self.state.peristant.dragged.is_none() {
             return;
         }
         if self.parent_dir_drop_forbidden() {
@@ -407,6 +415,7 @@ where
 
     fn is_selected(&self, id: &NodeIdType) -> bool {
         self.state
+            .peristant
             .selected
             .as_ref()
             .is_some_and(|selected_id| selected_id == id)
@@ -414,6 +423,7 @@ where
 
     fn is_dragged(&self, id: &NodeIdType) -> bool {
         self.state
+            .peristant
             .dragged
             .as_ref()
             .is_some_and(|drag_id| drag_id == id)
