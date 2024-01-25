@@ -51,8 +51,6 @@ impl eframe::App for MyApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.allocate_space(vec2(ui.available_width(), 0.0));
-
-                _ = ui.button("before");
                 let response = TreeView::new(ui.make_persistent_id("Names tree view"))
                     .override_indent(self.settings.override_indent)
                     .vline_style(self.settings.vline_style)
@@ -66,7 +64,6 @@ impl eframe::App for MyApp {
                         show_node(&mut builder, &self.tree);
                     });
                 self.selected_node = response.selected_node;
-                _ = ui.button("after");
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.selected_node == Some(self.settings_id) {

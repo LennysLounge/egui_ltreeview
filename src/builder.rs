@@ -97,9 +97,6 @@ where
             .copied()
             .unwrap_or(true);
 
-        // let dir_id = self.ui.id().with(id).with("dir");
-        // let mut open = crate::load(self.ui, dir_id).unwrap_or(true);
-
         let row_config = Row {
             id: *id,
             drop_on_allowed: true,
@@ -133,9 +130,6 @@ where
             .and_modify(|e| *e = open)
             .or_insert(open);
 
-        //self.ui.data_mut(|d| d.insert_persisted(dir_id, open));
-
-        //self.stack.push(self.current_dir.clone());
         self.stack.push(DirectoryState {
             is_open: open,
             id: *id,

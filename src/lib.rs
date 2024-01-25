@@ -77,19 +77,6 @@ impl TreeView {
             )
         });
 
-        // ui.painter().rect_stroke(
-        //     state.peristant.rect,
-        //     egui::Rounding::ZERO,
-        //     egui::Stroke::new(
-        //         1.0,
-        //         if state.has_focus {
-        //             egui::Color32::WHITE
-        //         } else {
-        //             egui::Color32::BLACK
-        //         },
-        //     ),
-        // );
-
         let res = ui.allocate_ui_with_layout(
             ui.available_size_before_wrap(),
             Layout::top_down(egui::Align::Min),
@@ -100,9 +87,6 @@ impl TreeView {
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
             },
         );
-
-        ui.label(format!("dragged: {:?}", state.peristant.dragged));
-        ui.label(format!("drop: {:?}", state.drop));
 
         let tree_view_interact = state.interact(&res.response.rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {
