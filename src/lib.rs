@@ -56,18 +56,18 @@ impl TreeView {
     {
         let mut state = TreeViewState::load(ui, self.id);
 
-        // ui.painter().rect_stroke(
-        //     state.rect,
-        //     egui::Rounding::ZERO,
-        //     egui::Stroke::new(
-        //         1.0,
-        //         if ui.memory(|m| m.has_focus(self.id)) {
-        //             egui::Color32::WHITE
-        //         } else {
-        //             egui::Color32::BLACK
-        //         },
-        //     ),
-        // );
+        ui.painter().rect_stroke(
+            state.rect,
+            egui::Rounding::ZERO,
+            egui::Stroke::new(
+                1.0,
+                if state.has_focus {
+                    egui::Color32::WHITE
+                } else {
+                    egui::Color32::BLACK
+                },
+            ),
+        );
 
         let res = ui.allocate_ui_with_layout(
             ui.available_size_before_wrap(),
@@ -82,6 +82,11 @@ impl TreeView {
 
         ui.label(format!("dragged: {:?}", state.dragged));
         ui.label(format!("drop: {:?}", state.drop));
+
+        let tree_view_interact = state.interact(&res.response.rect);
+        if tree_view_interact.clicked || tree_view_interact.drag_started {
+            ui.memory_mut(|m| m.request_focus(self.id));
+        }
 
         let drag_drop_action =
             state
@@ -106,7 +111,7 @@ impl TreeView {
             drag_drop_action,
             drop_marker_idx: state.drop_marker_idx,
             selected_node: state.selected,
-            context_menu_node: state.context_menu,
+            context_menu_node: state.context_menu_node,
         }
     }
 }
@@ -158,7 +163,9 @@ struct TreeViewState<NodeIdType> {
     /// Rectangle of the tree view.
     rect: Rect,
     /// NodeId of the node that was right clicked for a context menu.
-    context_menu: Option<NodeIdType>,
+    context_menu_node: Option<NodeIdType>,
+    /// Wether or not the tree view has keyboard focus.
+    has_focus: bool,
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
@@ -170,6 +177,7 @@ where
             .unwrap_or_default();
 
         let response = interact_no_expansion(ui, state.rect, id, Sense::click_and_drag());
+        let has_focus = ui.memory(|m| m.has_focus(id));
 
         TreeViewState {
             drag_start_pos: state.drag_start_pos,
@@ -180,7 +188,8 @@ where
             drop_marker_idx: ui.painter().add(Shape::Noop),
             rect: state.rect,
             response,
-            context_menu: state.context_menu,
+            context_menu_node: state.context_menu,
+            has_focus,
         }
     }
 
@@ -194,7 +203,7 @@ where
                     rect: self.rect,
                     drag_start_pos: self.drag_start_pos,
                     drag_row_offset: self.drag_row_offset,
-                    context_menu: self.context_menu.clone(),
+                    context_menu: self.context_menu_node.clone(),
                 },
             )
         });

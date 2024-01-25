@@ -212,13 +212,17 @@ where
                 epaint::RectShape::new(
                     row_response.rect,
                     self.ui.visuals().widgets.active.rounding,
-                    self.ui.visuals().selection.bg_fill,
+                    if self.state.has_focus {
+                        self.ui.visuals().selection.bg_fill
+                    } else {
+                        self.ui.visuals().widgets.inactive.weak_bg_fill
+                    },
                     Stroke::NONE,
                 ),
             );
         }
         if row_interaction.right_clicked {
-            self.state.context_menu = Some(row_config.id);
+            self.state.context_menu_node = Some(row_config.id);
         }
         if row_interaction.drag_started {
             self.state.dragged = Some(row_config.id);
