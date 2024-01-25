@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     row::{DropQuarter, Row},
-    DropPosition, TreeViewSettings, TreeViewState, VLineStyle,
+    DropPosition, NodeOrder, TreeViewSettings, TreeViewState, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -28,7 +28,10 @@ pub(crate) struct DirectoryState<NodeIdType> {
 /// The builder used to construct the tree view.
 ///
 /// Use this to add directories or leaves to the tree.
-pub struct TreeViewBuilder<'a, NodeIdType> {
+pub struct TreeViewBuilder<'a, NodeIdType>
+where
+    NodeIdType: Clone,
+{
     ui: &'a mut Ui,
     state: &'a mut TreeViewState<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
@@ -71,6 +74,12 @@ where
                     .unwrap_or(self.ui.spacing().indent),
         };
         self.row(&row_config, add_label, None);
+
+        self.state.node_order.push(NodeOrder {
+            depth: self.stack.len(),
+            node_id: *id,
+            id: None,
+        });
     }
 
     pub fn dir(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) {
@@ -114,6 +123,12 @@ where
             open = !open;
             self.state.selected = Some(*id);
         }
+
+        self.state.node_order.push(NodeOrder {
+            depth: self.stack.len(),
+            node_id: *id,
+            id: Some(dir_id),
+        });
 
         self.ui.data_mut(|d| d.insert_persisted(dir_id, open));
 

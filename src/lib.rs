@@ -2,8 +2,8 @@ pub mod builder;
 mod row;
 
 use egui::{
-    self, layers::ShapeIdx, util::id_type_map::SerializableAny, Id, Layout, Pos2, Rect, Response,
-    Sense, Shape, Ui, Vec2,
+    self, layers::ShapeIdx, util::id_type_map::SerializableAny, Event, EventFilter, Id, Key,
+    Layout, Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -56,6 +56,18 @@ impl TreeView {
     {
         let mut state = TreeViewState::load(ui, self.id);
 
+        ui.memory_mut(|m| {
+            m.set_focus_lock_filter(
+                self.id,
+                EventFilter {
+                    tab: false,
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    escape: false,
+                },
+            )
+        });
+
         ui.painter().rect_stroke(
             state.rect,
             egui::Rounding::ZERO,
@@ -87,6 +99,41 @@ impl TreeView {
         if tree_view_interact.clicked || tree_view_interact.drag_started {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
+
+        ui.input(|i| {
+            for event in i.events.iter() {
+                match event {
+                    Event::Key { key, pressed, .. } if *pressed == true => match key {
+                        Key::ArrowUp => {
+                            if let Some(index) = state
+                                .node_order
+                                .iter()
+                                .position(|n| Some(n.node_id) == state.selected)
+                            {
+                                if index > 0 {
+                                    state.selected = Some(state.node_order[index - 1].node_id);
+                                }
+                            }
+                        }
+                        Key::ArrowDown => {
+                            if let Some(index) = state
+                                .node_order
+                                .iter()
+                                .position(|n| Some(n.node_id) == state.selected)
+                            {
+                                if index < state.node_order.len() - 1 {
+                                    state.selected = Some(state.node_order[index + 1].node_id);
+                                }
+                            }
+                        }
+                        Key::ArrowLeft => (),
+                        Key::ArrowRight => (),
+                        _ => (),
+                    },
+                    _ => (),
+                }
+            }
+        });
 
         let drag_drop_action =
             state
@@ -145,7 +192,10 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
 }
 
 #[derive(Clone)]
-struct TreeViewState<NodeIdType> {
+struct TreeViewState<NodeIdType>
+where
+    NodeIdType: Clone,
+{
     /// Response of the interaction.
     response: Response,
     /// Cursor position of when a drag started.
@@ -166,6 +216,8 @@ struct TreeViewState<NodeIdType> {
     context_menu_node: Option<NodeIdType>,
     /// Wether or not the tree view has keyboard focus.
     has_focus: bool,
+    /// Order of the nodes inside the tree.
+    node_order: Vec<NodeOrder<NodeIdType>>,
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
@@ -190,6 +242,7 @@ where
             response,
             context_menu_node: state.context_menu,
             has_focus,
+            node_order: Vec::new(),
         }
     }
 
@@ -209,7 +262,10 @@ where
         });
     }
 }
-impl<NodeIdType> TreeViewState<NodeIdType> {
+impl<NodeIdType> TreeViewState<NodeIdType>
+where
+    NodeIdType: Clone,
+{
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
             .response
@@ -233,6 +289,13 @@ impl<NodeIdType> TreeViewState<NodeIdType> {
             right_clicked: self.response.clicked_by(egui::PointerButton::Secondary),
         }
     }
+}
+
+#[derive(Clone)]
+struct NodeOrder<NodeIdType> {
+    pub depth: usize,
+    pub node_id: NodeIdType,
+    pub id: Option<Id>,
 }
 
 struct Interaction {
