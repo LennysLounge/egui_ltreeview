@@ -16,7 +16,10 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Egui_ltreeview example",
         options,
-        Box::new(|_| Box::<MyApp>::default()),
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Box::<MyApp>::default()
+        }),
     )
 }
 

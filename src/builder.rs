@@ -75,7 +75,14 @@ where
             is_selected: self.state.is_selected(id),
             is_focused: self.state.has_focus,
         };
-        self.row(&row_config, add_label, None);
+
+        let mut add_icon = |ui: &mut Ui| {
+            egui::Image::new(egui::include_image!("../settings.png"))
+                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                .paint_at(ui, ui.max_rect());
+        };
+
+        self.row(&row_config, add_label, Some(&mut add_icon));
     }
 
     pub fn dir(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) {
@@ -113,7 +120,15 @@ where
             is_focused: self.state.has_focus,
         };
 
-        let (row_response, closer_response) = self.row(&row_config, add_content, None);
+        let mut add_icon = |ui: &mut Ui| {
+            egui::Image::new(egui::include_image!("../folder.png"))
+                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                .maintain_aspect_ratio(true)
+                .paint_at(ui, ui.max_rect());
+        };
+
+        let (row_response, closer_response) =
+            self.row(&row_config, add_content, Some(&mut add_icon));
         let closer = closer_response.expect("Closer response should be availabel for dirs");
 
         let row_interaction = self.state.interact(&row_response.rect);

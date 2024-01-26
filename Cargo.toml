@@ -11,4 +11,5 @@ uuid = "1.6.1"
 
 [dev-dependencies]
 eframe = "0.25"
+egui_extras = {version = "0.25", features = ["all_loaders"]}
 uuid = { version = "1.6.1", features = ["v4"] }

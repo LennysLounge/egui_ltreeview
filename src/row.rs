@@ -115,6 +115,7 @@ where
                 ui.add_space(ui.spacing().icon_width);
             };
 
+            ui.add_space(2.0);
             let label_pos = ui.cursor().min;
             (add_label)(ui);
             ui.add_space(ui.available_width());
@@ -137,11 +138,11 @@ where
             };
             if draw_icon {
                 add_icon.as_mut().map(|add_icon| {
-                    let (_small_rect, rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
+                    let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
                         icon_pos,
                         vec2(ui.spacing().icon_width, ui.min_size().y),
                     ));
-                    ui.allocate_ui_at_rect(rect, |ui| add_icon(ui)).response
+                    ui.allocate_ui_at_rect(_big_rect, |ui| add_icon(ui)).response
                 });
             }
             let label_rect_min = if draw_closer {
