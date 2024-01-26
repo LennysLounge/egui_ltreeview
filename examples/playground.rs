@@ -87,7 +87,7 @@ fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
 fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.node(
         NodeBuilder::dir(dir.id).icon(|ui| {
-            egui::Image::new(egui::include_image!("../folder.png"))
+            egui::Image::new(egui::include_image!("folder.png"))
                 .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
                 .paint_at(ui, ui.max_rect());
         }),
@@ -105,7 +105,7 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
 fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
     builder.node(
         NodeBuilder::leaf(file.id).icon(|ui| {
-            egui::Image::new(egui::include_image!("../user.png"))
+            egui::Image::new(egui::include_image!("user.png"))
                 .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
                 .paint_at(ui, ui.max_rect());
         }),
