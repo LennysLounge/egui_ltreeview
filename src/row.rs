@@ -3,7 +3,7 @@ use egui::{
     Rangef, Rect, Response, Shape, Stroke, Ui, Vec2,
 };
 
-use crate::{Interaction, RowLayout, TreeViewState, TreeViewSettings};
+use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
 
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
@@ -11,6 +11,8 @@ pub struct Row<NodeIdType> {
     pub drop_on_allowed: bool,
     pub is_open: bool,
     pub is_dir: bool,
+    pub is_selected: bool,
+    pub is_focused: bool,
 }
 
 impl<NodeIdType> Row<NodeIdType>
@@ -99,6 +101,16 @@ where
             inner: (closer_response, label_rect_min),
             response: row_response,
         } = ui.horizontal(|ui| {
+            let fg_stroke = if self.is_selected && self.is_focused {
+                ui.visuals().selection.stroke
+            } else if self.is_selected {
+                ui.visuals().widgets.inactive.fg_stroke
+            } else {
+                ui.visuals().widgets.noninteractive.fg_stroke
+            };
+            ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
+            ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
+
             ui.add_space(self.depth);
             // The closer and the icon should be drawn vertically centered to the label.
             // To do this we first have to draw the label and then the closer and icon

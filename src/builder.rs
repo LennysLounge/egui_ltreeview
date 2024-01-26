@@ -72,6 +72,8 @@ where
                     .settings
                     .override_indent
                     .unwrap_or(self.ui.spacing().indent),
+            is_selected: self.is_selected(id),
+            is_focused: self.state.has_focus,
         };
         self.row(&row_config, add_label, None);
     }
@@ -107,6 +109,8 @@ where
                     .settings
                     .override_indent
                     .unwrap_or(self.ui.spacing().indent),
+            is_selected: self.is_selected(id),
+            is_focused: self.state.has_focus,
         };
 
         let (row_response, closer_response) = self.row(&row_config, add_content, None);
@@ -226,7 +230,7 @@ where
                     if self.state.has_focus {
                         self.ui.visuals().selection.bg_fill
                     } else {
-                        self.ui.visuals().widgets.inactive.weak_bg_fill
+                        self.ui.visuals().widgets.inactive.weak_bg_fill.linear_multiply(0.3)
                     },
                     Stroke::NONE,
                 ),
