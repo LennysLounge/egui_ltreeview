@@ -46,7 +46,7 @@ pub struct TreeViewVisitor<'a> {
 }
 impl NodeVisitor for TreeViewVisitor<'_> {
     fn visit_dir(&mut self, dir: &Directory) -> ControlFlow<()> {
-        self.builder.dir(&dir.id, |ui| {
+        self.builder.dir(dir.id, |ui| {
             ui.label(&dir.name);
         });
         ControlFlow::Continue(())
@@ -58,7 +58,7 @@ impl NodeVisitor for TreeViewVisitor<'_> {
     }
 
     fn visit_file(&mut self, file: &File) -> ControlFlow<()> {
-        self.builder.leaf(&file.id, |ui| {
+        self.builder.leaf(file.id, |ui| {
             ui.label(&file.name);
         });
         ControlFlow::Continue(())

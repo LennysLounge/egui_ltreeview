@@ -2,7 +2,7 @@
 mod data;
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
-use egui_ltreeview::{RowLayout, TreeView, TreeViewBuilder, VLineStyle};
+use egui_ltreeview::{builder::NodeBuilder, RowLayout, TreeView, TreeViewBuilder, VLineStyle};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -59,7 +59,7 @@ impl eframe::App for MyApp {
                     .vline_style(self.settings.vline_style)
                     .row_layout(self.settings.row_layout)
                     .show(ui, |mut builder| {
-                        builder.leaf(&self.settings_id, |ui| {
+                        builder.leaf(self.settings_id, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label("Settings");
                             });
@@ -85,9 +85,16 @@ fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
     }
 }
 fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
-    builder.dir(&dir.id, |ui| {
-        ui.label(&dir.name);
-    });
+    builder.node(
+        NodeBuilder::dir(dir.id).icon(|ui| {
+            egui::Image::new(egui::include_image!("../folder.png"))
+                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                .paint_at(ui, ui.max_rect());
+        }),
+        |ui| {
+            ui.label(&dir.name);
+        },
+    );
 
     for node in dir.children.iter() {
         show_node(builder, node);
@@ -96,9 +103,16 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.close_dir();
 }
 fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
-    builder.leaf(&file.id, |ui| {
-        ui.label(&file.name);
-    });
+    builder.node(
+        NodeBuilder::leaf(file.id).icon(|ui| {
+            egui::Image::new(egui::include_image!("../user.png"))
+                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                .paint_at(ui, ui.max_rect());
+        }),
+        |ui| {
+            ui.label(&file.name);
+        },
+    );
 }
 
 fn show_settings(ui: &mut Ui, settings: &mut Settings) {

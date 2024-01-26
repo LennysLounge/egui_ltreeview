@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct DirectoryState<NodeIdType> {
+struct DirectoryState<NodeIdType> {
     /// Id of the directory node.
     id: NodeIdType,
     /// If directory is expanded
@@ -28,25 +28,25 @@ pub(crate) struct DirectoryState<NodeIdType> {
 /// The builder used to construct the tree view.
 ///
 /// Use this to add directories or leaves to the tree.
-pub struct TreeViewBuilder<'a, NodeIdType>
+pub struct TreeViewBuilder<'ui, NodeIdType>
 where
     NodeIdType: Clone,
 {
-    ui: &'a mut Ui,
-    state: &'a mut TreeViewState<NodeIdType>,
+    ui: &'ui mut Ui,
+    state: &'ui mut TreeViewState<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
     background_idx: ShapeIdx,
-    settings: &'a TreeViewSettings,
+    settings: &'ui TreeViewSettings,
 }
 
-impl<'a, NodeIdType> TreeViewBuilder<'a, NodeIdType>
+impl<'ui, NodeIdType> TreeViewBuilder<'ui, NodeIdType>
 where
     NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
 {
     pub(crate) fn new(
-        ui: &'a mut Ui,
-        state: &'a mut TreeViewState<NodeIdType>,
-        settings: &'a TreeViewSettings,
+        ui: &'ui mut Ui,
+        state: &'ui mut TreeViewState<NodeIdType>,
+        settings: &'ui TreeViewSettings,
     ) -> Self {
         Self {
             background_idx: ui.painter().add(Shape::Noop),
@@ -57,108 +57,18 @@ where
         }
     }
 
-    pub fn leaf(&mut self, id: &NodeIdType, add_label: impl FnMut(&mut Ui)) {
-        if !self.parent_dir_is_open() {
-            return;
-        }
-
-        let row_config = Row {
-            id: *id,
-            drop_on_allowed: false,
-            is_open: false,
-            is_dir: false,
-            depth: self.stack.len() as f32
-                * self
-                    .settings
-                    .override_indent
-                    .unwrap_or(self.ui.spacing().indent),
-            is_selected: self.state.is_selected(id),
-            is_focused: self.state.has_focus,
-        };
-
-        let mut add_icon = |ui: &mut Ui| {
-            egui::Image::new(egui::include_image!("../settings.png"))
-                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
-                .paint_at(ui, ui.max_rect());
-        };
-
-        self.row(&row_config, add_label, Some(&mut add_icon));
+    /// Add a leaf to the tree.
+    pub fn leaf(&mut self, id: NodeIdType, add_label: impl FnMut(&mut Ui)) {
+        self.node(NodeBuilder::leaf(id), add_label);
     }
 
-    pub fn dir(&mut self, id: &NodeIdType, add_content: impl FnMut(&mut Ui)) {
-        if !self.parent_dir_is_open() {
-            self.stack.push(DirectoryState {
-                is_open: false,
-                id: *id,
-                drop_forbidden: true,
-                row_rect: Rect::NOTHING,
-                icon_rect: Rect::NOTHING,
-                child_node_positions: Vec::new(),
-            });
-            return;
-        }
-
-        let mut open = self
-            .state
-            .peristant
-            .dir_states
-            .get(id)
-            .copied()
-            .unwrap_or(true);
-
-        let row_config = Row {
-            id: *id,
-            drop_on_allowed: true,
-            is_open: open,
-            is_dir: true,
-            depth: self.stack.len() as f32
-                * self
-                    .settings
-                    .override_indent
-                    .unwrap_or(self.ui.spacing().indent),
-            is_selected: self.state.is_selected(id),
-            is_focused: self.state.has_focus,
-        };
-
-        let mut add_icon = |ui: &mut Ui| {
-            egui::Image::new(egui::include_image!("../folder.png"))
-                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
-                .maintain_aspect_ratio(true)
-                .paint_at(ui, ui.max_rect());
-        };
-
-        let (row_response, closer_response) =
-            self.row(&row_config, add_content, Some(&mut add_icon));
-        let closer = closer_response.expect("Closer response should be availabel for dirs");
-
-        let row_interaction = self.state.interact(&row_response.rect);
-        if row_interaction.double_clicked {
-            open = !open;
-        }
-
-        let closer_interaction = self.state.interact(&closer.rect);
-        if closer_interaction.clicked {
-            open = !open;
-            self.state.peristant.selected = Some(*id);
-        }
-
-        self.state
-            .peristant
-            .dir_states
-            .entry(*id)
-            .and_modify(|e| *e = open)
-            .or_insert(open);
-
-        self.stack.push(DirectoryState {
-            is_open: open,
-            id: *id,
-            drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(id),
-            row_rect: row_response.rect,
-            icon_rect: closer.rect,
-            child_node_positions: Vec::new(),
-        });
+    /// Add a directory to the tree.
+    /// Must call [Self::close_dir] to close the directory.
+    pub fn dir(&mut self, id: NodeIdType, add_label: impl FnMut(&mut Ui)) {
+        self.node(NodeBuilder::dir(id), add_label);
     }
 
+    /// Close the current directory.
     pub fn close_dir(&mut self) {
         if let Some(current_dir) = self.parent_dir() {
             if let Some((drop_parent, DropPosition::Last)) = &self.state.drop {
@@ -215,6 +125,82 @@ where
             }
         }
         self.stack.pop();
+    }
+
+    /// Add a node to the tree.
+    pub fn node(&mut self, node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
+        if !self.parent_dir_is_open() {
+            if node.is_dir {
+                self.stack.push(DirectoryState {
+                    is_open: false,
+                    id: node.id,
+                    drop_forbidden: true,
+                    row_rect: Rect::NOTHING,
+                    icon_rect: Rect::NOTHING,
+                    child_node_positions: Vec::new(),
+                });
+            }
+            return;
+        }
+
+        let mut open = self
+            .state
+            .peristant
+            .dir_states
+            .get(&node.id)
+            .copied()
+            .unwrap_or(true);
+
+        let row_config = Row {
+            id: node.id,
+            drop_on_allowed: false,
+            is_open: open,
+            is_dir: node.is_dir,
+            depth: self.stack.len() as f32
+                * self
+                    .settings
+                    .override_indent
+                    .unwrap_or(self.ui.spacing().indent),
+            is_selected: self.state.is_selected(&node.id),
+            is_focused: self.state.has_focus,
+        };
+
+        let (row_response, closer_response) = match node.icon {
+            Some(mut add_icon) => self.row(&row_config, &mut add_label, Some(&mut add_icon)),
+            None => self.row(&row_config, &mut add_label, None),
+        };
+
+        if node.is_dir {
+            let closer_response =
+                closer_response.expect("Closer response should be availabel for dirs");
+
+            let closer_interaction = self.state.interact(&closer_response.rect);
+            if closer_interaction.clicked {
+                open = !open;
+                self.state.peristant.selected = Some(node.id);
+            }
+
+            let row_interaction = self.state.interact(&row_response.rect);
+            if row_interaction.double_clicked {
+                open = !open;
+            }
+
+            self.state
+                .peristant
+                .dir_states
+                .entry(node.id)
+                .and_modify(|e| *e = open)
+                .or_insert(open);
+
+            self.stack.push(DirectoryState {
+                is_open: open,
+                id: node.id,
+                drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
+                row_rect: row_response.rect,
+                icon_rect: closer_response.rect,
+                child_node_positions: Vec::new(),
+            });
+        }
     }
 
     fn row(
@@ -451,5 +437,36 @@ where
         if let Some(parent_dir) = self.stack.last_mut() {
             parent_dir.child_node_positions.push(pos);
         }
+    }
+}
+
+pub struct NodeBuilder<NodeIdType> {
+    id: NodeIdType,
+    is_dir: bool,
+    icon: Option<Box<dyn FnMut(&mut Ui)>>,
+}
+impl<NodeIdType> NodeBuilder<NodeIdType> {
+    /// Create a new node builder from a leaf prototype.
+    pub fn leaf(id: NodeIdType) -> Self {
+        Self {
+            id,
+            is_dir: false,
+            icon: None,
+        }
+    }
+
+    /// Create a new node builder from a directory prorotype.
+    pub fn dir(id: NodeIdType) -> Self {
+        Self {
+            id,
+            is_dir: true,
+            icon: None,
+        }
+    }
+
+    /// Add a icon to the node.
+    pub fn icon(mut self, add_icon: impl FnMut(&mut Ui) + 'static) -> Self {
+        self.icon = Some(Box::new(add_icon));
+        self
     }
 }

@@ -47,7 +47,7 @@ fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
     }
 }
 fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
-    builder.dir(&dir.id, |ui| {
+    builder.dir(dir.id, |ui| {
         ui.label(&dir.name);
     });
 
@@ -58,7 +58,7 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.close_dir();
 }
 fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
-    builder.leaf(&file.id, |ui| {
+    builder.leaf(file.id, |ui| {
         ui.label(&file.name);
     });
 }
