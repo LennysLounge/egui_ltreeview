@@ -62,8 +62,7 @@ impl TreeView {
                 self.id,
                 EventFilter {
                     tab: false,
-                    horizontal_arrows: true,
-                    vertical_arrows: true,
+                    arrows: true,
                     escape: false,
                 },
             )
