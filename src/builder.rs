@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     row::{DropQuarter, Row},
-    DropPosition, NodeOrder, TreeViewSettings, TreeViewState, VLineStyle,
+    DragState, DropPosition, NodeOrder, TreeViewSettings, TreeViewState, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -72,7 +72,7 @@ where
                     .settings
                     .override_indent
                     .unwrap_or(self.ui.spacing().indent),
-            is_selected: self.is_selected(id),
+            is_selected: self.state.is_selected(id),
             is_focused: self.state.has_focus,
         };
         self.row(&row_config, add_label, None);
@@ -109,7 +109,7 @@ where
                     .settings
                     .override_indent
                     .unwrap_or(self.ui.spacing().indent),
-            is_selected: self.is_selected(id),
+            is_selected: self.state.is_selected(id),
             is_focused: self.state.has_focus,
         };
 
@@ -137,7 +137,7 @@ where
         self.stack.push(DirectoryState {
             is_open: open,
             id: *id,
-            drop_forbidden: self.parent_dir_drop_forbidden() || self.is_dragged(id),
+            drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(id),
             row_rect: row_response.rect,
             icon_rect: closer.rect,
             child_node_positions: Vec::new(),
@@ -221,7 +221,7 @@ where
         if row_interaction.clicked {
             self.state.peristant.selected = Some(row_config.id);
         }
-        if self.is_selected(&row_config.id) {
+        if self.state.is_selected(&row_config.id) {
             self.ui.painter().set(
                 self.background_idx,
                 epaint::RectShape::new(
@@ -245,30 +245,23 @@ where
             self.state.peristant.context_menu = Some(row_config.id);
         }
         if row_interaction.drag_started {
-            self.state.peristant.dragged = Some(row_config.id);
-            self.state.peristant.drag_start_pos = self.ui.ctx().pointer_latest_pos();
-            self.state.peristant.drag_valid = false;
-            self.state.peristant._drag_row_offset = Some(
-                row_response.rect.min
-                    - self
-                        .ui
-                        .ctx()
-                        .pointer_latest_pos()
-                        .unwrap_or_default()
-                        .to_vec2(),
-            );
+            let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
+            self.state.peristant.dragged = Some(DragState {
+                node_id: row_config.id,
+                drag_row_offset: row_response.rect.min - pointer_pos,
+                drag_start_pos: pointer_pos,
+                drag_valid: false,
+            });
         }
-        if self.is_dragged(&row_config.id) {
+        if let Some(drag_state) = self.state.peristant.dragged.as_mut() {
             // Test if the drag becomes valid
-            if !self.state.peristant.drag_valid {
-                self.state.peristant.drag_valid = self
-                    .state
-                    .peristant
+            if !drag_state.drag_valid {
+                drag_state.drag_valid = drag_state
                     .drag_start_pos
-                    .zip(self.ui.ctx().pointer_latest_pos())
-                    .is_some_and(|(start, current)| start.distance(current) > 5.0);
+                    .distance(self.ui.ctx().pointer_latest_pos().unwrap_or_default())
+                    > 5.0;
             }
-            if self.state.peristant.drag_valid {
+            if drag_state.node_id == row_config.id && drag_state.drag_valid {
                 row_config.draw_row_dragged(
                     self.ui,
                     &self.settings,
@@ -309,7 +302,7 @@ where
         if self.state.peristant.dragged.is_none() {
             return;
         }
-        if !self.state.peristant.drag_valid {
+        if !self.state.drag_valid() {
             return;
         }
         if self.parent_dir_drop_forbidden() {
@@ -317,7 +310,7 @@ where
         }
         // For dirs and for nodes that allow dropping on them, it is not
         // allowed to drop itself onto itself.
-        if self.is_dragged(&row_config.id) && row_config.drop_on_allowed {
+        if self.state.is_dragged(&row_config.id) && row_config.drop_on_allowed {
             return;
         }
 
@@ -328,7 +321,7 @@ where
         // This however doesn't make sense and makes executing the command more
         // difficult for the caller.
         // Instead we display the markers only.
-        if self.is_dragged(&row_config.id) {
+        if self.state.is_dragged(&row_config.id) {
             self.ui.painter().set(self.state.drop_marker_idx, shape);
             return;
         }
@@ -437,22 +430,6 @@ where
 
     fn parent_dir_drop_forbidden(&self) -> bool {
         self.parent_dir().is_some_and(|dir| dir.drop_forbidden)
-    }
-
-    fn is_selected(&self, id: &NodeIdType) -> bool {
-        self.state
-            .peristant
-            .selected
-            .as_ref()
-            .is_some_and(|selected_id| selected_id == id)
-    }
-
-    fn is_dragged(&self, id: &NodeIdType) -> bool {
-        self.state
-            .peristant
-            .dragged
-            .as_ref()
-            .is_some_and(|drag_id| drag_id == id)
     }
 
     fn push_child_node_position(&mut self, pos: Pos2) {

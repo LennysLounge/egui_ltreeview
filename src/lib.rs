@@ -53,15 +53,7 @@ impl TreeView {
         mut build_tree_view: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
     where
-        NodeIdType: Clone
-            + Copy
-            + Send
-            + Sync
-            + std::hash::Hash
-            + PartialEq
-            + Eq
-            + std::fmt::Debug
-            + 'static,
+        NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
     {
         let mut state = TreeViewState::load(ui, self.id);
 
@@ -94,10 +86,15 @@ impl TreeView {
         }
 
         if ui.memory(|m| m.has_focus(self.id)) {
+            // If the widget is focused but no node is selected we want to select any node
+            // to allow navigating throught the tree.
+            // In case we gain focus from a drag action we select the dragged node directly.
             if state.peristant.selected == None {
                 state.peristant.selected = state
                     .peristant
                     .dragged
+                    .as_ref()
+                    .map(|drag_state| drag_state.node_id)
                     .or(state.node_order.first().map(|n| n.node_id));
             }
             ui.input(|i| {
@@ -112,16 +109,14 @@ impl TreeView {
             });
         }
 
-        let drag_drop_action = if state.peristant.drag_valid {
-            state
-                .peristant
-                .dragged
-                .zip(state.drop)
-                .map(|(drag_id, (drop_id, position))| DragDropAction {
-                    drag_id,
+        let drag_drop_action = if state.drag_valid() {
+            state.peristant.dragged.as_ref().zip(state.drop).map(
+                |(drag_state, (drop_id, position))| DragDropAction {
+                    drag_id: drag_state.node_id,
                     drop_id,
                     position,
-                })
+                },
+            )
         } else {
             None
         };
@@ -148,7 +143,7 @@ impl TreeView {
 
 fn handle_input<NodeIdType>(state: &mut TreeViewState<NodeIdType>, key: &Key)
 where
-    NodeIdType: Clone + Copy + PartialEq + Eq + std::hash::Hash + std::fmt::Debug,
+    NodeIdType: Clone + Copy + PartialEq + Eq + std::hash::Hash,
 {
     let Some(selected_index) = state
         .node_order
@@ -211,17 +206,10 @@ where
 struct TreeViewPersistantState<NodeIdType> {
     /// Id of the node that was selected.
     selected: Option<NodeIdType>,
-    /// Id of the node that was dragged.
-    dragged: Option<NodeIdType>,
+    /// Information about the dragged node.
+    dragged: Option<DragState<NodeIdType>>,
     /// The rectangle the tree view occupied.
     rect: Rect,
-    /// Position of the cursor when the drag started.
-    drag_start_pos: Option<Pos2>,
-    /// A drag only becomes valid after it has been dragged for
-    /// a short distance.
-    drag_valid: bool,
-    /// Offset of the row drag overlay.
-    _drag_row_offset: Option<Pos2>,
     /// Id of the node to show a context menu for.
     context_menu: Option<NodeIdType>,
     /// Open states of the dirs in this tree.
@@ -233,13 +221,23 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
             selected: Default::default(),
             dragged: Default::default(),
             rect: Rect::NOTHING,
-            drag_start_pos: Default::default(),
-            drag_valid: Default::default(),
-            _drag_row_offset: Default::default(),
             context_menu: Default::default(),
             dir_states: HashMap::new(),
         }
     }
+}
+
+#[derive(Clone)]
+struct DragState<NodeIdType> {
+    /// Id of the dragged node.
+    pub node_id: NodeIdType,
+    /// Offset of the drag overlay to the pointer.
+    pub drag_row_offset: Vec2,
+    /// Position of the pointer when the drag started.
+    pub drag_start_pos: Pos2,
+    /// A drag only becomes valid after it has been dragged for
+    /// a short distance.
+    pub drag_valid: bool,
 }
 
 #[derive(Clone)]
@@ -288,7 +286,7 @@ where
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
-    NodeIdType: Clone,
+    NodeIdType: Clone + PartialEq + Eq,
 {
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
@@ -312,6 +310,25 @@ where
             drag_started: self.response.drag_started_by(egui::PointerButton::Primary),
             right_clicked: self.response.clicked_by(egui::PointerButton::Secondary),
         }
+    }
+    /// Is the current drag valid.
+    /// `false` if no drag is currently registered.
+    pub fn drag_valid(&self) -> bool {
+        self.peristant
+            .dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid)
+    }
+    /// Is the given id part of a valid drag.
+    pub fn is_dragged(&self, id: &NodeIdType) -> bool {
+        self.peristant
+            .dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid && &drag_state.node_id == id)
+    }
+
+    pub fn is_selected(&self, id: &NodeIdType) -> bool {
+        self.peristant.selected.as_ref().is_some_and(|n| n == id)
     }
 }
 

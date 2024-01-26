@@ -17,7 +17,7 @@ pub struct Row<NodeIdType> {
 
 impl<NodeIdType> Row<NodeIdType>
 where
-    NodeIdType: Clone + Copy + std::hash::Hash,
+    NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
 {
     /// Draw the content as a drag overlay if it is beeing dragged.
     pub(crate) fn draw_row_dragged(
@@ -60,11 +60,7 @@ where
             //let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
             let delta = -background_rect.min.to_vec2()
                 + pointer_pos.to_vec2()
-                + state
-                    .peristant
-                    ._drag_row_offset
-                    .unwrap_or_default()
-                    .to_vec2();
+                + state.peristant.dragged.as_ref().unwrap().drag_row_offset;
             ui.ctx().translate_layer(layer_id, delta);
         }
 
