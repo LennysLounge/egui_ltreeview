@@ -4,8 +4,8 @@ mod row;
 use std::collections::HashMap;
 
 use egui::{
-    self, layers::ShapeIdx, util::id_type_map::SerializableAny, Event, EventFilter, Id, Key,
-    Layout, Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
+    self, layers::ShapeIdx, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense,
+    Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -112,7 +112,7 @@ impl TreeView {
             });
         }
 
-        let drag_drop_action =
+        let drag_drop_action = if state.peristant.drag_valid {
             state
                 .peristant
                 .dragged
@@ -121,7 +121,11 @@ impl TreeView {
                     drag_id,
                     drop_id,
                     position,
-                });
+                })
+        } else {
+            None
+        };
+
         let dropped = ui.ctx().input(|i| i.pointer.any_released()) && drag_drop_action.is_some();
 
         state.peristant.rect = res.response.rect;
@@ -212,7 +216,10 @@ struct TreeViewPersistantState<NodeIdType> {
     /// The rectangle the tree view occupied.
     rect: Rect,
     /// Position of the cursor when the drag started.
-    _drag_start_pos: Option<Pos2>,
+    drag_start_pos: Option<Pos2>,
+    /// A drag only becomes valid after it has been dragged for
+    /// a short distance.
+    drag_valid: bool,
     /// Offset of the row drag overlay.
     _drag_row_offset: Option<Pos2>,
     /// Id of the node to show a context menu for.
@@ -226,7 +233,8 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
             selected: Default::default(),
             dragged: Default::default(),
             rect: Rect::NOTHING,
-            _drag_start_pos: Default::default(),
+            drag_start_pos: Default::default(),
+            drag_valid: Default::default(),
             _drag_row_offset: Default::default(),
             context_menu: Default::default(),
             dir_states: HashMap::new(),
@@ -410,13 +418,6 @@ impl<NodeIdType> TreeViewResponse<NodeIdType> {
     }
 }
 
-fn load<T: SerializableAny>(ui: &mut Ui, id: Id) -> Option<T> {
-    ui.data_mut(|d| d.get_persisted::<T>(id))
-}
-
-fn store<T: SerializableAny>(ui: &mut Ui, id: Id, value: T) {
-    ui.data_mut(|d| d.insert_persisted(id, value));
-}
 /// Interact with the ui without egui adding any extra space.
 fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Response {
     let spacing_before = ui.spacing().clone();

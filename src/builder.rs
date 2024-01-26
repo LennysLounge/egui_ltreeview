@@ -230,7 +230,12 @@ where
                     if self.state.has_focus {
                         self.ui.visuals().selection.bg_fill
                     } else {
-                        self.ui.visuals().widgets.inactive.weak_bg_fill.linear_multiply(0.3)
+                        self.ui
+                            .visuals()
+                            .widgets
+                            .inactive
+                            .weak_bg_fill
+                            .linear_multiply(0.3)
                     },
                     Stroke::NONE,
                 ),
@@ -241,16 +246,37 @@ where
         }
         if row_interaction.drag_started {
             self.state.peristant.dragged = Some(row_config.id);
+            self.state.peristant.drag_start_pos = self.ui.ctx().pointer_latest_pos();
+            self.state.peristant.drag_valid = false;
+            self.state.peristant._drag_row_offset = Some(
+                row_response.rect.min
+                    - self
+                        .ui
+                        .ctx()
+                        .pointer_latest_pos()
+                        .unwrap_or_default()
+                        .to_vec2(),
+            );
         }
         if self.is_dragged(&row_config.id) {
-            row_config.draw_row_dragged(
-                self.ui,
-                &self.settings,
-                &self.state,
-                &row_response,
-                &mut add_label,
-                &mut add_icon,
-            );
+            // Test if the drag becomes valid
+            if !self.state.peristant.drag_valid {
+                self.state.peristant.drag_valid = self
+                    .state
+                    .peristant
+                    .drag_start_pos
+                    .zip(self.ui.ctx().pointer_latest_pos())
+                    .is_some_and(|(start, current)| start.distance(current) > 5.0);
+            }
+            if self.state.peristant.drag_valid {
+                row_config.draw_row_dragged(
+                    self.ui,
+                    &self.settings,
+                    &self.state,
+                    &mut add_label,
+                    &mut add_icon,
+                );
+            }
         }
         if let Some(drop_quarter) = self
             .state
@@ -281,6 +307,9 @@ where
             return;
         }
         if self.state.peristant.dragged.is_none() {
+            return;
+        }
+        if !self.state.peristant.drag_valid {
             return;
         }
         if self.parent_dir_drop_forbidden() {

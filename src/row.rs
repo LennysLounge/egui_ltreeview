@@ -1,6 +1,6 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, PointerButton,
-    Rangef, Rect, Response, Shape, Stroke, Ui, Vec2,
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Rangef, Rect,
+    Response, Shape, Stroke, Ui,
 };
 
 use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
@@ -25,25 +25,12 @@ where
         ui: &mut Ui,
         settings: &TreeViewSettings,
         state: &TreeViewState<NodeIdType>,
-        row_response: &Response,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
     ) -> bool {
-        //*self.drag = Some(self.id);
         ui.ctx().set_cursor_icon(CursorIcon::Alias);
 
         let drag_source_id = ui.make_persistent_id("Drag source");
-        let drag_offset = if state.response.drag_started_by(PointerButton::Primary) {
-            let drag_offset = ui
-                .ctx()
-                .pointer_latest_pos()
-                .map(|pointer_pos| row_response.rect.min - pointer_pos)
-                .unwrap_or(Vec2::ZERO);
-            crate::store(ui, drag_source_id, drag_offset);
-            drag_offset
-        } else {
-            crate::load(ui, drag_source_id).unwrap_or(Vec2::ZERO)
-        };
 
         // Paint the content to a new layer for the drag overlay.
         let layer_id = LayerId::new(Order::Tooltip, drag_source_id);
@@ -70,7 +57,14 @@ where
 
         // Move layer to the drag position
         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-            let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
+            //let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
+            let delta = -background_rect.min.to_vec2()
+                + pointer_pos.to_vec2()
+                + state
+                    .peristant
+                    ._drag_row_offset
+                    .unwrap_or_default()
+                    .to_vec2();
             ui.ctx().translate_layer(layer_id, delta);
         }
 
