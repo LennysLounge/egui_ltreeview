@@ -165,9 +165,20 @@ where
             is_focused: self.state.has_focus,
         };
 
-        let (row_response, closer_response) = match node.icon {
-            Some(mut add_icon) => self.row(&row_config, &mut add_label, Some(&mut add_icon)),
-            None => self.row(&row_config, &mut add_label, None),
+        let (row_response, closer_response) = match (node.icon, node.closer) {
+            (Some(mut add_icon), Some(mut add_closer)) => self.row(
+                &row_config,
+                &mut add_label,
+                Some(&mut add_icon),
+                Some(&mut add_closer),
+            ),
+            (None, Some(mut add_closer)) => {
+                self.row(&row_config, &mut add_label, None, Some(&mut add_closer))
+            }
+            (Some(mut add_icon), None) => {
+                self.row(&row_config, &mut add_label, Some(&mut add_icon), None)
+            }
+            (None, None) => self.row(&row_config, &mut add_label, None, None),
         };
 
         if node.is_dir {
@@ -208,6 +219,7 @@ where
         row_config: &Row<NodeIdType>,
         mut add_label: impl FnMut(&mut Ui),
         mut add_icon: Option<&mut dyn FnMut(&mut Ui)>,
+        mut add_closer: Option<&mut dyn FnMut(&mut Ui, CloserState)>,
     ) -> (Response, Option<Response>) {
         let (row_response, closer_response, label_rect) = row_config.draw_row(
             self.ui,
@@ -215,6 +227,7 @@ where
             &self.settings,
             &mut add_label,
             &mut add_icon,
+            &mut add_closer,
         );
 
         let row_interaction = self.state.interact(&row_response.rect);
@@ -269,6 +282,7 @@ where
                     &self.state,
                     &mut add_label,
                     &mut add_icon,
+                    &mut add_closer,
                 );
             }
         }
@@ -444,6 +458,7 @@ pub struct NodeBuilder<NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
     icon: Option<Box<dyn FnMut(&mut Ui)>>,
+    closer: Option<Box<dyn FnMut(&mut Ui, CloserState)>>,
 }
 impl<NodeIdType> NodeBuilder<NodeIdType> {
     /// Create a new node builder from a leaf prototype.
@@ -452,6 +467,7 @@ impl<NodeIdType> NodeBuilder<NodeIdType> {
             id,
             is_dir: false,
             icon: None,
+            closer: None,
         }
     }
 
@@ -461,6 +477,7 @@ impl<NodeIdType> NodeBuilder<NodeIdType> {
             id,
             is_dir: true,
             icon: None,
+            closer: None,
         }
     }
 
@@ -469,4 +486,19 @@ impl<NodeIdType> NodeBuilder<NodeIdType> {
         self.icon = Some(Box::new(add_icon));
         self
     }
+
+    /// Add a custom closer to the directory node.
+    /// Leaves do not show a closer.
+    pub fn closer(mut self, add_closer: impl FnMut(&mut Ui, CloserState) + 'static) -> Self {
+        self.closer = Some(Box::new(add_closer));
+        self
+    }
+}
+
+/// State of the closer when it is drawn.
+pub struct CloserState {
+    /// Wether the current directory this closer represents is currently open or closed.
+    pub is_open: bool,
+    /// Wether the pointer is hovering over the closer.
+    pub is_hovered: bool,
 }

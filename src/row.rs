@@ -3,7 +3,7 @@ use egui::{
     Response, Shape, Stroke, Ui,
 };
 
-use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
+use crate::{builder::CloserState, Interaction, RowLayout, TreeViewSettings, TreeViewState};
 
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
@@ -27,6 +27,7 @@ where
         state: &TreeViewState<NodeIdType>,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
+        add_closer: &mut Option<&mut dyn FnMut(&mut Ui, CloserState)>,
     ) -> bool {
         ui.ctx().set_cursor_icon(CursorIcon::Alias);
 
@@ -40,7 +41,8 @@ where
             .with_layer_id(layer_id, |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _) = self.draw_row(ui, state, settings, add_label, add_icon);
+                let (row, _, _) =
+                    self.draw_row(ui, state, settings, add_label, add_icon, add_closer);
 
                 ui.painter().set(
                     background_position,
@@ -74,6 +76,7 @@ where
         settings: &TreeViewSettings,
         add_label: &mut dyn FnMut(&mut Ui),
         add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
+        add_closer: &mut Option<&mut dyn FnMut(&mut Ui, CloserState)>,
     ) -> (Response, Option<Response>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
             RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
@@ -125,11 +128,26 @@ where
                     closer_pos,
                     vec2(ui.spacing().icon_width, ui.min_size().y),
                 ));
-                let res = ui.allocate_ui_at_rect(_small_rect, |ui| {
-                    let icon_id = Id::new(self.id).with("tree view closer icon");
-                    let openness = ui.ctx().animate_bool(icon_id, self.is_open);
+
+                let res = ui.allocate_ui_at_rect(_big_rect, |ui| {
                     let closer_interaction = interaction.interact(&ui.max_rect());
-                    paint_default_icon(ui, openness, &ui.max_rect(), &closer_interaction);
+                    if closer_interaction.hovered {
+                        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+                    }
+                    if let Some(add_closer) = add_closer {
+                        (add_closer)(
+                            ui,
+                            CloserState {
+                                is_open: self.is_open,
+                                is_hovered: closer_interaction.hovered,
+                            },
+                        );
+                    } else {
+                        let icon_id = Id::new(self.id).with("tree view closer icon");
+                        let openness = ui.ctx().animate_bool(icon_id, self.is_open);
+                        let closer_interaction = interaction.interact(&ui.max_rect());
+                        paint_default_icon(ui, openness, &_small_rect, &closer_interaction);
+                    }
                     ui.allocate_space(ui.available_size_before_wrap());
                 });
                 Some(res.response)

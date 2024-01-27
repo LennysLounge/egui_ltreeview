@@ -43,7 +43,10 @@ impl Default for MyApp {
             tree: make_tree(),
             settings_id: Uuid::new_v4(),
             selected_node: None,
-            settings: Settings::default(),
+            settings: Settings {
+                row_layout: RowLayout::CompactAlignedLables,
+                ..Default::default()
+            },
         }
     }
 }
@@ -91,11 +94,28 @@ fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
 }
 fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.node(
-        NodeBuilder::dir(dir.id).icon(|ui| {
-            egui::Image::new(egui::include_image!("folder.png"))
-                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
-                .paint_at(ui, ui.max_rect());
-        }),
+        NodeBuilder::dir(dir.id)
+            .closer(|ui, state| {
+                let color = if state.is_hovered {
+                    ui.visuals().widgets.hovered.fg_stroke.color
+                } else {
+                    ui.visuals().widgets.noninteractive.fg_stroke.color
+                };
+                if state.is_open {
+                    egui::Image::new(egui::include_image!("folder_open.png"))
+                        .tint(color)
+                        .paint_at(ui, ui.max_rect());
+                } else {
+                    egui::Image::new(egui::include_image!("folder.png"))
+                        .tint(color)
+                        .paint_at(ui, ui.max_rect());
+                }
+            })
+            .icon(|ui| {
+                egui::Image::new(egui::include_image!("folder.png"))
+                    .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                    .paint_at(ui, ui.max_rect());
+            }),
         |ui| {
             ui.label(&dir.name);
         },
