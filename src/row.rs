@@ -138,11 +138,13 @@ where
             };
             if draw_icon {
                 add_icon.as_mut().map(|add_icon| {
-                    let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
-                        icon_pos,
-                        vec2(ui.spacing().icon_width, ui.min_size().y),
-                    ));
-                    ui.allocate_ui_at_rect(_big_rect, |ui| add_icon(ui)).response
+                    let (_small_rect, _big_rect) =
+                        ui.spacing().icon_rectangles(Rect::from_min_size(
+                            icon_pos,
+                            vec2(ui.spacing().icon_width, ui.min_size().y),
+                        ));
+                    ui.allocate_ui_at_rect(_big_rect, |ui| add_icon(ui))
+                        .response
                 });
             }
             let label_rect_min = if draw_closer {

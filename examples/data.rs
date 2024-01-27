@@ -41,7 +41,7 @@ pub fn make_tree() -> Node {
                 "Foo",
                 vec![
                     Node::file("Ava"),
-                    Node::dir("baz", vec![Node::file("Benjamin"), Node::file("Charlotte")]),
+                    Node::dir("Request inspection", vec![Node::file("Benjamin"), Node::file("Charlotte")]),
                 ],
             ),
             Node::file("Daniel"),

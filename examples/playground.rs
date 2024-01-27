@@ -59,11 +59,16 @@ impl eframe::App for MyApp {
                     .vline_style(self.settings.vline_style)
                     .row_layout(self.settings.row_layout)
                     .show(ui, |mut builder| {
-                        builder.leaf(self.settings_id, |ui| {
-                            ui.horizontal(|ui| {
+                        builder.node(
+                            NodeBuilder::leaf(self.settings_id).icon(|ui| {
+                                egui::Image::new(egui::include_image!("settings.png"))
+                                    .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                                    .paint_at(ui, ui.max_rect());
+                            }),
+                            |ui| {
                                 ui.label("Settings");
-                            });
-                        });
+                            },
+                        );
                         show_node(&mut builder, &self.tree);
                     });
                 self.selected_node = response.selected_node;
