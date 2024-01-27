@@ -1,4 +1,3 @@
-#[path = "../data.rs"]
 mod data;
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
@@ -81,7 +80,7 @@ impl eframe::App for MyApp {
                 if selected_node == &self.settings_id {
                     show_settings(ui, &mut self.settings);
                 } else {
-                    self.tree.find(selected_node, &mut |node| {
+                    self.tree.find_mut(selected_node, &mut |node| {
                         show_node_content(ui, node);
                     });
                 }
@@ -97,33 +96,35 @@ fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
     }
 }
 fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
-    builder.node(
-        NodeBuilder::dir(dir.id)
-            .closer(|ui, state| {
-                let color = if state.is_hovered {
-                    ui.visuals().widgets.hovered.fg_stroke.color
-                } else {
-                    ui.visuals().widgets.noninteractive.fg_stroke.color
-                };
-                if state.is_open {
-                    egui::Image::new(egui::include_image!("folder_open.png"))
-                        .tint(color)
-                        .paint_at(ui, ui.max_rect());
-                } else {
-                    egui::Image::new(egui::include_image!("folder.png"))
-                        .tint(color)
-                        .paint_at(ui, ui.max_rect());
-                }
-            })
-            .icon(|ui| {
-                egui::Image::new(egui::include_image!("folder.png"))
-                    .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+    let mut node = NodeBuilder::dir(dir.id);
+    if dir.icon {
+        node = node.icon(|ui| {
+            egui::Image::new(egui::include_image!("folder.png"))
+                .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                .paint_at(ui, ui.max_rect());
+        });
+    }
+    if dir.custom_closer {
+        node = node.closer(|ui, state| {
+            let color = if state.is_hovered {
+                ui.visuals().widgets.hovered.fg_stroke.color
+            } else {
+                ui.visuals().widgets.noninteractive.fg_stroke.color
+            };
+            if state.is_open {
+                egui::Image::new(egui::include_image!("folder_open.png"))
+                    .tint(color)
                     .paint_at(ui, ui.max_rect());
-            }),
-        |ui| {
-            ui.label(&dir.name);
-        },
-    );
+            } else {
+                egui::Image::new(egui::include_image!("folder.png"))
+                    .tint(color)
+                    .paint_at(ui, ui.max_rect());
+            }
+        });
+    }
+    builder.node(node, |ui| {
+        ui.label(&dir.name);
+    });
 
     for node in dir.children.iter() {
         show_node(builder, node);
@@ -132,16 +133,17 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.close_dir();
 }
 fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
-    builder.node(
-        NodeBuilder::leaf(file.id).icon(|ui| {
+    let mut node = NodeBuilder::leaf(file.id);
+    if file.icon {
+        node = node.icon(|ui| {
             egui::Image::new(egui::include_image!("user.png"))
                 .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
                 .paint_at(ui, ui.max_rect());
-        }),
-        |ui| {
-            ui.label(&file.name);
-        },
-    );
+        });
+    }
+    builder.node(node, |ui| {
+        ui.label(&file.name);
+    });
 }
 
 fn show_settings(ui: &mut Ui, settings: &mut Settings) {
@@ -241,9 +243,35 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
     });
 }
 
-fn show_node_content(ui: &mut Ui, node: &Node) {
-    match node {
-        Node::Directory(dir) => ui.label(format!("This group of people is called {}", dir.name)),
-        Node::File(file) => ui.label(format!("This person is called {}", file.name)),
-    };
+fn show_node_content(ui: &mut Ui, node: &mut Node) {
+    egui::Grid::new("settings grid").show(ui, |ui| {
+        ui.label("Id");
+        ui.label(format!("{:?}", node.id()));
+        ui.end_row();
+
+        match node {
+            Node::Directory(dir) => {
+                ui.label("Name");
+                ui.text_edit_singleline(&mut dir.name);
+                ui.end_row();
+
+                ui.label("Show custom closer");
+                ui.checkbox(&mut dir.custom_closer, "");
+                ui.end_row();
+
+                ui.label("Show icon");
+                ui.checkbox(&mut dir.icon, "");
+                ui.end_row();
+            }
+            Node::File(file) => {
+                ui.label("Name");
+                ui.text_edit_singleline(&mut file.name);
+                ui.end_row();
+
+                ui.label("Show icon");
+                ui.checkbox(&mut file.icon, "");
+                ui.end_row();
+            }
+        }
+    });
 }

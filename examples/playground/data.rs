@@ -14,10 +14,13 @@ pub struct Directory {
     pub id: Uuid,
     pub name: String,
     pub children: Vec<Node>,
+    pub custom_closer: bool,
+    pub icon: bool,
 }
 pub struct File {
     pub id: Uuid,
     pub name: String,
+    pub icon: bool,
 }
 
 impl Node {
@@ -26,12 +29,16 @@ impl Node {
             id: Uuid::new_v4(),
             name: String::from(name),
             children,
+            custom_closer: true,
+            icon: false,
         })
     }
+
     pub fn file(name: &'static str) -> Self {
         Node::File(File {
             id: Uuid::new_v4(),
             name: String::from(name),
+            icon: true,
         })
     }
 
@@ -42,20 +49,6 @@ impl Node {
         }
     }
 
-    pub fn find(&self, id: &Uuid, action: &mut dyn FnMut(&Node)) {
-        if self.id() == id {
-            (action)(&self);
-        } else {
-            match self {
-                Node::Directory(dir) => {
-                    for node in dir.children.iter() {
-                        node.find(id, action);
-                    }
-                }
-                Node::File(_) => (),
-            }
-        }
-    }
     pub fn find_mut(&mut self, id: &Uuid, action: &mut dyn FnMut(&mut Node)) {
         if self.id() == id {
             (action)(self);
