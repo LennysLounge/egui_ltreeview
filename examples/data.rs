@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::any::Any;
+
 use uuid::Uuid;
 
 fn main() {}
@@ -31,6 +33,28 @@ impl Node {
             id: Uuid::new_v4(),
             name: String::from(name),
         })
+    }
+
+    pub fn id(&self) -> &Uuid {
+        match self {
+            Node::Directory(dir) => &dir.id,
+            Node::File(file) => &file.id,
+        }
+    }
+
+    pub fn find(&self, id: &Uuid, action: &mut dyn FnMut(&Node)) {
+        if self.id() == id {
+            (action)(&self);
+        } else {
+            match self {
+                Node::Directory(dir) => {
+                    for node in dir.children.iter() {
+                        node.find(id, action);
+                    }
+                }
+                Node::File(_) => (),
+            }
+        }
     }
 }
 pub fn make_tree() -> Node {

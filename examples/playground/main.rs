@@ -1,4 +1,4 @@
-#[path = "data.rs"]
+#[path = "../data.rs"]
 mod data;
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
@@ -77,10 +77,14 @@ impl eframe::App for MyApp {
                 self.selected_node = response.selected_node;
             });
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.selected_node == Some(self.settings_id) {
-                show_settings(ui, &mut self.settings);
-            } else {
-                ui.label("Center");
+            if let Some(selected_node) = self.selected_node.as_ref() {
+                if selected_node == &self.settings_id {
+                    show_settings(ui, &mut self.settings);
+                } else {
+                    self.tree.find(selected_node, &mut |node| {
+                        show_node_content(ui, node);
+                    });
+                }
             }
         });
     }
@@ -235,4 +239,11 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             });
         ui.end_row();
     });
+}
+
+fn show_node_content(ui: &mut Ui, node: &Node) {
+    match node {
+        Node::Directory(dir) => ui.label(format!("This group of people is called {}", dir.name)),
+        Node::File(file) => ui.label(format!("This person is called {}", file.name)),
+    };
 }
