@@ -4,8 +4,8 @@ mod row;
 use std::collections::HashMap;
 
 use egui::{
-    self, layers::ShapeIdx, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense,
-    Shape, Ui, Vec2,
+    self, epaint, layers::ShapeIdx, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response,
+    Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -127,15 +127,17 @@ impl TreeView {
             state.peristant.dragged = None;
         }
         let res = TreeViewResponse {
-            response: state.response.clone(),
+            response: state.response,
             dropped,
             drag_drop_action,
-            drop_marker_idx: state.drop_marker_idx.clone(),
-            selected_node: state.peristant.selected.clone(),
-            context_menu_node: state.peristant.context_menu.clone(),
+            drop_marker_idx: state.drop_marker_idx,
+            context_menu_marker_idx: state.context_menu_marker_idx,
+            selected_node: state.peristant.selected,
+            context_menu_node: state.peristant.context_menu,
+            nodes: state.node_order,
         };
 
-        state.store(ui, self.id);
+        state.peristant.store(ui, self.id);
         res
     }
 }
@@ -225,6 +227,14 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
         }
     }
 }
+impl<NodeIdType> TreeViewPersistantState<NodeIdType>
+where
+    NodeIdType: Clone + Send + Sync + 'static,
+{
+    fn store(self, ui: &mut Ui, id: Id) {
+        ui.data_mut(|d| d.insert_persisted(id, self));
+    }
+}
 
 #[derive(Clone)]
 struct DragState<NodeIdType> {
@@ -252,10 +262,12 @@ where
     drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     /// Shape index of the drop marker
     drop_marker_idx: ShapeIdx,
+    /// Shape index of the right click context menu marker.
+    context_menu_marker_idx: ShapeIdx,
     /// Wether or not the tree view has keyboard focus.
     has_focus: bool,
     /// Order of the nodes inside the tree.
-    node_order: Vec<NodeOrder<NodeIdType>>,
+    node_order: Vec<NodeInfo<NodeIdType>>,
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
@@ -273,14 +285,11 @@ where
             peristant: state,
             drop: None,
             drop_marker_idx: ui.painter().add(Shape::Noop),
+            context_menu_marker_idx: ui.painter().add(Shape::Noop),
             response,
             has_focus,
             node_order: Vec::new(),
         }
-    }
-
-    fn store(self, ui: &mut Ui, id: Id) {
-        ui.data_mut(|d| d.insert_persisted(id, self.peristant));
     }
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
@@ -332,9 +341,10 @@ where
 }
 
 #[derive(Clone)]
-struct NodeOrder<NodeIdType> {
+struct NodeInfo<NodeIdType> {
     pub depth: usize,
     pub node_id: NodeIdType,
+    pub rect: Rect,
 }
 
 struct Interaction {
@@ -423,14 +433,96 @@ pub struct TreeViewResponse<NodeIdType> {
     /// If od the node for which to show the context menu.
     pub context_menu_node: Option<NodeIdType>,
     drop_marker_idx: ShapeIdx,
+    context_menu_marker_idx: ShapeIdx,
+    nodes: Vec<NodeInfo<NodeIdType>>,
 }
-impl<NodeIdType> TreeViewResponse<NodeIdType> {
+impl<NodeIdType> TreeViewResponse<NodeIdType>
+where
+    NodeIdType: Clone + Copy + PartialEq + Eq,
+{
     /// Remove the drop marker from the tree view.
     ///
     /// Use this to remove the drop marker if a proposed drag and drop action
     /// is disallowed.
     pub fn remove_drop_marker(&self, ui: &mut Ui) {
         ui.painter().set(self.drop_marker_idx, Shape::Noop);
+    }
+
+    pub fn draw_nodes(&self, ui: &mut Ui) {
+        for node in self.nodes.iter() {
+            ui.painter().rect(
+                node.rect,
+                egui::Rounding::ZERO,
+                egui::Color32::RED.linear_multiply(0.2),
+                egui::Stroke::new(1.0, egui::Color32::RED),
+            );
+        }
+    }
+
+    pub fn context_menu(
+        self,
+        ui: &mut Ui,
+        mut add_context_menu: impl FnMut(&mut Ui, NodeIdType),
+    ) -> Self {
+        let TreeViewResponse {
+            mut response,
+            drag_drop_action,
+            dropped,
+            selected_node,
+            context_menu_node,
+            drop_marker_idx,
+            nodes,
+            context_menu_marker_idx,
+        } = self;
+        let mut clicked_node = None;
+        response = response.context_menu(|ui| {
+            let has_context_menu_moved = {
+                let last_pos_id = Id::new("Tree View context menu last pos");
+                let last_pos = ui.data_mut(|d| d.get_persisted::<Pos2>(last_pos_id));
+                ui.data_mut(|d| d.insert_persisted(last_pos_id, ui.cursor().min));
+                last_pos.map_or(true, |last_pos| last_pos != ui.cursor().min)
+            };
+            let cursor_position = {
+                let cursor_pos_id = Id::new("Tree view context menu cursor pos");
+                if has_context_menu_moved {
+                    let pos = ui.ctx().pointer_latest_pos();
+                    ui.data_mut(|d| d.insert_persisted(cursor_pos_id, pos));
+                    pos
+                } else {
+                    ui.data_mut(|d| d.get_persisted::<Option<Pos2>>(cursor_pos_id))
+                        .flatten()
+                }
+            };
+            clicked_node =
+                cursor_position.and_then(|pos| nodes.iter().find(|node| node.rect.contains(pos)));
+            if let Some(node) = clicked_node {
+                add_context_menu(ui, node.node_id)
+            }
+        });
+        if let Some(node) = clicked_node {
+            if Some(node.node_id) != selected_node {
+                let stroke = ui.visuals().widgets.inactive.fg_stroke;
+                ui.painter().set(
+                    context_menu_marker_idx,
+                    epaint::RectShape::new(
+                        node.rect.expand(-stroke.width),
+                        ui.visuals().widgets.active.rounding,
+                        egui::Color32::TRANSPARENT,
+                        stroke,
+                    ),
+                );
+            }
+        }
+        TreeViewResponse {
+            response,
+            drag_drop_action,
+            dropped,
+            selected_node,
+            context_menu_node,
+            drop_marker_idx,
+            nodes,
+            context_menu_marker_idx,
+        }
     }
 }
 

@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     row::{DropQuarter, Row},
-    DragState, DropPosition, NodeOrder, TreeViewSettings, TreeViewState, VLineStyle,
+    DragState, DropPosition, NodeInfo, TreeViewSettings, TreeViewState, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -295,9 +295,10 @@ where
             self.do_drop(&row_config, &row_response, drop_quarter);
         }
 
-        self.state.node_order.push(NodeOrder {
+        self.state.node_order.push(NodeInfo {
             depth: self.stack.len(),
             node_id: row_config.id,
+            rect: row_response.rect,
         });
 
         self.push_child_node_position(label_rect.left_center());

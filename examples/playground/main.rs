@@ -1,10 +1,13 @@
 mod data;
+use std::env;
+
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
 use egui_ltreeview::{builder::NodeBuilder, RowLayout, TreeView, TreeViewBuilder, VLineStyle};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
+    env::set_var("RUST_BACKTRACE", "1");
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
         //viewport: egui::ViewportBuilder::default().with_inner_size([300.0, 500.0]),
@@ -74,6 +77,19 @@ impl eframe::App for MyApp {
                         show_node(&mut builder, &self.tree);
                     });
                 self.selected_node = response.selected_node;
+                //response.draw_nodes(ui);
+                response.context_menu(ui, |ui, node_id| {
+                    self.tree.find_mut(&node_id, &mut |node| match node {
+                        Node::Directory(dir) => {
+                            ui.label("dir:");
+                            ui.label(&dir.name);
+                        }
+                        Node::File(file) => {
+                            ui.label("file:");
+                            ui.label(&file.name);
+                        }
+                    });
+                });
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(selected_node) = self.selected_node.as_ref() {
