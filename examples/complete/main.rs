@@ -90,13 +90,10 @@ fn show_tree(ui: &mut Ui, tree: &mut TreeNode) {
             tree_res.remove_drop_marker(ui);
         }
     }
-
-    tree_res.response.context_menu(|ui| {
-        if let Some(node_id) = tree_res.context_menu_node {
-            tree.walk(&mut TreeViewContextMenu {
-                target_id: node_id,
-                ui,
-            });
-        }
+    tree_res.context_menu(ui, |ui, node_id| {
+        tree.walk(&mut TreeViewContextMenu {
+            target_id: node_id,
+            ui,
+        });
     });
 }

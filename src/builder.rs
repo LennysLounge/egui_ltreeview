@@ -255,9 +255,6 @@ where
                 ),
             );
         }
-        if row_interaction.right_clicked {
-            self.state.peristant.context_menu = Some(row_config.id);
-        }
         if row_interaction.drag_started {
             let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
             self.state.peristant.dragged = Some(DragState {

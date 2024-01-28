@@ -133,7 +133,6 @@ impl TreeView {
             drop_marker_idx: state.drop_marker_idx,
             context_menu_marker_idx: state.context_menu_marker_idx,
             selected_node: state.peristant.selected,
-            context_menu_node: state.peristant.context_menu,
             nodes: state.node_order,
         };
 
@@ -211,8 +210,6 @@ struct TreeViewPersistantState<NodeIdType> {
     dragged: Option<DragState<NodeIdType>>,
     /// The rectangle the tree view occupied.
     rect: Rect,
-    /// Id of the node to show a context menu for.
-    context_menu: Option<NodeIdType>,
     /// Open states of the dirs in this tree.
     dir_states: HashMap<NodeIdType, bool>,
 }
@@ -222,7 +219,6 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
             selected: Default::default(),
             dragged: Default::default(),
             rect: Rect::NOTHING,
-            context_menu: Default::default(),
             dir_states: HashMap::new(),
         }
     }
@@ -307,7 +303,6 @@ where
                 double_clicked: false,
                 hovered: false,
                 drag_started: false,
-                right_clicked: false,
             };
         }
 
@@ -316,7 +311,6 @@ where
             double_clicked: self.response.double_clicked(),
             hovered: self.response.hovered(),
             drag_started: self.response.drag_started_by(egui::PointerButton::Primary),
-            right_clicked: self.response.clicked_by(egui::PointerButton::Secondary),
         }
     }
     /// Is the current drag valid.
@@ -352,7 +346,6 @@ struct Interaction {
     pub double_clicked: bool,
     pub hovered: bool,
     pub drag_started: bool,
-    pub right_clicked: bool,
 }
 
 /// Contains information about a drag and drop that the
@@ -430,8 +423,6 @@ pub struct TreeViewResponse<NodeIdType> {
     pub dropped: bool,
     /// Id of the selected node.
     pub selected_node: Option<NodeIdType>,
-    /// If od the node for which to show the context menu.
-    pub context_menu_node: Option<NodeIdType>,
     drop_marker_idx: ShapeIdx,
     context_menu_marker_idx: ShapeIdx,
     nodes: Vec<NodeInfo<NodeIdType>>,
@@ -469,7 +460,6 @@ where
             drag_drop_action,
             dropped,
             selected_node,
-            context_menu_node,
             drop_marker_idx,
             nodes,
             context_menu_marker_idx,
@@ -518,7 +508,6 @@ where
             drag_drop_action,
             dropped,
             selected_node,
-            context_menu_node,
             drop_marker_idx,
             nodes,
             context_menu_marker_idx,
