@@ -287,6 +287,7 @@ where
             depth: self.stack.len(),
             node_id: row_config.id,
             rect: row_response.rect,
+            parent_node_id: self.parent_dir().map(|dir| dir.id),
         });
 
         self.push_child_node_position(label_rect.left_center());

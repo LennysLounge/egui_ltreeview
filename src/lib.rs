@@ -333,6 +333,7 @@ struct NodeInfo<NodeIdType> {
     pub depth: usize,
     pub node_id: NodeIdType,
     pub rect: Rect,
+    pub parent_node_id: Option<NodeIdType>,
 }
 
 struct Interaction {
@@ -435,17 +436,17 @@ where
         ui.painter().set(self.drop_marker_idx, Shape::Noop);
     }
 
-    pub fn draw_nodes(&self, ui: &mut Ui) {
-        for node in self.nodes.iter() {
-            ui.painter().rect(
-                node.rect,
-                egui::Rounding::ZERO,
-                egui::Color32::RED.linear_multiply(0.2),
-                egui::Stroke::new(1.0, egui::Color32::RED),
-            );
-        }
+    /// Get the parent node id of a node.
+    pub fn parent_of(&self, id: NodeIdType) -> Option<NodeIdType> {
+        self.nodes
+            .iter()
+            .find(|n| n.node_id == id)
+            .and_then(|node_info| node_info.parent_node_id)
     }
 
+    /// Show a context menu for the tree view.
+    ///
+    /// Use the provided node id to identify which node was clicked.
     pub fn context_menu(&self, ui: &mut Ui, mut add_context_menu: impl FnMut(&mut Ui, NodeIdType)) {
         let mut clicked_node = None;
         self.response.clone().context_menu(|ui| {
