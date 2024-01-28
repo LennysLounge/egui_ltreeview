@@ -452,13 +452,13 @@ where
     }
 }
 
-pub struct NodeBuilder<NodeIdType> {
+pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
-    icon: Option<Box<dyn FnMut(&mut Ui)>>,
-    closer: Option<Box<dyn FnMut(&mut Ui, CloserState)>>,
+    icon: Option<Box<dyn FnMut(&mut Ui) + 'icon>>,
+    closer: Option<Box<dyn FnMut(&mut Ui, CloserState) + 'closer>>,
 }
-impl<NodeIdType> NodeBuilder<NodeIdType> {
+impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
     /// Create a new node builder from a leaf prototype.
     pub fn leaf(id: NodeIdType) -> Self {
         Self {
@@ -480,16 +480,26 @@ impl<NodeIdType> NodeBuilder<NodeIdType> {
     }
 
     /// Add a icon to the node.
-    pub fn icon(mut self, add_icon: impl FnMut(&mut Ui) + 'static) -> Self {
-        self.icon = Some(Box::new(add_icon));
-        self
+    pub fn icon<'new_icon>(
+        self,
+        add_icon: impl FnMut(&mut Ui) + 'new_icon,
+    ) -> NodeBuilder<'new_icon, 'closer, NodeIdType> {
+        NodeBuilder {
+            icon: Some(Box::new(add_icon)),
+            ..self
+        }
     }
 
     /// Add a custom closer to the directory node.
     /// Leaves do not show a closer.
-    pub fn closer(mut self, add_closer: impl FnMut(&mut Ui, CloserState) + 'static) -> Self {
-        self.closer = Some(Box::new(add_closer));
-        self
+    pub fn closer<'new_closer>(
+        self,
+        add_closer: impl FnMut(&mut Ui, CloserState) + 'new_closer,
+    ) -> NodeBuilder<'icon, 'new_closer, NodeIdType> {
+        NodeBuilder {
+            closer: Some(Box::new(add_closer)),
+            ..self
+        }
     }
 }
 
