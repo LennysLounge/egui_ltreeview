@@ -2,6 +2,7 @@
 
 use std::any::Any;
 
+use egui_ltreeview::DropPosition;
 use uuid::Uuid;
 
 fn main() {}
@@ -61,6 +62,67 @@ impl Node {
                 }
                 Node::File(_) => (),
             }
+        }
+    }
+
+    pub fn remove(&mut self, id: &Uuid) -> Option<Node> {
+        match self {
+            Node::Directory(dir) => {
+                if let Some(index) = dir.children.iter().position(|n| n.id() == id) {
+                    Some(dir.children.remove(index))
+                } else {
+                    for node in dir.children.iter_mut() {
+                        let r = node.remove(id);
+                        if r.is_some() {
+                            return r;
+                        }
+                    }
+                    None
+                }
+            }
+            Node::File(_) => None,
+        }
+    }
+
+    pub fn insert(
+        &mut self,
+        id: &Uuid,
+        position: DropPosition<Uuid>,
+        value: Node,
+    ) -> Result<(), Node> {
+        match self {
+            Node::Directory(dir) => {
+                if dir.id == *id {
+                    match position {
+                        DropPosition::First => dir.children.insert(0, value),
+                        DropPosition::Last => dir.children.push(value),
+                        DropPosition::After(after_id) => {
+                            if let Some(index) =
+                                dir.children.iter().position(|n| *n.id() == after_id)
+                            {
+                                dir.children.insert(index + 1, value);
+                            }
+                        }
+                        DropPosition::Before(before_id) => {
+                            if let Some(index) =
+                                dir.children.iter().position(|n| *n.id() == before_id)
+                            {
+                                dir.children.insert(index, value);
+                            }
+                        }
+                    }
+                    Ok(())
+                } else {
+                    let mut value = Err(value);
+                    for node in dir.children.iter_mut() {
+                        if let Err(v) = value {
+                            value = node.insert(id, position, v);
+                        }
+                    }
+                    value
+                }
+            }
+            _ => Err(value),
         }
     }
 }

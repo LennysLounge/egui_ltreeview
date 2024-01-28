@@ -59,37 +59,7 @@ impl eframe::App for MyApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.allocate_space(vec2(ui.available_width(), 0.0));
-                let response = TreeView::new(ui.make_persistent_id("Names tree view"))
-                    .override_indent(self.settings.override_indent)
-                    .vline_style(self.settings.vline_style)
-                    .row_layout(self.settings.row_layout)
-                    .show(ui, |mut builder| {
-                        builder.node(
-                            NodeBuilder::leaf(self.settings_id).icon(|ui| {
-                                egui::Image::new(egui::include_image!("settings.png"))
-                                    .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
-                                    .paint_at(ui, ui.max_rect());
-                            }),
-                            |ui| {
-                                ui.label("Settings");
-                            },
-                        );
-                        show_node(&mut builder, &self.tree);
-                    });
-                self.selected_node = response.selected_node;
-                //response.draw_nodes(ui);
-                response.context_menu(ui, |ui, node_id| {
-                    self.tree.find_mut(&node_id, &mut |node| match node {
-                        Node::Directory(dir) => {
-                            ui.label("dir:");
-                            ui.label(&dir.name);
-                        }
-                        Node::File(file) => {
-                            ui.label("file:");
-                            ui.label(&file.name);
-                        }
-                    });
-                });
+                show_tree_view(ui, self);
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(selected_node) = self.selected_node.as_ref() {
@@ -102,6 +72,49 @@ impl eframe::App for MyApp {
                 }
             }
         });
+    }
+}
+
+fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
+    let response = TreeView::new(ui.make_persistent_id("Names tree view"))
+        .override_indent(app.settings.override_indent)
+        .vline_style(app.settings.vline_style)
+        .row_layout(app.settings.row_layout)
+        .show(ui, |mut builder| {
+            builder.node(
+                NodeBuilder::leaf(app.settings_id).icon(|ui| {
+                    egui::Image::new(egui::include_image!("settings.png"))
+                        .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                        .paint_at(ui, ui.max_rect());
+                }),
+                |ui| {
+                    ui.label("Settings");
+                },
+            );
+            show_node(&mut builder, &app.tree);
+        });
+    app.selected_node = response.selected_node;
+    response.context_menu(ui, |ui, node_id| {
+        app.tree.find_mut(&node_id, &mut |node| match node {
+            Node::Directory(dir) => {
+                ui.label("dir:");
+                ui.label(&dir.name);
+            }
+            Node::File(file) => {
+                ui.label("file:");
+                ui.label(&file.name);
+            }
+        });
+    });
+
+    if let Some(drop_action) = response.drag_drop_action {
+        if drop_action.commit {
+            if let Some(source) = app.tree.remove(&drop_action.source) {
+                _ = app
+                    .tree
+                    .insert(&drop_action.target, drop_action.position, source);
+            }
+        }
     }
 }
 

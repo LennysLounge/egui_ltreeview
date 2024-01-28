@@ -60,8 +60,8 @@ fn show_tree(ui: &mut Ui, tree: &mut TreeNode) {
     if let Some(drop_action) = &tree_res.drag_drop_action {
         // Test if drop is valid
         let drop_allowed = {
-            SearchVisitor::new(drop_action.drag_id, |dragged| {
-                SearchVisitor::new(drop_action.drop_id, |dropped| {
+            SearchVisitor::new(drop_action.source, |dragged| {
+                SearchVisitor::new(drop_action.target, |dropped| {
                     DropAllowedVisitor::new(dragged.as_any()).test(dropped)
                 })
                 .search_in(tree)
@@ -71,23 +71,22 @@ fn show_tree(ui: &mut Ui, tree: &mut TreeNode) {
             .unwrap_or(false)
         };
 
-        if drop_allowed {
-            if tree_res.dropped {
-                // remove dragged node
-                let removed_node = RemoveNodeVisitor::new(drop_action.drag_id).remove_from(tree);
-
-                // insert node
-                if let Some(dragged_node) = removed_node {
-                    tree.walk_mut(&mut InsertNodeVisitor {
-                        target_id: drop_action.drop_id,
-                        position: drop_action.position,
-                        node: Some(dragged_node),
-                    });
-                }
-            }
-        } else {
-            // Render the dissallowed drop
+        if !drop_allowed {
             tree_res.remove_drop_marker(ui);
+        }
+
+        if drop_allowed && drop_action.commit {
+            // remove dragged node
+            let removed_node = RemoveNodeVisitor::new(drop_action.source).remove_from(tree);
+
+            // insert node
+            if let Some(dragged_node) = removed_node {
+                tree.walk_mut(&mut InsertNodeVisitor {
+                    target_id: drop_action.target,
+                    position: drop_action.position,
+                    node: Some(dragged_node),
+                });
+            }
         }
     }
     tree_res.context_menu(ui, |ui, node_id| {

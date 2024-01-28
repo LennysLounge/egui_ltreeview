@@ -111,16 +111,15 @@ impl TreeView {
         let drag_drop_action = if state.drag_valid() {
             state.peristant.dragged.as_ref().zip(state.drop).map(
                 |(drag_state, (drop_id, position))| DragDropAction {
-                    drag_id: drag_state.node_id,
-                    drop_id,
+                    source: drag_state.node_id,
+                    target: drop_id,
                     position,
+                    commit: ui.ctx().input(|i| i.pointer.any_released()),
                 },
             )
         } else {
             None
         };
-
-        let dropped = ui.ctx().input(|i| i.pointer.any_released()) && drag_drop_action.is_some();
 
         state.peristant.rect = res.response.rect;
         if state.response.drag_released() {
@@ -128,7 +127,6 @@ impl TreeView {
         }
         let res = TreeViewResponse {
             response: state.response,
-            dropped,
             drag_drop_action,
             drop_marker_idx: state.drop_marker_idx,
             context_menu_marker_idx: state.context_menu_marker_idx,
@@ -352,12 +350,16 @@ struct Interaction {
 /// tree view produced.
 #[derive(Debug)]
 pub struct DragDropAction<NodeIdType> {
-    pub drag_id: NodeIdType,
     /// Id of the dragged node.
-    /// Id of the drop node where the dragged node is added to.
-    pub drop_id: NodeIdType,
+    pub source: NodeIdType,
+    /// Id of the node where the dragged node is added to.
+    pub target: NodeIdType,
     /// Position of the dragged node in the drop node.
     pub position: DropPosition<NodeIdType>,
+    /// Wether or not the dnd is just hovering or should be commited.  
+    /// `true` -> The drag and drop should be commited.  
+    /// `false` -> The drag and drop is hovering.
+    pub commit: bool,
 }
 
 /// Where a dragged item should be dropped to in a container.
@@ -419,8 +421,6 @@ pub struct TreeViewResponse<NodeIdType> {
     /// If a row was dragged in the tree this will contain information about
     /// who was dragged to who and at what position.
     pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
-    /// `true` if a drag and drop was performed
-    pub dropped: bool,
     /// Id of the selected node.
     pub selected_node: Option<NodeIdType>,
     drop_marker_idx: ShapeIdx,
@@ -450,22 +450,9 @@ where
         }
     }
 
-    pub fn context_menu(
-        self,
-        ui: &mut Ui,
-        mut add_context_menu: impl FnMut(&mut Ui, NodeIdType),
-    ) -> Self {
-        let TreeViewResponse {
-            mut response,
-            drag_drop_action,
-            dropped,
-            selected_node,
-            drop_marker_idx,
-            nodes,
-            context_menu_marker_idx,
-        } = self;
+    pub fn context_menu(&self, ui: &mut Ui, mut add_context_menu: impl FnMut(&mut Ui, NodeIdType)) {
         let mut clicked_node = None;
-        response = response.context_menu(|ui| {
+        self.response.clone().context_menu(|ui| {
             let has_context_menu_moved = {
                 let last_pos_id = Id::new("Tree View context menu last pos");
                 let last_pos = ui.data_mut(|d| d.get_persisted::<Pos2>(last_pos_id));
@@ -483,17 +470,17 @@ where
                         .flatten()
                 }
             };
-            clicked_node =
-                cursor_position.and_then(|pos| nodes.iter().find(|node| node.rect.contains(pos)));
+            clicked_node = cursor_position
+                .and_then(|pos| self.nodes.iter().find(|node| node.rect.contains(pos)));
             if let Some(node) = clicked_node {
                 add_context_menu(ui, node.node_id)
             }
         });
         if let Some(node) = clicked_node {
-            if Some(node.node_id) != selected_node {
+            if Some(node.node_id) != self.selected_node {
                 let stroke = ui.visuals().widgets.inactive.fg_stroke;
                 ui.painter().set(
-                    context_menu_marker_idx,
+                    self.context_menu_marker_idx,
                     epaint::RectShape::new(
                         node.rect.expand(-stroke.width),
                         ui.visuals().widgets.active.rounding,
@@ -502,15 +489,6 @@ where
                     ),
                 );
             }
-        }
-        TreeViewResponse {
-            response,
-            drag_drop_action,
-            dropped,
-            selected_node,
-            drop_marker_idx,
-            nodes,
-            context_menu_marker_idx,
         }
     }
 }

@@ -153,7 +153,7 @@ where
 
         let row_config = Row {
             id: node.id,
-            drop_on_allowed: false,
+            drop_on_allowed: node.is_dir,
             is_open: open,
             is_dir: node.is_dir,
             depth: self.stack.len() as f32
