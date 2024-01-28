@@ -3,7 +3,10 @@ use egui::{
     Response, Shape, Stroke, Ui,
 };
 
-use crate::{builder::CloserState, Interaction, RowLayout, TreeViewSettings, TreeViewState};
+use crate::{
+    builder::{AddCloser, AddIcon, CloserState},
+    Interaction, RowLayout, TreeViewSettings, TreeViewState,
+};
 
 pub struct Row<NodeIdType> {
     pub id: NodeIdType,
@@ -26,8 +29,8 @@ where
         settings: &TreeViewSettings,
         state: &TreeViewState<NodeIdType>,
         add_label: &mut dyn FnMut(&mut Ui),
-        add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
-        add_closer: &mut Option<&mut dyn FnMut(&mut Ui, CloserState)>,
+        add_icon: &mut Option<&mut AddIcon<'_>>,
+        add_closer: &mut Option<&mut AddCloser<'_>>,
     ) -> bool {
         ui.ctx().set_cursor_icon(CursorIcon::Alias);
 
@@ -75,8 +78,8 @@ where
         interaction: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
         add_label: &mut dyn FnMut(&mut Ui),
-        add_icon: &mut Option<&mut dyn FnMut(&mut Ui)>,
-        add_closer: &mut Option<&mut dyn FnMut(&mut Ui, CloserState)>,
+        add_icon: &mut Option<&mut AddIcon<'_>>,
+        add_closer: &mut Option<&mut AddCloser<'_>>,
     ) -> (Response, Option<Response>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
             RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
@@ -179,7 +182,7 @@ where
             .rect
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
         let label_rect = {
-            let mut rect = background_rect.clone();
+            let mut rect = background_rect;
             rect.min.x = label_rect_min;
             rect
         };
@@ -195,8 +198,6 @@ where
 /// Paint the arrow icon that indicated if the region is open or not
 fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, interaction: &Interaction) {
     let visuals = if interaction.hovered {
-        ui.visuals().widgets.active
-    } else if interaction.hovered {
         ui.visuals().widgets.hovered
     } else {
         ui.visuals().widgets.inactive

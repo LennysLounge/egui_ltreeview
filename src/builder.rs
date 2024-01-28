@@ -94,7 +94,7 @@ where
                 let top = current_dir.icon_rect.center_bottom() + vec2(0.0, 2.0);
 
                 let bottom = match self.settings.vline_style {
-                    VLineStyle::None => top.clone(),
+                    VLineStyle::None => top,
                     VLineStyle::VLine => pos2(
                         top.x,
                         self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
@@ -128,7 +128,7 @@ where
     }
 
     /// Add a node to the tree.
-    pub fn node(&mut self, node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
+    pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
         if !self.parent_dir_is_open() {
             if node.is_dir {
                 self.stack.push(DirectoryState {
@@ -165,21 +165,12 @@ where
             is_focused: self.state.has_focus,
         };
 
-        let (row_response, closer_response) = match (node.icon, node.closer) {
-            (Some(mut add_icon), Some(mut add_closer)) => self.row(
-                &row_config,
-                &mut add_label,
-                Some(&mut add_icon),
-                Some(&mut add_closer),
-            ),
-            (None, Some(mut add_closer)) => {
-                self.row(&row_config, &mut add_label, None, Some(&mut add_closer))
-            }
-            (Some(mut add_icon), None) => {
-                self.row(&row_config, &mut add_label, Some(&mut add_icon), None)
-            }
-            (None, None) => self.row(&row_config, &mut add_label, None, None),
-        };
+        let (row_response, closer_response) = self.row(
+            &row_config,
+            &mut add_label,
+            node.icon.as_deref_mut(),
+            node.closer.as_deref_mut(),
+        );
 
         if node.is_dir {
             let closer_response =
@@ -218,13 +209,13 @@ where
         &mut self,
         row_config: &Row<NodeIdType>,
         mut add_label: impl FnMut(&mut Ui),
-        mut add_icon: Option<&mut dyn FnMut(&mut Ui)>,
-        mut add_closer: Option<&mut dyn FnMut(&mut Ui, CloserState)>,
+        mut add_icon: Option<&mut AddIcon<'_>>,
+        mut add_closer: Option<&mut AddCloser<'_>>,
     ) -> (Response, Option<Response>) {
         let (row_response, closer_response, label_rect) = row_config.draw_row(
             self.ui,
-            &self.state,
-            &self.settings,
+            self.state,
+            self.settings,
             &mut add_label,
             &mut add_icon,
             &mut add_closer,
@@ -275,8 +266,8 @@ where
             if drag_state.node_id == row_config.id && drag_state.drag_valid {
                 row_config.draw_row_dragged(
                     self.ui,
-                    &self.settings,
-                    &self.state,
+                    self.settings,
+                    self.state,
                     &mut add_label,
                     &mut add_icon,
                     &mut add_closer,
@@ -289,7 +280,7 @@ where
             .hover_pos()
             .and_then(|pos| DropQuarter::new(row_response.rect.y_range(), pos.y))
         {
-            self.do_drop(&row_config, &row_response, drop_quarter);
+            self.do_drop(row_config, &row_response, drop_quarter);
         }
 
         self.state.node_order.push(NodeInfo {
@@ -327,8 +318,8 @@ where
             return;
         }
 
-        let drop_position = self.get_drop_position(&row_config, &drop_quarter);
-        let shape = self.drop_marker_shape(&row_response, drop_position.as_ref());
+        let drop_position = self.get_drop_position(row_config, &drop_quarter);
+        let shape = self.drop_marker_shape(row_response, drop_position.as_ref());
 
         // It is allowed to drop itself `After´ or `Before` itself.
         // This however doesn't make sense and makes executing the command more
@@ -363,7 +354,7 @@ where
                 if *drop_on_allowed {
                     return Some((*id, DropPosition::Last));
                 }
-                return None;
+                None
             }
             DropQuarter::MiddleTop => {
                 if *drop_on_allowed {
@@ -372,7 +363,7 @@ where
                 if let Some(parent_dir) = self.parent_dir() {
                     return Some((parent_dir.id, DropPosition::Before(*id)));
                 }
-                return None;
+                None
             }
             DropQuarter::MiddleBottom => {
                 if *drop_on_allowed {
@@ -381,7 +372,7 @@ where
                 if let Some(parent_dir) = self.parent_dir() {
                     return Some((parent_dir.id, DropPosition::After(*id)));
                 }
-                return None;
+                None
             }
             DropQuarter::Bottom => {
                 if *drop_on_allowed && *is_open {
@@ -393,7 +384,7 @@ where
                 if *drop_on_allowed {
                     return Some((*id, DropPosition::Last));
                 }
-                return None;
+                None
             }
         }
     }
@@ -452,11 +443,14 @@ where
     }
 }
 
+pub type AddIcon<'icon> = dyn FnMut(&mut Ui) + 'icon;
+pub type AddCloser<'closer> = dyn FnMut(&mut Ui, CloserState) + 'closer;
+
 pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
-    icon: Option<Box<dyn FnMut(&mut Ui) + 'icon>>,
-    closer: Option<Box<dyn FnMut(&mut Ui, CloserState) + 'closer>>,
+    icon: Option<Box<AddIcon<'icon>>>,
+    closer: Option<Box<AddCloser<'closer>>>,
 }
 impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
     /// Create a new node builder from a leaf prototype.

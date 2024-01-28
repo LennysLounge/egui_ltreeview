@@ -88,7 +88,7 @@ impl TreeView {
             // If the widget is focused but no node is selected we want to select any node
             // to allow navigating throught the tree.
             // In case we gain focus from a drag action we select the dragged node directly.
-            if state.peristant.selected == None {
+            if state.peristant.selected.is_none() {
                 state.peristant.selected = state
                     .peristant
                     .dragged
@@ -99,7 +99,7 @@ impl TreeView {
             ui.input(|i| {
                 for event in i.events.iter() {
                     match event {
-                        Event::Key { key, pressed, .. } if *pressed == true => {
+                        Event::Key { key, pressed, .. } if *pressed => {
                             handle_input(&mut state, key)
                         }
                         _ => (),
@@ -173,15 +173,11 @@ where
             if let Some(dir_open) = state.peristant.dir_states.get_mut(&selected_node) {
                 if *dir_open {
                     *dir_open = false;
-                } else {
-                    if let Some(first_parent) = first_parent {
-                        state.peristant.selected = Some(first_parent);
-                    }
-                }
-            } else {
-                if let Some(first_parent) = first_parent {
+                } else if let Some(first_parent) = first_parent {
                     state.peristant.selected = Some(first_parent);
                 }
+            } else if let Some(first_parent) = first_parent {
+                state.peristant.selected = Some(first_parent);
             }
         }
         Key::ArrowRight => {
