@@ -3,7 +3,9 @@ use std::env;
 
 use data::*;
 use egui::{vec2, DragValue, Id, Ui};
-use egui_ltreeview::{builder::NodeBuilder, RowLayout, TreeView, TreeViewBuilder, VLineStyle};
+use egui_ltreeview::{
+    builder::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle,
+};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -93,7 +95,21 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
             );
             show_node(&mut builder, &app.tree);
         });
-    app.selected_node = response.selected_node;
+    for action in response.actions.iter() {
+        match action {
+            Action::SetSelected(id) => app.selected_node = *id,
+            Action::Move {
+                source,
+                target,
+                position,
+            } => {
+                if let Some(source) = app.tree.remove(&source) {
+                    _ = app.tree.insert(&target, *position, source);
+                }
+            }
+            Action::Drag { .. } => (),
+        }
+    }
     response.context_menu(ui, |ui, node_id| {
         app.tree.find_mut(&node_id, &mut |node| match node {
             Node::Directory(dir) => {
@@ -106,16 +122,6 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
             }
         });
     });
-
-    if let Some(drop_action) = response.drag_drop_action {
-        if drop_action.commit {
-            if let Some(source) = app.tree.remove(&drop_action.source) {
-                _ = app
-                    .tree
-                    .insert(&drop_action.target, drop_action.position, source);
-            }
-        }
-    }
 }
 
 fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {

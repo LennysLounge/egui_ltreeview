@@ -56,6 +56,7 @@ impl TreeView {
         NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
     {
         let mut state = TreeViewState::load(ui, self.id);
+        let prev_selection = state.peristant.selected.clone();
 
         ui.memory_mut(|m| {
             m.set_focus_lock_filter(
@@ -108,30 +109,43 @@ impl TreeView {
             });
         }
 
-        let drag_drop_action = if state.drag_valid() {
-            state.peristant.dragged.as_ref().zip(state.drop).map(
-                |(drag_state, (drop_id, position))| DragDropAction {
-                    source: drag_state.node_id,
-                    target: drop_id,
-                    position,
-                    commit: ui.ctx().input(|i| i.pointer.any_released()),
-                },
-            )
-        } else {
-            None
-        };
+        if state.drag_valid() {
+            if let Some((drag_state, (drop_id, position))) =
+                state.peristant.dragged.as_ref().zip(state.drop)
+            {
+                if ui.ctx().input(|i| i.pointer.any_released()) {
+                    state.actions.push(Action::Move {
+                        source: drag_state.node_id,
+                        target: drop_id,
+                        position: position,
+                    })
+                } else {
+                    state.actions.push(Action::Drag {
+                        source: drag_state.node_id,
+                        target: drop_id,
+                        position: position,
+                    })
+                }
+            }
+        }
+        if state.peristant.selected != prev_selection {
+            state
+                .actions
+                .push(Action::SetSelected(state.peristant.selected));
+        }
 
         state.peristant.rect = res.response.rect;
         if state.response.drag_released() {
             state.peristant.dragged = None;
         }
+
         let res = TreeViewResponse {
             response: state.response,
-            drag_drop_action,
             drop_marker_idx: state.drop_marker_idx,
             context_menu_marker_idx: state.context_menu_marker_idx,
             selected_node: state.peristant.selected,
             nodes: state.node_order,
+            actions: state.actions,
         };
 
         state.peristant.store(ui, self.id);
@@ -258,6 +272,8 @@ where
     has_focus: bool,
     /// Order of the nodes inside the tree.
     node_order: Vec<NodeInfo<NodeIdType>>,
+    /// Actions for the tree view.
+    actions: Vec<Action<NodeIdType>>,
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
@@ -279,6 +295,7 @@ where
             response,
             has_focus,
             node_order: Vec::new(),
+            actions: Vec::new(),
         }
     }
 }
@@ -413,13 +430,36 @@ pub enum RowLayout {
     AlignedIconsAndLabels,
 }
 
+/// An action the tree view would like to take as a result
+/// of some user input like drag and drop.
+#[derive(Clone)]
+pub enum Action<NodeIdType> {
+    /// Set the selected node to be this.
+    SetSelected(Option<NodeIdType>),
+    /// Move a node from one place to another.
+    Move {
+        source: NodeIdType,
+        target: NodeIdType,
+        position: DropPosition<NodeIdType>,
+    },
+    /// An inprocess drag and drop action where the node
+    /// is currently dragged but not yet dropped.
+    Drag {
+        source: NodeIdType,
+        target: NodeIdType,
+        position: DropPosition<NodeIdType>,
+    },
+}
+
 pub struct TreeViewResponse<NodeIdType> {
     pub response: Response,
-    /// If a row was dragged in the tree this will contain information about
-    /// who was dragged to who and at what position.
-    pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
-    /// Id of the selected node.
-    pub selected_node: Option<NodeIdType>,
+    /// Actions this tree view would like to perform.
+    pub actions: Vec<Action<NodeIdType>>,
+    // /// If a row was dragged in the tree this will contain information about
+    // /// who was dragged to who and at what position.
+    // pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
+    // /// Id of the selected node.
+    selected_node: Option<NodeIdType>,
     drop_marker_idx: ShapeIdx,
     context_menu_marker_idx: ShapeIdx,
     nodes: Vec<NodeInfo<NodeIdType>>,

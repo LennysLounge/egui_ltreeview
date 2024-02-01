@@ -3,7 +3,7 @@
 use data::{make_tree, TreeNode, Visitable};
 use eframe::egui;
 use egui::Ui;
-use egui_ltreeview::TreeView;
+use egui_ltreeview::{Action, TreeView};
 use visitor::{
     DropAllowedVisitor, InsertNodeVisitor, RemoveNodeVisitor, SearchVisitor, TreeViewContextMenu,
     TreeViewVisitor,
@@ -50,45 +50,54 @@ fn show_tree(ui: &mut Ui, tree: &mut TreeNode) {
         tree.walk(&mut TreeViewVisitor { builder: build });
     });
 
-    if let Some(selected_id) = tree_res.selected_node {
-        SearchVisitor::new(selected_id, |selected| {
-            ui.label(format!("selected: {}", selected.name()));
-        })
-        .search_in(tree);
-    }
+    for action in tree_res.actions.iter() {
+        match action {
+            Action::SetSelected(_) => (),
+            a @ Action::Move {
+                source,
+                target,
+                position,
+            }
+            | a @ Action::Drag {
+                source,
+                target,
+                position,
+            } => {
+                // Test if drop is valid
+                let drop_allowed = {
+                    SearchVisitor::new(*source, |dragged| {
+                        SearchVisitor::new(*target, |dropped| {
+                            DropAllowedVisitor::new(dragged.as_any()).test(dropped)
+                        })
+                        .search_in(tree)
+                    })
+                    .search_in(tree)
+                    .flatten()
+                    .unwrap_or(false)
+                };
+                match (a, drop_allowed) {
+                    (Action::Move { .. }, true) => {
+                        // remove dragged node
+                        let removed_node = RemoveNodeVisitor::new(*source).remove_from(tree);
 
-    if let Some(drop_action) = &tree_res.drag_drop_action {
-        // Test if drop is valid
-        let drop_allowed = {
-            SearchVisitor::new(drop_action.source, |dragged| {
-                SearchVisitor::new(drop_action.target, |dropped| {
-                    DropAllowedVisitor::new(dragged.as_any()).test(dropped)
-                })
-                .search_in(tree)
-            })
-            .search_in(tree)
-            .flatten()
-            .unwrap_or(false)
-        };
-
-        if !drop_allowed {
-            tree_res.remove_drop_marker(ui);
-        }
-
-        if drop_allowed && drop_action.commit {
-            // remove dragged node
-            let removed_node = RemoveNodeVisitor::new(drop_action.source).remove_from(tree);
-
-            // insert node
-            if let Some(dragged_node) = removed_node {
-                tree.walk_mut(&mut InsertNodeVisitor {
-                    target_id: drop_action.target,
-                    position: drop_action.position,
-                    node: Some(dragged_node),
-                });
+                        // insert node
+                        if let Some(dragged_node) = removed_node {
+                            tree.walk_mut(&mut InsertNodeVisitor {
+                                target_id: *target,
+                                position: *position,
+                                node: Some(dragged_node),
+                            });
+                        }
+                    }
+                    (Action::Drag { .. }, false) => {
+                        tree_res.remove_drop_marker(ui);
+                    }
+                    _ => (),
+                }
             }
         }
     }
+
     tree_res.context_menu(ui, |ui, node_id| {
         tree.walk(&mut TreeViewContextMenu {
             target_id: node_id,
