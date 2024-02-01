@@ -83,6 +83,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
         .vline_style(app.settings.vline_style)
         .row_layout(app.settings.row_layout)
         .show(ui, |mut builder| {
+            builder.set_root_id(Uuid::default());
             builder.node(
                 NodeBuilder::leaf(app.settings_id).icon(|ui| {
                     egui::Image::new(egui::include_image!("settings.png"))

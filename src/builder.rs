@@ -23,6 +23,8 @@ struct DirectoryState<NodeIdType> {
     icon_rect: Rect,
     /// Positions of each child node of this directory.
     child_node_positions: Vec<Pos2>,
+    /// The level of indentation.
+    indent_level: usize,
 }
 
 /// The builder used to construct the tree view.
@@ -127,6 +129,21 @@ where
         self.stack.pop();
     }
 
+    /// Set the id of the root node.
+    pub fn set_root_id(&mut self, id: NodeIdType) {
+        if self.stack.is_empty() {
+            self.stack.push(DirectoryState {
+                is_open: true,
+                id: id,
+                drop_forbidden: false,
+                row_rect: Rect::NOTHING,
+                icon_rect: Rect::NOTHING,
+                child_node_positions: Vec::new(),
+                indent_level: 0,
+            });
+        }
+    }
+
     /// Add a node to the tree.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
         if !self.parent_dir_is_open() {
@@ -138,6 +155,7 @@ where
                     row_rect: Rect::NOTHING,
                     icon_rect: Rect::NOTHING,
                     child_node_positions: Vec::new(),
+                    indent_level: self.get_indent_level(),
                 });
             }
             return;
@@ -156,7 +174,7 @@ where
             drop_on_allowed: node.is_dir,
             is_open: open,
             is_dir: node.is_dir,
-            depth: self.stack.len() as f32
+            depth: self.get_indent_level() as f32
                 * self
                     .settings
                     .override_indent
@@ -201,6 +219,7 @@ where
                 row_rect: row_response.rect,
                 icon_rect: closer_response.rect,
                 child_node_positions: Vec::new(),
+                indent_level: self.get_indent_level() + 1,
             });
         }
     }
@@ -284,7 +303,7 @@ where
         }
 
         self.state.node_order.push(NodeInfo {
-            depth: self.stack.len(),
+            depth: self.get_indent_level(),
             node_id: row_config.id,
             rect: row_response.rect,
             parent_node_id: self.parent_dir().map(|dir| dir.id),
@@ -441,6 +460,9 @@ where
         if let Some(parent_dir) = self.stack.last_mut() {
             parent_dir.child_node_positions.push(pos);
         }
+    }
+    fn get_indent_level(&self) -> usize {
+        self.stack.last().map(|d| d.indent_level).unwrap_or(0)
     }
 }
 
