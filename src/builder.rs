@@ -245,7 +245,7 @@ where
             .dir_states
             .get(&node.id)
             .copied()
-            .unwrap_or(true);
+            .unwrap_or(node.default_open);
 
         let row_config = Row {
             id: node.id,
@@ -550,6 +550,7 @@ pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
     flatten: bool,
+    default_open: bool,
     icon: Option<Box<AddIcon<'icon>>>,
     closer: Option<Box<AddCloser<'closer>>>,
 }
@@ -562,6 +563,7 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
             flatten: false,
             icon: None,
             closer: None,
+            default_open: true,
         }
     }
 
@@ -573,6 +575,7 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
             flatten: false,
             icon: None,
             closer: None,
+            default_open: true,
         }
     }
 
@@ -582,6 +585,12 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
     /// like the children of the grand parent directory.
     pub fn flatten(mut self, flatten: bool) -> Self {
         self.flatten = flatten;
+        self
+    }
+
+    /// Whether or not a directory should be open by default or closed.
+    pub fn default_open(mut self, default_open: bool) -> Self {
+        self.default_open = default_open;
         self
     }
 
