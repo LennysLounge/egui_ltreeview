@@ -95,7 +95,7 @@ impl TreeView {
                     .dragged
                     .as_ref()
                     .map(|drag_state| drag_state.node_id)
-                    .or(state.node_order.first().map(|n| n.node_id));
+                    .or(state.node_info.first().map(|n| n.node_id));
             }
             ui.input(|i| {
                 for event in i.events.iter() {
@@ -144,7 +144,7 @@ impl TreeView {
             drop_marker_idx: state.drop_marker_idx,
             context_menu_marker_idx: state.context_menu_marker_idx,
             selected_node: state.peristant.selected,
-            nodes: state.node_order,
+            nodes: state.node_info,
             actions: state.actions,
         };
 
@@ -158,15 +158,15 @@ where
     NodeIdType: Clone + Copy + PartialEq + Eq + std::hash::Hash,
 {
     let Some(selected_index) = state
-        .node_order
+        .node_info
         .iter()
         .position(|n| Some(n.node_id) == state.peristant.selected)
     else {
         return;
     };
-    let selected_node = state.node_order[selected_index].node_id;
-    let selected_depth = state.node_order[selected_index].depth;
-    let first_parent = state.node_order[0..selected_index]
+    let selected_node = state.node_info[selected_index].node_id;
+    let selected_depth = state.node_info[selected_index].depth;
+    let first_parent = state.node_info[0..selected_index]
         .iter()
         .rev()
         .find(|n| n.depth < selected_depth)
@@ -175,12 +175,25 @@ where
     match key {
         Key::ArrowUp => {
             if selected_index > 0 {
-                state.peristant.selected = Some(state.node_order[selected_index - 1].node_id);
+                // Search for previous visible node.
+                state.node_info[0..selected_index]
+                    .iter()
+                    .rev()
+                    .find(|node| node.visible)
+                    .map(|node| {
+                        state.peristant.selected = Some(node.node_id);
+                    });
             }
         }
         Key::ArrowDown => {
-            if selected_index < state.node_order.len() - 1 {
-                state.peristant.selected = Some(state.node_order[selected_index + 1].node_id);
+            if selected_index < state.node_info.len() - 1 {
+                // Search for previous visible node.
+                state.node_info[(selected_index + 1)..]
+                    .iter()
+                    .find(|node| node.visible)
+                    .map(|node| {
+                        state.peristant.selected = Some(node.node_id);
+                    });
             }
         }
         Key::ArrowLeft => {
@@ -197,9 +210,14 @@ where
         Key::ArrowRight => {
             if let Some(dir_open) = state.peristant.dir_states.get_mut(&selected_node) {
                 if *dir_open {
-                    if selected_index < state.node_order.len() - 1 {
-                        state.peristant.selected =
-                            Some(state.node_order[selected_index + 1].node_id);
+                    if selected_index < state.node_info.len() - 1 {
+                        // Search for previous visible node.
+                        state.node_info[(selected_index + 1)..]
+                            .iter()
+                            .find(|node| node.visible)
+                            .map(|node| {
+                                state.peristant.selected = Some(node.node_id);
+                            });
                     }
                 } else {
                     *dir_open = true;
@@ -270,8 +288,8 @@ where
     context_menu_marker_idx: ShapeIdx,
     /// Wether or not the tree view has keyboard focus.
     has_focus: bool,
-    /// Order of the nodes inside the tree.
-    node_order: Vec<NodeInfo<NodeIdType>>,
+    /// Info about each node in the tree.
+    node_info: Vec<NodeInfo<NodeIdType>>,
     /// Actions for the tree view.
     actions: Vec<Action<NodeIdType>>,
 }
@@ -294,7 +312,7 @@ where
             context_menu_marker_idx: ui.painter().add(Shape::Noop),
             response,
             has_focus,
-            node_order: Vec::new(),
+            node_info: Vec::new(),
             actions: Vec::new(),
         }
     }
@@ -351,6 +369,7 @@ struct NodeInfo<NodeIdType> {
     pub node_id: NodeIdType,
     pub rect: Rect,
     pub parent_node_id: Option<NodeIdType>,
+    pub visible: bool,
 }
 
 struct Interaction {

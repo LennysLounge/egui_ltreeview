@@ -83,6 +83,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
         .vline_style(app.settings.vline_style)
         .row_layout(app.settings.row_layout)
         .show(ui, |mut builder| {
+            builder.node(NodeBuilder::dir(Uuid::default()).flatten(true), |_| {});
             //builder.set_root_id(Uuid::default());
             builder.node(
                 NodeBuilder::leaf(app.settings_id).icon(|ui| {
@@ -95,6 +96,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
                 },
             );
             show_node(&mut builder, &app.tree);
+            builder.close_dir();
         });
     for action in response.actions.iter() {
         match action {
