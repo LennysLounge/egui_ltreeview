@@ -25,6 +25,8 @@ struct DirectoryState<NodeIdType> {
     child_node_positions: Vec<Pos2>,
     /// The level of indentation.
     indent_level: usize,
+    /// If this dir was flattened.
+    flattened: bool,
 }
 
 /// The builder used to construct the tree view.
@@ -72,93 +74,149 @@ where
 
     /// Close the current directory.
     pub fn close_dir(&mut self) {
-        if let Some(current_dir) = self.parent_dir() {
-            if let Some((drop_parent, DropPosition::Last)) = &self.state.drop {
-                if drop_parent == &current_dir.id {
-                    let mut rect = current_dir.row_rect;
-                    *rect.bottom_mut() =
-                        self.ui.cursor().top() - self.ui.spacing().item_spacing.y * 0.5;
-                    self.ui.painter().set(
-                        self.state.drop_marker_idx,
-                        RectShape::new(
-                            rect,
-                            self.ui.visuals().widgets.active.rounding,
-                            self.ui.visuals().selection.bg_fill.linear_multiply(0.5),
-                            Stroke::NONE,
-                        ),
-                    );
-                }
-            }
-        }
+        let Some(current_dir) = self.stack.pop() else {
+            return;
+        };
 
-        if let Some(current_dir) = self.parent_dir() {
-            if current_dir.is_open {
-                let top = current_dir.icon_rect.center_bottom() + vec2(0.0, 2.0);
-
-                let bottom = match self.settings.vline_style {
-                    VLineStyle::None => top,
-                    VLineStyle::VLine => pos2(
-                        top.x,
-                        self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
+        // Draw the drop marker over the entire dir if it is the target.
+        if let Some((drop_parent, DropPosition::Last)) = &self.state.drop {
+            if drop_parent == &current_dir.id {
+                let mut rect = current_dir.row_rect;
+                *rect.bottom_mut() =
+                    self.ui.cursor().top() - self.ui.spacing().item_spacing.y * 0.5;
+                self.ui.painter().set(
+                    self.state.drop_marker_idx,
+                    RectShape::new(
+                        rect,
+                        self.ui.visuals().widgets.active.rounding,
+                        self.ui.visuals().selection.bg_fill.linear_multiply(0.5),
+                        Stroke::NONE,
                     ),
-                    VLineStyle::Hook => pos2(
-                        top.x,
-                        current_dir
-                            .child_node_positions
-                            .last()
-                            .map(|pos| pos.y)
-                            .unwrap_or(top.y),
-                    ),
-                };
-                self.ui.painter().line_segment(
-                    [top, bottom],
-                    self.ui.visuals().widgets.noninteractive.bg_stroke,
                 );
-                if matches!(self.settings.vline_style, VLineStyle::Hook) {
-                    for child_pos in current_dir.child_node_positions.iter() {
-                        let p1 = pos2(top.x, child_pos.y);
-                        let p2 = *child_pos + vec2(-2.0, 0.0);
-                        self.ui.painter().line_segment(
-                            [p1, p2],
-                            self.ui.visuals().widgets.noninteractive.bg_stroke,
-                        );
-                    }
+            }
+        }
+
+        // Draw vline
+        if current_dir.is_open {
+            let top = current_dir.icon_rect.center_bottom() + vec2(0.0, 2.0);
+
+            let bottom = match self.settings.vline_style {
+                VLineStyle::None => top,
+                VLineStyle::VLine => pos2(
+                    top.x,
+                    self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
+                ),
+                VLineStyle::Hook => pos2(
+                    top.x,
+                    current_dir
+                        .child_node_positions
+                        .last()
+                        .map(|pos| pos.y)
+                        .unwrap_or(top.y),
+                ),
+            };
+            self.ui.painter().line_segment(
+                [top, bottom],
+                self.ui.visuals().widgets.noninteractive.bg_stroke,
+            );
+            if matches!(self.settings.vline_style, VLineStyle::Hook) {
+                for child_pos in current_dir.child_node_positions.iter() {
+                    let p1 = pos2(top.x, child_pos.y);
+                    let p2 = *child_pos + vec2(-2.0, 0.0);
+                    self.ui
+                        .painter()
+                        .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
                 }
             }
         }
-        self.stack.pop();
-    }
 
-    /// Set the id of the root node.
-    pub fn set_root_id(&mut self, id: NodeIdType) {
-        if self.stack.is_empty() {
-            self.stack.push(DirectoryState {
-                is_open: true,
-                id: id,
-                drop_forbidden: false,
-                row_rect: Rect::NOTHING,
-                icon_rect: Rect::NOTHING,
-                child_node_positions: Vec::new(),
-                indent_level: 0,
+        // Add child markers to next dir if this one was flattened.
+        if current_dir.flattened {
+            self.stack.last_mut().map(|dir| {
+                dir.child_node_positions
+                    .extend(current_dir.child_node_positions)
             });
         }
     }
 
     /// Add a node to the tree.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
+        let row_response = if node.is_dir {
+            self.dir_internal(&mut node, &mut add_label)
+        } else {
+            self.leaf_internal(&mut node, &mut add_label)
+        };
+
+        self.state.node_order.push(NodeInfo {
+            depth: self.get_indent_level(),
+            node_id: node.id,
+            rect: row_response.map(|r| r.rect).unwrap_or(Rect::NOTHING),
+            parent_node_id: self.parent_dir().map(|dir| dir.id),
+        });
+    }
+
+    fn leaf_internal(
+        &mut self,
+        node: &mut NodeBuilder<NodeIdType>,
+        add_label: &mut dyn FnMut(&mut Ui),
+    ) -> Option<Response> {
         if !self.parent_dir_is_open() {
-            if node.is_dir {
-                self.stack.push(DirectoryState {
-                    is_open: false,
-                    id: node.id,
-                    drop_forbidden: true,
-                    row_rect: Rect::NOTHING,
-                    icon_rect: Rect::NOTHING,
-                    child_node_positions: Vec::new(),
-                    indent_level: self.get_indent_level(),
-                });
-            }
-            return;
+            return None;
+        }
+        let row_config = Row {
+            id: node.id,
+            drop_on_allowed: false,
+            is_open: true,
+            is_dir: false,
+            depth: self.get_indent_level() as f32
+                * self
+                    .settings
+                    .override_indent
+                    .unwrap_or(self.ui.spacing().indent),
+            is_selected: self.state.is_selected(&node.id),
+            is_focused: self.state.has_focus,
+        };
+
+        let (row_response, _closer_response) = self.row(
+            &row_config,
+            add_label,
+            node.icon.as_deref_mut(),
+            node.closer.as_deref_mut(),
+        );
+
+        Some(row_response)
+    }
+
+    fn dir_internal(
+        &mut self,
+        node: &mut NodeBuilder<NodeIdType>,
+        add_label: &mut dyn FnMut(&mut Ui),
+    ) -> Option<Response> {
+        if !self.parent_dir_is_open() {
+            self.stack.push(DirectoryState {
+                is_open: false,
+                id: node.id,
+                drop_forbidden: true,
+                row_rect: Rect::NOTHING,
+                icon_rect: Rect::NOTHING,
+                child_node_positions: Vec::new(),
+                indent_level: self.get_indent_level(),
+                flattened: false,
+            });
+            return None;
+        }
+        if node.flatten {
+            self.stack.push(DirectoryState {
+                is_open: self.parent_dir_is_open(),
+                id: node.id,
+                drop_forbidden: self.parent_dir_drop_forbidden(),
+                row_rect: Rect::NOTHING,
+                icon_rect: Rect::NOTHING,
+                child_node_positions: Vec::new(),
+                indent_level: self.get_indent_level(),
+                flattened: true,
+            });
+            return None;
         }
 
         let mut open = self
@@ -185,43 +243,43 @@ where
 
         let (row_response, closer_response) = self.row(
             &row_config,
-            &mut add_label,
+            add_label,
             node.icon.as_deref_mut(),
             node.closer.as_deref_mut(),
         );
 
-        if node.is_dir {
-            let closer_response =
-                closer_response.expect("Closer response should be availabel for dirs");
+        let closer_response =
+            closer_response.expect("Closer response should be availabel for dirs");
 
-            let closer_interaction = self.state.interact(&closer_response.rect);
-            if closer_interaction.clicked {
-                open = !open;
-                self.state.peristant.selected = Some(node.id);
-            }
-
-            let row_interaction = self.state.interact(&row_response.rect);
-            if row_interaction.double_clicked {
-                open = !open;
-            }
-
-            self.state
-                .peristant
-                .dir_states
-                .entry(node.id)
-                .and_modify(|e| *e = open)
-                .or_insert(open);
-
-            self.stack.push(DirectoryState {
-                is_open: open,
-                id: node.id,
-                drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
-                row_rect: row_response.rect,
-                icon_rect: closer_response.rect,
-                child_node_positions: Vec::new(),
-                indent_level: self.get_indent_level() + 1,
-            });
+        let closer_interaction = self.state.interact(&closer_response.rect);
+        if closer_interaction.clicked {
+            open = !open;
+            self.state.peristant.selected = Some(node.id);
         }
+
+        let row_interaction = self.state.interact(&row_response.rect);
+        if row_interaction.double_clicked {
+            open = !open;
+        }
+
+        self.state
+            .peristant
+            .dir_states
+            .entry(node.id)
+            .and_modify(|e| *e = open)
+            .or_insert(open);
+
+        self.stack.push(DirectoryState {
+            is_open: open,
+            id: node.id,
+            drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
+            row_rect: row_response.rect,
+            icon_rect: closer_response.rect,
+            child_node_positions: Vec::new(),
+            indent_level: self.get_indent_level() + 1,
+            flattened: false,
+        });
+        Some(row_response)
     }
 
     fn row(
@@ -301,13 +359,6 @@ where
         {
             self.do_drop(row_config, &row_response, drop_quarter);
         }
-
-        self.state.node_order.push(NodeInfo {
-            depth: self.get_indent_level(),
-            node_id: row_config.id,
-            rect: row_response.rect,
-            parent_node_id: self.parent_dir().map(|dir| dir.id),
-        });
 
         self.push_child_node_position(label_rect.left_center());
 
@@ -472,6 +523,7 @@ pub type AddCloser<'closer> = dyn FnMut(&mut Ui, CloserState) + 'closer;
 pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
+    flatten: bool,
     icon: Option<Box<AddIcon<'icon>>>,
     closer: Option<Box<AddCloser<'closer>>>,
 }
@@ -481,6 +533,7 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
         Self {
             id,
             is_dir: false,
+            flatten: false,
             icon: None,
             closer: None,
         }
@@ -491,9 +544,19 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
         Self {
             id,
             is_dir: true,
+            flatten: false,
             icon: None,
             closer: None,
         }
+    }
+
+    /// Whether or not the directory should be flattened into the
+    /// parent directiron. A directory that is flattened does not
+    /// show a label and cannot be navigated to. Its children appear
+    /// like the children of the grand parent directory.
+    pub fn flatten(mut self, flatten: bool) -> Self {
+        self.flatten = flatten;
+        self
     }
 
     /// Add a icon to the node.
