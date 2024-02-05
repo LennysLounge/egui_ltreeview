@@ -141,27 +141,32 @@ where
 
     /// Add a node to the tree.
     pub fn node(&mut self, node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
-        if node.is_dir {
-            self.dir_internal(node, &mut add_label);
+        let parent_node_id = self.parent_dir().map(|dir| dir.id);
+        let depth = self.get_indent_level();
+        let node_id = node.id;
+
+        let rect = if node.is_dir {
+            self.dir_internal(node, &mut add_label)
         } else {
-            self.leaf_internal(node, &mut add_label);
+            self.leaf_internal(node, &mut add_label)
         };
+
+        self.state.node_info.push(NodeInfo {
+            depth,
+            node_id,
+            visible: rect.is_some(),
+            rect: rect.unwrap_or(Rect::NOTHING),
+            parent_node_id,
+        });
     }
 
     fn leaf_internal(
         &mut self,
         mut node: NodeBuilder<NodeIdType>,
         add_label: &mut dyn FnMut(&mut Ui),
-    ) {
+    ) -> Option<Rect> {
         if !self.parent_dir_is_open() {
-            self.state.node_info.push(NodeInfo {
-                depth: self.get_indent_level(),
-                node_id: node.id,
-                visible: false,
-                rect: Rect::NOTHING,
-                parent_node_id: self.parent_dir().map(|dir| dir.id),
-            });
-            return;
+            return None;
         }
         let row_config = Row {
             id: node.id,
@@ -184,20 +189,14 @@ where
             node.closer.as_deref_mut(),
         );
 
-        self.state.node_info.push(NodeInfo {
-            depth: self.get_indent_level(),
-            node_id: node.id,
-            visible: true,
-            rect: row_response.rect,
-            parent_node_id: self.parent_dir().map(|dir| dir.id),
-        });
+        Some(row_response.rect)
     }
 
     fn dir_internal(
         &mut self,
         mut node: NodeBuilder<NodeIdType>,
         add_label: &mut dyn FnMut(&mut Ui),
-    ) {
+    ) -> Option<Rect> {
         if !self.parent_dir_is_open() {
             self.stack.push(DirectoryState {
                 is_open: false,
@@ -209,14 +208,7 @@ where
                 indent_level: self.get_indent_level(),
                 flattened: false,
             });
-            self.state.node_info.push(NodeInfo {
-                depth: self.get_indent_level(),
-                node_id: node.id,
-                visible: false,
-                rect: Rect::NOTHING,
-                parent_node_id: self.parent_dir().map(|dir| dir.id),
-            });
-            return;
+            return None;
         }
         if node.flatten {
             self.stack.push(DirectoryState {
@@ -229,14 +221,7 @@ where
                 indent_level: self.get_indent_level(),
                 flattened: true,
             });
-            self.state.node_info.push(NodeInfo {
-                depth: self.get_indent_level(),
-                node_id: node.id,
-                visible: false,
-                rect: Rect::NOTHING,
-                parent_node_id: self.parent_dir().map(|dir| dir.id),
-            });
-            return;
+            return None;
         }
 
         let mut open = self
@@ -289,13 +274,6 @@ where
             .and_modify(|e| *e = open)
             .or_insert(open);
 
-        self.state.node_info.push(NodeInfo {
-            depth: self.get_indent_level(),
-            node_id: node.id,
-            visible: true,
-            rect: row_response.rect,
-            parent_node_id: self.parent_dir().map(|dir| dir.id),
-        });
         self.stack.push(DirectoryState {
             is_open: open,
             id: node.id,
@@ -306,6 +284,7 @@ where
             indent_level: self.get_indent_level() + 1,
             flattened: false,
         });
+        Some(row_response.rect)
     }
 
     fn row(
