@@ -41,6 +41,10 @@ struct Settings {
     row_layout: RowLayout,
     fill_space_horizontal: bool,
     fill_space_vertical: bool,
+    max_width_enabled: bool,
+    max_width: f32,
+    max_height_enabled: bool,
+    max_height: f32,
 }
 
 impl Default for MyApp {
@@ -53,6 +57,8 @@ impl Default for MyApp {
                 row_layout: RowLayout::CompactAlignedLables,
                 fill_space_horizontal: true,
                 fill_space_vertical: false,
+                max_width: 100.0,
+                max_height: 100.0,
                 ..Default::default()
             },
         }
@@ -88,6 +94,16 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
         .row_layout(app.settings.row_layout)
         .fill_space_horizontal(app.settings.fill_space_horizontal)
         .fill_space_vertical(app.settings.fill_space_vertical)
+        .max_width(
+            app.settings
+                .max_width_enabled
+                .then_some(app.settings.max_width),
+        )
+        .max_height(
+            app.settings
+                .max_height_enabled
+                .then_some(app.settings.max_height),
+        )
         .show(ui, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true), |_| {});
             //builder.set_root_id(Uuid::default());
@@ -291,6 +307,26 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
 
         ui.label("fill vertical");
         ui.checkbox(&mut settings.fill_space_vertical, "");
+        ui.end_row();
+
+        ui.label("max width");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut settings.max_width_enabled, "");
+            ui.add_enabled(
+                settings.max_width_enabled,
+                egui::DragValue::new(&mut settings.max_width).clamp_range(0.0..=f32::INFINITY),
+            );
+        });
+        ui.end_row();
+
+        ui.label("max height");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut settings.max_height_enabled, "");
+            ui.add_enabled(
+                settings.max_height_enabled,
+                egui::DragValue::new(&mut settings.max_height).clamp_range(0.0..=f32::INFINITY),
+            );
+        });
         ui.end_row();
     });
 }

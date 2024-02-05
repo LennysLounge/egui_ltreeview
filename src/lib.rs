@@ -46,13 +46,35 @@ impl TreeView {
         self
     }
 
+    /// Set whether or not the tree should fill all available horizontal space.
+    ///
+    /// Default is `true`.
     pub fn fill_space_horizontal(mut self, fill_space_horizontal: bool) -> Self {
         self.settings.fill_space_horizontal = fill_space_horizontal;
         self
     }
 
+    /// Set whether or not the tree should fill all available vertical space.
+    ///
+    /// Default is `false`.
     pub fn fill_space_vertical(mut self, fill_space_vertical: bool) -> Self {
         self.settings.fill_space_vertical = fill_space_vertical;
+        self
+    }
+
+    /// Set the maximum width the tree can have.
+    ///
+    /// If set to `None` the width it not limited.
+    pub fn max_width(mut self, width: Option<f32>) -> Self {
+        self.settings.max_width = width;
+        self
+    }
+
+    /// Set the maximum hight the tree can have.
+    ///
+    /// If set to `None` the hight it not limited.
+    pub fn max_height(mut self, height: Option<f32>) -> Self {
+        self.settings.max_height = height;
         self
     }
 
@@ -61,7 +83,7 @@ impl TreeView {
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
     /// directories or leaves to the tree.
     pub fn show<NodeIdType>(
-        mut self,
+        self,
         ui: &mut Ui,
         mut build_tree_view: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
@@ -86,20 +108,26 @@ impl TreeView {
         });
 
         // Calculate the desired size of the tree view widget.
-        self.settings.fill_space_horizontal |= ui.layout().horizontal_justify();
-        self.settings.fill_space_vertical |= ui.layout().vertical_justify();
-        let size = vec2(
-            if self.settings.fill_space_horizontal {
-                ui.available_width()
-            } else {
-                state.response.rect.width()
-            },
-            if self.settings.fill_space_vertical {
-                ui.available_height()
-            } else {
-                state.response.rect.height()
-            },
-        );
+        let size = {
+            let mut size = vec2(state.response.rect.width(), state.response.rect.height());
+            if self.settings.fill_space_horizontal || ui.layout().horizontal_justify() {
+                size.x = ui.available_width();
+            }
+            if let Some(max_width) = self.settings.max_width {
+                if max_width < size.x {
+                    size.x = max_width;
+                }
+            }
+            if self.settings.fill_space_vertical || ui.layout().vertical_justify() {
+                size.y = ui.available_height();
+            }
+            if let Some(max_height) = self.settings.max_height {
+                if max_height < size.y {
+                    size.y = max_height;
+                }
+            }
+            size
+        };
 
         // Run the build tree view closure
         let used_rect = ui
@@ -477,7 +505,7 @@ impl Default for TreeViewSettings {
             max_width: None,
             max_height: None,
             fill_space_horizontal: true,
-            fill_space_vertical: true,
+            fill_space_vertical: false,
         }
     }
 }
