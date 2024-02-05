@@ -124,7 +124,6 @@ where
             ui.add_space(2.0);
             let label_pos = ui.cursor().min;
             (add_label)(ui);
-            ui.add_space(ui.available_width());
 
             let closer_response = if draw_closer {
                 let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
@@ -178,9 +177,10 @@ where
             (closer_response, label_rect_min.x)
         });
 
-        let background_rect = row_response
+        let mut background_rect = row_response
             .rect
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
+        background_rect.set_width(ui.available_width());
         let label_rect = {
             let mut rect = background_rect;
             rect.min.x = label_rect_min;

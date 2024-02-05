@@ -39,6 +39,8 @@ struct Settings {
     override_indent: Option<f32>,
     vline_style: VLineStyle,
     row_layout: RowLayout,
+    fill_space_horizontal: bool,
+    fill_space_vertical: bool,
 }
 
 impl Default for MyApp {
@@ -49,6 +51,8 @@ impl Default for MyApp {
             selected_node: None,
             settings: Settings {
                 row_layout: RowLayout::CompactAlignedLables,
+                fill_space_horizontal: true,
+                fill_space_vertical: false,
                 ..Default::default()
             },
         }
@@ -82,6 +86,8 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
         .override_indent(app.settings.override_indent)
         .vline_style(app.settings.vline_style)
         .row_layout(app.settings.row_layout)
+        .fill_space_horizontal(app.settings.fill_space_horizontal)
+        .fill_space_vertical(app.settings.fill_space_vertical)
         .show(ui, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true), |_| {});
             //builder.set_root_id(Uuid::default());
@@ -277,6 +283,14 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
                     "Aligned icons and labels",
                 );
             });
+        ui.end_row();
+
+        ui.label("fill horizontal");
+        ui.checkbox(&mut settings.fill_space_horizontal, "");
+        ui.end_row();
+
+        ui.label("fill vertical");
+        ui.checkbox(&mut settings.fill_space_vertical, "");
         ui.end_row();
     });
 }

@@ -7,7 +7,8 @@ use egui::{
     self,
     epaint::{self, RectShape},
     layers::ShapeIdx,
-    Color32, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
+    vec2, Color32, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense, Shape, Ui,
+    Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -45,12 +46,22 @@ impl TreeView {
         self
     }
 
+    pub fn fill_space_horizontal(mut self, fill_space_horizontal: bool) -> Self {
+        self.settings.fill_space_horizontal = fill_space_horizontal;
+        self
+    }
+
+    pub fn fill_space_vertical(mut self, fill_space_vertical: bool) -> Self {
+        self.settings.fill_space_vertical = fill_space_vertical;
+        self
+    }
+
     /// Start displaying the tree view.
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
     /// directories or leaves to the tree.
     pub fn show<NodeIdType>(
-        self,
+        mut self,
         ui: &mut Ui,
         mut build_tree_view: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
@@ -62,6 +73,7 @@ impl TreeView {
         let mut state = TreeViewState::load(ui, self.id);
         let prev_selection = state.peristant.selected.clone();
 
+        // Set the focus filter to get correct keyboard navigation while focused.s
         ui.memory_mut(|m| {
             m.set_focus_lock_filter(
                 self.id,
@@ -73,18 +85,41 @@ impl TreeView {
             )
         });
 
-        let res = ui.allocate_ui_with_layout(
-            ui.available_size_before_wrap(),
-            Layout::top_down(egui::Align::Min),
-            |ui| {
+        // Calculate the desired size of the tree view widget.
+        self.settings.fill_space_horizontal |= ui.layout().horizontal_justify();
+        self.settings.fill_space_vertical |= ui.layout().vertical_justify();
+        let size = vec2(
+            if self.settings.fill_space_horizontal {
+                ui.available_width()
+            } else {
+                state.response.rect.width()
+            },
+            if self.settings.fill_space_vertical {
+                ui.available_height()
+            } else {
+                state.response.rect.height()
+            },
+        );
+
+        // Run the build tree view closure
+        let used_rect = ui
+            .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
                 ui.add_space(ui.spacing().item_spacing.y * 0.5);
                 build_tree_view(TreeViewBuilder::new(ui, &mut state, &self.settings));
                 // Add negative space because the place will add the item spacing on top of this.
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
-            },
-        );
+                if self.settings.fill_space_horizontal {
+                    ui.allocate_space(vec2(ui.available_width(), 0.0));
+                }
+                if self.settings.fill_space_vertical {
+                    ui.allocate_space(vec2(0.0, ui.available_height()));
+                }
+            })
+            .response
+            .rect;
 
-        let tree_view_interact = state.interact(&res.response.rect);
+        // If the tree was clicked it should receive focus.
+        let tree_view_interact = state.interact(&used_rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
@@ -113,6 +148,7 @@ impl TreeView {
             });
         }
 
+        // Create a drag or move action.
         if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
                 state.peristant.dragged.as_ref().zip(state.drop)
@@ -132,20 +168,24 @@ impl TreeView {
                 }
             }
         }
+        // Create a selection action.
         if state.peristant.selected != prev_selection {
             state
                 .actions
                 .push(Action::SetSelected(state.peristant.selected));
         }
 
-        state.peristant.rect = res.response.rect;
+        // Reset the drag state.
         if state.response.drag_released() {
             state.peristant.dragged = None;
         }
 
+        // Remember the size of the tree for next frame.
+        state.peristant.size = used_rect.size();
+
         ui.painter().set(
             background,
-            RectShape::stroke(state.response.rect, 0.0, (1.0, Color32::BLACK)),
+            RectShape::stroke(used_rect, 0.0, (1.0, Color32::BLACK)),
         );
 
         let res = TreeViewResponse {
@@ -244,7 +284,7 @@ struct TreeViewPersistantState<NodeIdType> {
     /// Information about the dragged node.
     dragged: Option<DragState<NodeIdType>>,
     /// The rectangle the tree view occupied.
-    rect: Rect,
+    size: Vec2,
     /// Open states of the dirs in this tree.
     dir_states: HashMap<NodeIdType, bool>,
 }
@@ -253,7 +293,7 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
         Self {
             selected: Default::default(),
             dragged: Default::default(),
-            rect: Rect::NOTHING,
+            size: Vec2::ZERO,
             dir_states: HashMap::new(),
         }
     }
@@ -311,7 +351,12 @@ where
             .data_mut(|d| d.get_persisted::<TreeViewPersistantState<NodeIdType>>(id))
             .unwrap_or_default();
 
-        let response = interact_no_expansion(ui, state.rect, id, Sense::click_and_drag());
+        let response = interact_no_expansion(
+            ui,
+            Rect::from_min_size(ui.cursor().min, state.size),
+            id,
+            Sense::click_and_drag(),
+        );
         let has_focus = ui.memory(|m| m.has_focus(id));
 
         TreeViewState {
@@ -413,11 +458,28 @@ pub enum DropPosition<NodeIdType> {
     Before(NodeIdType),
 }
 
-#[derive(Default)]
 struct TreeViewSettings {
     override_indent: Option<f32>,
     vline_style: VLineStyle,
     row_layout: RowLayout,
+    max_width: Option<f32>,
+    max_height: Option<f32>,
+    fill_space_horizontal: bool,
+    fill_space_vertical: bool,
+}
+
+impl Default for TreeViewSettings {
+    fn default() -> Self {
+        Self {
+            override_indent: None,
+            vline_style: Default::default(),
+            row_layout: Default::default(),
+            max_width: None,
+            max_height: None,
+            fill_space_horizontal: true,
+            fill_space_vertical: true,
+        }
+    }
 }
 
 /// Style of the vertical line to show the indentation level.
