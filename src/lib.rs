@@ -101,8 +101,9 @@ impl TreeView {
                 self.id,
                 EventFilter {
                     tab: false,
-                    arrows: true,
                     escape: false,
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
                 },
             )
         });
