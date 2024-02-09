@@ -37,21 +37,21 @@ impl eframe::App for MyApp {
                 builder.node(NodeBuilder::dir(1).default_open(false), |ui| {
                     _ = ui.label("Foo")
                 });
-                builder.leaf(2, |ui| _ = ui.label("Ava"));
+                builder.leaf(2, "Ava");
                 builder.node(NodeBuilder::dir(3).default_open(false), |ui| {
                     _ = ui.label("Bar")
                 });
-                builder.leaf(4, |ui| _ = ui.label("Benjamin"));
-                builder.leaf(5, |ui| _ = ui.label("Charlotte"));
+                builder.leaf(4, "Benjamin");
+                builder.leaf(5, "Charlotte");
                 builder.close_dir();
                 builder.close_dir();
-                builder.leaf(6, |ui| _ = ui.label("Daniel"));
-                builder.leaf(7, |ui| _ = ui.label("Emma"));
+                builder.leaf(6, "Daniel");
+                builder.leaf(7, "Emma");
                 builder.node(NodeBuilder::dir(8).default_open(false), |ui| {
                     _ = ui.label("Baz")
                 });
-                builder.leaf(9, |ui| _ = ui.label("Finn"));
-                builder.leaf(10, |ui| _ = ui.label("Grayson"));
+                builder.leaf(9, "Finn");
+                builder.leaf(10, "Grayson");
                 builder.close_dir();
 
                 builder.close_dir();

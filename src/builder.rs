@@ -1,7 +1,7 @@
 use egui::{
     epaint::{self, RectShape},
     layers::ShapeIdx,
-    pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui,
+    pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui, WidgetText,
 };
 
 use crate::{
@@ -62,14 +62,20 @@ where
     }
 
     /// Add a leaf to the tree.
-    pub fn leaf(&mut self, id: NodeIdType, add_label: impl FnMut(&mut Ui)) {
-        self.node(NodeBuilder::leaf(id), add_label);
+    pub fn leaf(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
+        let widget_text = label.into();
+        self.node(NodeBuilder::leaf(id), |ui| {
+            ui.add(egui::Label::new(widget_text.clone()).selectable(false));
+        });
     }
 
     /// Add a directory to the tree.
     /// Must call [Self::close_dir] to close the directory.
-    pub fn dir(&mut self, id: NodeIdType, add_label: impl FnMut(&mut Ui)) {
-        self.node(NodeBuilder::dir(id), add_label);
+    pub fn dir(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
+        let widget_text = label.into();
+        self.node(NodeBuilder::dir(id), |ui| {
+            ui.add(egui::Label::new(widget_text.clone()).selectable(false));
+        });
     }
 
     /// Close the current directory.
@@ -132,10 +138,11 @@ where
 
         // Add child markers to next dir if this one was flattened.
         if current_dir.flattened {
-            self.stack.last_mut().map(|dir| {
-                dir.child_node_positions
-                    .extend(current_dir.child_node_positions)
-            });
+            if let Some(parent_dir) = self.stack.last_mut() {
+                parent_dir
+                    .child_node_positions
+                    .extend(current_dir.child_node_positions);
+            }
         }
     }
 

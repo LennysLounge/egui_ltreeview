@@ -30,41 +30,19 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |mut builder| {
-                builder.dir(0, |ui| {
-                    ui.add(egui::Label::new("Root").selectable(false));
-                });
-                builder.dir(1, |ui| {
-                    ui.add(egui::Label::new("Foo").selectable(false));
-                });
-                builder.leaf(2, |ui| {
-                    ui.add(egui::Label::new("Ava").selectable(false));
-                });
-                builder.dir(3, |ui| {
-                    ui.add(egui::Label::new("Bar").selectable(false));
-                });
-                builder.leaf(4, |ui| {
-                    ui.add(egui::Label::new("Benjamin").selectable(false));
-                });
-                builder.leaf(5, |ui| {
-                    ui.add(egui::Label::new("Charlotte").selectable(false));
-                });
+                builder.dir(0, "Root");
+                builder.dir(1, "Foo");
+                builder.leaf(2, "Ava");
+                builder.dir(3, "Bar");
+                builder.leaf(4, "Benjamin");
+                builder.leaf(5, "Charlotte");
                 builder.close_dir();
                 builder.close_dir();
-                builder.leaf(6, |ui| {
-                    ui.add(egui::Label::new("Daniel").selectable(false));
-                });
-                builder.leaf(7, |ui| {
-                    ui.add(egui::Label::new("Emma").selectable(false));
-                });
-                builder.dir(8, |ui| {
-                    ui.add(egui::Label::new("Baz").selectable(false));
-                });
-                builder.leaf(9, |ui| {
-                    ui.add(egui::Label::new("Finn").selectable(false));
-                });
-                builder.leaf(10, |ui| {
-                    ui.add(egui::Label::new("Grayson").selectable(false));
-                });
+                builder.leaf(6, "Daniel");
+                builder.leaf(7, "Emma");
+                builder.dir(8, "Baz");
+                builder.leaf(9, "Finn");
+                builder.leaf(10, "Grayson");
                 builder.close_dir();
                 builder.close_dir();
             });

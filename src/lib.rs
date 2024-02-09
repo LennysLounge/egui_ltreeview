@@ -93,7 +93,7 @@ impl TreeView {
         let background = ui.painter().add(Shape::Noop);
 
         let mut state = TreeViewState::load(ui, self.id);
-        let prev_selection = state.peristant.selected.clone();
+        let prev_selection = state.peristant.selected;
 
         // Set the focus filter to get correct keyboard navigation while focused.s
         ui.memory_mut(|m| {
@@ -186,13 +186,13 @@ impl TreeView {
                     state.actions.push(Action::Move {
                         source: drag_state.node_id,
                         target: drop_id,
-                        position: position,
+                        position,
                     })
                 } else {
                     state.actions.push(Action::Drag {
                         source: drag_state.node_id,
                         target: drop_id,
-                        position: position,
+                        position,
                     })
                 }
             }
@@ -253,25 +253,26 @@ where
     match key {
         Key::ArrowUp => {
             if selected_index > 0 {
-                // Search for previous visible node.
-                state.node_info[0..selected_index]
-                    .iter()
-                    .rev()
-                    .find(|node| node.visible)
-                    .map(|node| {
-                        state.peristant.selected = Some(node.node_id);
-                    });
+                if let Some(node) =
+                    // Search for previous visible node.
+                    state.node_info[0..selected_index]
+                        .iter()
+                        .rev()
+                        .find(|node| node.visible)
+                {
+                    state.peristant.selected = Some(node.node_id);
+                }
             }
         }
         Key::ArrowDown => {
             if selected_index < state.node_info.len() - 1 {
                 // Search for previous visible node.
-                state.node_info[(selected_index + 1)..]
+                if let Some(node) = state.node_info[(selected_index + 1)..]
                     .iter()
                     .find(|node| node.visible)
-                    .map(|node| {
-                        state.peristant.selected = Some(node.node_id);
-                    });
+                {
+                    state.peristant.selected = Some(node.node_id);
+                }
             }
         }
         Key::ArrowLeft => {
@@ -290,12 +291,12 @@ where
                 if *dir_open {
                     if selected_index < state.node_info.len() - 1 {
                         // Search for previous visible node.
-                        state.node_info[(selected_index + 1)..]
+                        if let Some(node) = state.node_info[(selected_index + 1)..]
                             .iter()
                             .find(|node| node.visible)
-                            .map(|node| {
-                                state.peristant.selected = Some(node.node_id);
-                            });
+                        {
+                            state.peristant.selected = Some(node.node_id);
+                        }
                     }
                 } else {
                     *dir_open = true;
