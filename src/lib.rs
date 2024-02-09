@@ -5,10 +5,9 @@ use std::collections::HashMap;
 
 use egui::{
     self,
-    epaint::{self, RectShape},
+    epaint::{self},
     layers::ShapeIdx,
-    vec2, Color32, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense, Shape, Ui,
-    Vec2,
+    vec2, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -90,8 +89,6 @@ impl TreeView {
     where
         NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
     {
-        let background = ui.painter().add(Shape::Noop);
-
         let mut state = TreeViewState::load(ui, self.id);
         let prev_selection = state.peristant.selected;
 
@@ -211,11 +208,6 @@ impl TreeView {
 
         // Remember the size of the tree for next frame.
         state.peristant.size = used_rect.size();
-
-        ui.painter().set(
-            background,
-            RectShape::stroke(used_rect, 0.0, (1.0, Color32::BLACK)),
-        );
 
         let res = TreeViewResponse {
             response: state.response,

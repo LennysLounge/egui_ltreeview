@@ -2,7 +2,7 @@ mod data;
 use std::env;
 
 use data::*;
-use egui::{vec2, DragValue, Id, Ui};
+use egui::{vec2, DragValue, Id, Label, Ui};
 use egui_ltreeview::{
     builder::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle,
 };
@@ -114,7 +114,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
                         .paint_at(ui, ui.max_rect());
                 }),
                 |ui| {
-                    ui.label("Settings");
+                    ui.add(Label::new("Settings").selectable(false));
                 },
             );
             show_node(&mut builder, &app.tree);
@@ -183,7 +183,7 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
         });
     }
     builder.node(node, |ui| {
-        ui.label(&dir.name);
+        ui.add(Label::new(&dir.name).selectable(false));
     });
 
     for node in dir.children.iter() {
@@ -202,7 +202,7 @@ fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
         });
     }
     builder.node(node, |ui| {
-        ui.label(&file.name);
+        ui.add(Label::new(&file.name).selectable(false));
     });
 }
 
