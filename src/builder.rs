@@ -61,6 +61,11 @@ where
         }
     }
 
+    /// Set the selected node id.
+    pub fn set_selected(&mut self, id: NodeIdType) {
+        self.state.peristant.selected = Some(id);
+    }
+
     /// Add a leaf to the tree.
     pub fn leaf(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
