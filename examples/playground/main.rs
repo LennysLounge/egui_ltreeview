@@ -45,6 +45,10 @@ struct Settings {
     max_width: f32,
     max_height_enabled: bool,
     max_height: f32,
+    min_width_enabled: bool,
+    min_width: f32,
+    min_height_enabled: bool,
+    min_height: f32,
 }
 
 impl Default for MyApp {
@@ -112,6 +116,18 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                 .max_height_enabled
                 .then_some(app.settings.max_height)
                 .unwrap_or(f32::INFINITY),
+        )
+        .min_width(
+            app.settings
+                .min_width_enabled
+                .then_some(app.settings.min_width)
+                .unwrap_or(0.0),
+        )
+        .min_height(
+            app.settings
+                .min_height_enabled
+                .then_some(app.settings.min_height)
+                .unwrap_or(0.0),
         )
         .show(ui, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true), |_| {});
@@ -340,6 +356,26 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             ui.add_enabled(
                 settings.max_height_enabled,
                 egui::DragValue::new(&mut settings.max_height).clamp_range(0.0..=f32::INFINITY),
+            );
+        });
+        ui.end_row();
+
+        ui.label("min width");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut settings.min_width_enabled, "");
+            ui.add_enabled(
+                settings.min_width_enabled,
+                egui::DragValue::new(&mut settings.min_width).clamp_range(0.0..=f32::INFINITY),
+            );
+        });
+        ui.end_row();
+
+        ui.label("min height");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut settings.min_height_enabled, "");
+            ui.add_enabled(
+                settings.min_height_enabled,
+                egui::DragValue::new(&mut settings.min_height).clamp_range(0.0..=f32::INFINITY),
             );
         });
         ui.end_row();

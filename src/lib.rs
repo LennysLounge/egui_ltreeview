@@ -83,6 +83,18 @@ impl TreeView {
         self
     }
 
+    /// Set the minimum width the tree can have.
+    pub fn min_width(mut self, width: f32) -> Self {
+        self.settings.min_width = width;
+        self
+    }
+
+    /// Set the minimum hight the tree can have.
+    pub fn min_height(mut self, height: f32) -> Self {
+        self.settings.min_height = height;
+        self
+    }
+
     /// Start displaying the tree view.
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
@@ -128,17 +140,20 @@ impl TreeView {
                 ui.available_width().at_most(self.settings.max_width)
             } else {
                 state.peristant.size.x.at_most(self.settings.max_width)
-            },
+            }
+            .at_least(self.settings.min_width),
             if self.settings.fill_space_vertical {
                 ui.available_height().at_most(self.settings.max_height)
             } else {
                 state.peristant.size.y.at_most(self.settings.max_height)
-            },
+            }
+            .at_least(self.settings.min_height),
         );
 
         // Run the build tree view closure
         let used_rect = ui
             .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
                 ui.add_space(ui.spacing().item_spacing.y * 0.5);
                 build_tree_view(TreeViewBuilder::new(ui, &mut state, &self.settings));
                 // Add negative space because the place will add the item spacing on top of this.
@@ -154,8 +169,8 @@ impl TreeView {
             .response
             .rect;
 
-        // ui.painter()
-        //     .rect_stroke(used_rect, 0.0, (1.0, egui::Color32::BLACK));
+        ui.painter()
+            .rect_stroke(used_rect, 0.0, (1.0, egui::Color32::BLACK));
 
         // If the tree was clicked it should receive focus.
         let tree_view_interact = state.interact(&used_rect);
@@ -507,6 +522,8 @@ struct TreeViewSettings {
     row_layout: RowLayout,
     max_width: f32,
     max_height: f32,
+    min_width: f32,
+    min_height: f32,
     fill_space_horizontal: bool,
     fill_space_vertical: bool,
 }
@@ -519,6 +536,8 @@ impl Default for TreeViewSettings {
             row_layout: Default::default(),
             max_width: f32::INFINITY,
             max_height: f32::INFINITY,
+            min_width: 0.0,
+            min_height: 0.0,
             fill_space_horizontal: true,
             fill_space_vertical: false,
         }
