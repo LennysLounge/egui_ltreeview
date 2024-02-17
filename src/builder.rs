@@ -1,12 +1,13 @@
 use egui::{
     epaint::{self, RectShape},
     layers::ShapeIdx,
-    pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui, WidgetText,
+    pos2, vec2, CursorIcon, Id, InnerResponse, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui,
+    WidgetText,
 };
 
 use crate::{
-    row::{DropQuarter, Row},
-    DragState, DropPosition, NodeInfo, TreeViewSettings, TreeViewState, VLineStyle,
+    row::{paint_default_icon, DropQuarter, Row},
+    DragState, DropPosition, NodeInfo, RowLayout, TreeViewSettings, TreeViewState, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -180,28 +181,11 @@ where
         if !self.parent_dir_is_open() {
             return None;
         }
-        let row_config = Row {
-            id: node.id,
-            drop_on_allowed: false,
-            is_open: true,
-            is_dir: false,
-            depth: self.get_indent_level() as f32
-                * self
-                    .settings
-                    .override_indent
-                    .unwrap_or(self.ui.spacing().indent),
-            is_selected: self.state.is_selected(&node.id),
-            is_focused: self.state.has_focus,
-        };
 
-        let (row_response, _closer_response) = self.row(
-            &row_config,
-            add_label,
-            node.icon.as_deref_mut(),
-            node.closer.as_deref_mut(),
-        );
+        node.set_is_open(false);
+        let row = self.node_internal(node, add_label);
 
-        Some(row_response.rect)
+        Some(row)
     }
 
     fn dir_internal(
@@ -374,7 +358,7 @@ where
             .hover_pos()
             .and_then(|pos| DropQuarter::new(row_response.rect.y_range(), pos.y))
         {
-            self.do_drop(row_config, &row_response, drop_quarter);
+            self.do_drop(row_config, &row_response.rect, drop_quarter);
         }
 
         self.push_child_node_position(label_rect.left_center());
@@ -382,12 +366,118 @@ where
         (row_response, closer_response)
     }
 
-    fn do_drop(
+    fn node_internal(
         &mut self,
-        row_config: &Row<NodeIdType>,
-        row_response: &Response,
-        drop_quarter: DropQuarter,
-    ) {
+        mut node: NodeBuilder<NodeIdType>,
+        add_label: impl FnMut(&mut Ui),
+    ) -> Rect {
+        node.set_indent(self.get_indent_level());
+        let (row, closer, icon, label) = self
+            .ui
+            .scope(|ui| {
+                // Set the fg stroke colors here so that the ui added by the user
+                // has the correct colors when selected or focused.
+                let fg_stroke = if self.state.is_selected(&node.id) && self.state.has_focus {
+                    ui.visuals().selection.stroke
+                } else if self.state.is_selected(&node.id) {
+                    ui.visuals().widgets.inactive.fg_stroke
+                } else {
+                    ui.visuals().widgets.noninteractive.fg_stroke
+                };
+                ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
+                ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
+
+                node.show_node(ui, add_label, self.state, self.settings)
+            })
+            .inner;
+
+        let row_interaction = self.state.interact(&row);
+
+        if row_interaction.clicked {
+            self.state.peristant.selected = Some(node.id);
+        }
+        if self.state.is_selected(&node.id) {
+            self.ui.painter().set(
+                self.background_idx,
+                epaint::RectShape::new(
+                    row,
+                    self.ui.visuals().widgets.active.rounding,
+                    if self.state.has_focus {
+                        self.ui.visuals().selection.bg_fill
+                    } else {
+                        self.ui
+                            .visuals()
+                            .widgets
+                            .inactive
+                            .weak_bg_fill
+                            .linear_multiply(0.3)
+                    },
+                    Stroke::NONE,
+                ),
+            );
+        }
+        if row_interaction.drag_started {
+            let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
+            self.state.peristant.dragged = Some(DragState {
+                node_id: node.id,
+                drag_row_offset: row.min - pointer_pos,
+                drag_start_pos: pointer_pos,
+                drag_valid: false,
+            });
+        }
+        if let Some(drag_state) = self.state.peristant.dragged.as_mut() {
+            // Test if the drag becomes valid
+            if !drag_state.drag_valid {
+                drag_state.drag_valid = drag_state
+                    .drag_start_pos
+                    .distance(self.ui.ctx().pointer_latest_pos().unwrap_or_default())
+                    > 5.0;
+            }
+            if drag_state.node_id == node.id && drag_state.drag_valid {
+                // TODO:
+                // row_config.draw_row_dragged(
+                //     self.ui,
+                //     self.settings,
+                //     self.state,
+                //     &mut add_label,
+                //     &mut add_icon,
+                //     &mut add_closer,
+                // );
+            }
+        }
+        if let Some(drop_quarter) = self
+            .state
+            .interaction_response
+            .hover_pos()
+            .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
+        {
+            self.do_drop_node(&node, &row, drop_quarter);
+        }
+
+        self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());
+
+        // self.ui.painter().rect_filled(
+        //     closer.unwrap_or(Rect::NOTHING),
+        //     0.0,
+        //     Color32::RED.linear_multiply(0.2),
+        // );
+        // self.ui.painter().rect_filled(
+        //     icon.unwrap_or(Rect::NOTHING),
+        //     0.0,
+        //     Color32::BLUE.linear_multiply(0.5),
+        // );
+        // self.ui
+        //     .painter()
+        //     .rect_filled(row, 0.0, Color32::YELLOW.linear_multiply(0.2));
+
+        // self.ui
+        //     .painter()
+        //     .rect_filled(label, 0.0, Color32::GREEN.linear_multiply(0.2));
+
+        row
+    }
+
+    fn do_drop(&mut self, row_config: &Row<NodeIdType>, row: &Rect, drop_quarter: DropQuarter) {
         if !self.ui.ctx().memory(|m| m.is_anything_being_dragged()) {
             return;
         }
@@ -407,13 +497,53 @@ where
         }
 
         let drop_position = self.get_drop_position(row_config, &drop_quarter);
-        let shape = self.drop_marker_shape(row_response, drop_position.as_ref());
+        let shape = self.drop_marker_shape(row, drop_position.as_ref());
 
         // It is allowed to drop itself `After´ or `Before` itself.
         // This however doesn't make sense and makes executing the command more
         // difficult for the caller.
         // Instead we display the markers only.
         if self.state.is_dragged(&row_config.id) {
+            self.ui.painter().set(self.state.drop_marker_idx, shape);
+            return;
+        }
+
+        self.state.drop = drop_position;
+        self.ui.painter().set(self.state.drop_marker_idx, shape);
+    }
+
+    fn do_drop_node(
+        &mut self,
+        node: &NodeBuilder<NodeIdType>,
+        row: &Rect,
+        drop_quarter: DropQuarter,
+    ) {
+        if !self.ui.ctx().memory(|m| m.is_anything_being_dragged()) {
+            return;
+        }
+        if self.state.peristant.dragged.is_none() {
+            return;
+        }
+        if !self.state.drag_valid() {
+            return;
+        }
+        if self.parent_dir_drop_forbidden() {
+            return;
+        }
+        // For dirs and for nodes that allow dropping on them, it is not
+        // allowed to drop itself onto itself.
+        if self.state.is_dragged(&node.id) && node.drop_allowed {
+            return;
+        }
+
+        let drop_position = self.get_drop_position_node(node, &drop_quarter);
+        let shape = self.drop_marker_shape(row, drop_position.as_ref());
+
+        // It is allowed to drop itself `After´ or `Before` itself.
+        // This however doesn't make sense and makes executing the command more
+        // difficult for the caller.
+        // Instead we display the markers only.
+        if self.state.is_dragged(&node.id) {
             self.ui.painter().set(self.state.drop_marker_idx, shape);
             return;
         }
@@ -477,26 +607,81 @@ where
         }
     }
 
+    fn get_drop_position_node(
+        &self,
+        node_config: &NodeBuilder<NodeIdType>,
+        drop_quater: &DropQuarter,
+    ) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
+        let NodeBuilder {
+            id,
+            is_open,
+            drop_allowed,
+            ..
+        } = node_config;
+
+        match drop_quater {
+            DropQuarter::Top => {
+                if let Some(parent_dir) = self.parent_dir() {
+                    return Some((parent_dir.id, DropPosition::Before(*id)));
+                }
+                if *drop_allowed {
+                    return Some((*id, DropPosition::Last));
+                }
+                None
+            }
+            DropQuarter::MiddleTop => {
+                if *drop_allowed {
+                    return Some((*id, DropPosition::Last));
+                }
+                if let Some(parent_dir) = self.parent_dir() {
+                    return Some((parent_dir.id, DropPosition::Before(*id)));
+                }
+                None
+            }
+            DropQuarter::MiddleBottom => {
+                if *drop_allowed {
+                    return Some((*id, DropPosition::Last));
+                }
+                if let Some(parent_dir) = self.parent_dir() {
+                    return Some((parent_dir.id, DropPosition::After(*id)));
+                }
+                None
+            }
+            DropQuarter::Bottom => {
+                if *drop_allowed && *is_open {
+                    return Some((*id, DropPosition::First));
+                }
+                if let Some(parent_dir) = self.parent_dir() {
+                    return Some((parent_dir.id, DropPosition::After(*id)));
+                }
+                if *drop_allowed {
+                    return Some((*id, DropPosition::Last));
+                }
+                None
+            }
+        }
+    }
+
     fn drop_marker_shape(
         &self,
-        interaction: &Response,
+        interaction: &Rect,
         drop_position: Option<&(NodeIdType, DropPosition<NodeIdType>)>,
     ) -> Shape {
         pub const DROP_LINE_HEIGHT: f32 = 3.0;
 
         let drop_marker = match drop_position {
             Some((_, DropPosition::Before(_))) => {
-                Rangef::point(interaction.rect.min.y).expand(DROP_LINE_HEIGHT * 0.5)
+                Rangef::point(interaction.min.y).expand(DROP_LINE_HEIGHT * 0.5)
             }
             Some((_, DropPosition::First)) | Some((_, DropPosition::After(_))) => {
-                Rangef::point(interaction.rect.max.y).expand(DROP_LINE_HEIGHT * 0.5)
+                Rangef::point(interaction.max.y).expand(DROP_LINE_HEIGHT * 0.5)
             }
-            Some((_, DropPosition::Last)) => interaction.rect.y_range(),
+            Some((_, DropPosition::Last)) => interaction.y_range(),
             None => return Shape::Noop,
         };
 
         epaint::RectShape::new(
-            Rect::from_x_y_ranges(interaction.rect.x_range(), drop_marker),
+            Rect::from_x_y_ranges(interaction.x_range(), drop_marker),
             self.ui.visuals().widgets.active.rounding,
             self.ui
                 .style()
@@ -541,20 +726,29 @@ pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
     flatten: bool,
+    is_open: bool,
     default_open: bool,
+    drop_allowed: bool,
+    indent: usize,
     icon: Option<Box<AddIcon<'icon>>>,
     closer: Option<Box<AddCloser<'closer>>>,
 }
-impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
+impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType>
+where
+    NodeIdType: Clone + std::hash::Hash,
+{
     /// Create a new node builder from a leaf prototype.
     pub fn leaf(id: NodeIdType) -> Self {
         Self {
             id,
             is_dir: false,
             flatten: false,
+            drop_allowed: false,
             icon: None,
             closer: None,
+            is_open: false,
             default_open: true,
+            indent: 0,
         }
     }
 
@@ -564,9 +758,12 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
             id,
             is_dir: true,
             flatten: false,
+            drop_allowed: true,
             icon: None,
             closer: None,
+            is_open: false,
             default_open: true,
+            indent: 0,
         }
     }
 
@@ -582,6 +779,12 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
     /// Whether or not a directory should be open by default or closed.
     pub fn default_open(mut self, default_open: bool) -> Self {
         self.default_open = default_open;
+        self
+    }
+
+    /// Whether or not dropping onto this node is allowed.
+    pub fn drop_allowed(mut self, drop_allowed: bool) -> Self {
+        self.drop_allowed = drop_allowed;
         self
     }
 
@@ -606,6 +809,121 @@ impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType> {
             closer: Some(Box::new(add_closer)),
             ..self
         }
+    }
+
+    fn set_is_open(&mut self, open: bool) {
+        self.is_open = open;
+    }
+
+    fn set_indent(&mut self, indent: usize) {
+        self.indent = indent;
+    }
+
+    fn show_node(
+        &mut self,
+        ui: &mut Ui,
+        add_label: impl FnMut(&mut Ui),
+        state: &TreeViewState<NodeIdType>,
+        settings: &TreeViewSettings,
+    ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
+        let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
+            RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
+            RowLayout::CompactAlignedLables => (
+                self.is_dir,
+                self.is_dir,
+                !self.is_dir,
+                !self.is_dir && self.icon.is_some(),
+            ),
+            RowLayout::AlignedIcons => {
+                (true, self.is_dir, self.icon.is_some(), self.icon.is_some())
+            }
+            RowLayout::AlignedIconsAndLabels => (true, self.is_dir, true, self.icon.is_some()),
+        };
+
+        let InnerResponse {
+            inner: (closer, icon, label),
+            response: row_response,
+        } = ui.horizontal(|ui| {
+            ui.set_min_width(ui.available_width());
+            // Add a little space so the closer/icon/label doesnt touch the left side
+            // and add the indentation space.
+            ui.add_space(ui.spacing().item_spacing.x);
+            ui.add_space(
+                self.indent as f32 * settings.override_indent.unwrap_or(ui.spacing().indent),
+            );
+
+            // The closer and the icon should be drawn vertically centered to the label.
+            // To do this we first have to draw the label and then the closer and icon
+            // to get the correct position.
+            let closer_pos = ui.cursor().min;
+            if reserve_closer {
+                ui.add_space(ui.spacing().icon_width);
+            }
+
+            let icon_pos = ui.cursor().min;
+            if reserve_icon {
+                ui.add_space(ui.spacing().icon_width);
+            };
+
+            ui.add_space(2.0);
+            let label = ui.scope(add_label).response.rect;
+
+            let closer = if draw_closer {
+                let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
+                    closer_pos,
+                    vec2(ui.spacing().icon_width, ui.min_size().y),
+                ));
+
+                let res = ui.allocate_ui_at_rect(_big_rect, |ui| {
+                    let closer_interaction = state.interact(&ui.max_rect());
+                    if closer_interaction.hovered {
+                        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+                    }
+                    if let Some(add_closer) = self.closer.as_mut() {
+                        (add_closer)(
+                            ui,
+                            CloserState {
+                                is_open: self.is_open,
+                                is_hovered: closer_interaction.hovered,
+                            },
+                        );
+                    } else {
+                        let icon_id = Id::new(&self.id).with("tree view closer icon");
+                        let openness = ui.ctx().animate_bool(icon_id, self.is_open);
+                        let closer_interaction = state.interact(&ui.max_rect());
+                        paint_default_icon(ui, openness, &_small_rect, &closer_interaction);
+                    }
+                    ui.allocate_space(ui.available_size_before_wrap());
+                });
+                Some(res.response.rect)
+            } else {
+                None
+            };
+            let icon = if draw_icon {
+                self.icon.as_mut().map(|add_icon| {
+                    let (_small_rect, _big_rect) =
+                        ui.spacing().icon_rectangles(Rect::from_min_size(
+                            icon_pos,
+                            vec2(ui.spacing().icon_width, ui.min_size().y),
+                        ));
+                    ui.allocate_ui_at_rect(_big_rect, |ui| {
+                        ui.set_min_size(_big_rect.size());
+                        add_icon(ui);
+                    })
+                    .response
+                    .rect
+                })
+            } else {
+                None
+            };
+            (closer, icon, label)
+        });
+
+        let row = row_response
+            .rect
+            .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
+
+        (row, closer, icon, label)
     }
 }
 

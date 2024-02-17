@@ -408,7 +408,7 @@ where
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
-    NodeIdType: Clone + PartialEq + Eq,
+    NodeIdType: Clone,
 {
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
@@ -442,14 +442,20 @@ where
             .is_some_and(|drag_state| drag_state.drag_valid)
     }
     /// Is the given id part of a valid drag.
-    pub fn is_dragged(&self, id: &NodeIdType) -> bool {
+    pub fn is_dragged(&self, id: &NodeIdType) -> bool
+    where
+        NodeIdType: PartialEq + Eq,
+    {
         self.peristant
             .dragged
             .as_ref()
             .is_some_and(|drag_state| drag_state.drag_valid && &drag_state.node_id == id)
     }
 
-    pub fn is_selected(&self, id: &NodeIdType) -> bool {
+    pub fn is_selected(&self, id: &NodeIdType) -> bool
+    where
+        NodeIdType: PartialEq + Eq,
+    {
         self.peristant.selected.as_ref().is_some_and(|n| n == id)
     }
 }

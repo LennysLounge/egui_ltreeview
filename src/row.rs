@@ -202,7 +202,7 @@ where
 }
 
 /// Paint the arrow icon that indicated if the region is open or not
-fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, interaction: &Interaction) {
+pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, interaction: &Interaction) {
     let visuals = if interaction.hovered {
         ui.visuals().widgets.hovered
     } else {
