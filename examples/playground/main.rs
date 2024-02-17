@@ -97,12 +97,14 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
         .max_width(
             app.settings
                 .max_width_enabled
-                .then_some(app.settings.max_width),
+                .then_some(app.settings.max_width)
+                .unwrap_or(f32::INFINITY),
         )
         .max_height(
             app.settings
                 .max_height_enabled
-                .then_some(app.settings.max_height),
+                .then_some(app.settings.max_height)
+                .unwrap_or(f32::INFINITY),
         )
         .show(ui, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true), |_| {});
@@ -218,7 +220,7 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             style.spacing.indent = indent;
         });
         ui.end_row();
-
+        // TODO: settings the layout of the ui that contains the tree.
         ui.label("Item spacing:");
         ui.horizontal(|ui| {
             let mut spacing = ui.ctx().style().spacing.item_spacing;

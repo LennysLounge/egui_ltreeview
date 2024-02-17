@@ -370,7 +370,7 @@ where
         }
         if let Some(drop_quarter) = self
             .state
-            .response
+            .interaction_response
             .hover_pos()
             .and_then(|pos| DropQuarter::new(row_response.rect.y_range(), pos.y))
         {

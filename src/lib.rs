@@ -4,10 +4,8 @@ mod row;
 use std::collections::HashMap;
 
 use egui::{
-    self,
-    epaint::{self},
-    layers::ShapeIdx,
-    vec2, Event, EventFilter, Id, Key, Layout, Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
+    self, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
+    Response, Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -47,6 +45,9 @@ impl TreeView {
 
     /// Set whether or not the tree should fill all available horizontal space.
     ///
+    /// If the tree is part of a horizontally justified layout, this property has no
+    /// effect and the tree will always fill horizontal space.
+    ///
     /// Default is `true`.
     pub fn fill_space_horizontal(mut self, fill_space_horizontal: bool) -> Self {
         self.settings.fill_space_horizontal = fill_space_horizontal;
@@ -54,6 +55,9 @@ impl TreeView {
     }
 
     /// Set whether or not the tree should fill all available vertical space.
+    ///
+    /// If the tree is part of a vertically justified layout, this property has no
+    /// effect and the tree will always fill vertical space.
     ///
     /// Default is `false`.
     pub fn fill_space_vertical(mut self, fill_space_vertical: bool) -> Self {
@@ -63,16 +67,18 @@ impl TreeView {
 
     /// Set the maximum width the tree can have.
     ///
-    /// If set to `None` the width it not limited.
-    pub fn max_width(mut self, width: Option<f32>) -> Self {
+    /// If the tree is part of a horizontally justified layout, this property has no
+    /// effect and the tree will always fill the available horizontal space.
+    pub fn max_width(mut self, width: f32) -> Self {
         self.settings.max_width = width;
         self
     }
 
     /// Set the maximum hight the tree can have.
     ///
-    /// If set to `None` the hight it not limited.
-    pub fn max_height(mut self, height: Option<f32>) -> Self {
+    /// If the tree is part of a vertical justified layout, this property has no
+    /// effect and the tree will always fill the available vertical space.
+    pub fn max_height(mut self, height: f32) -> Self {
         self.settings.max_height = height;
         self
     }
@@ -92,7 +98,7 @@ impl TreeView {
         let mut state = TreeViewState::load(ui, self.id);
         let prev_selection = state.peristant.selected;
 
-        // Set the focus filter to get correct keyboard navigation while focused.s
+        // Set the focus filter to get correct keyboard navigation while focused.
         ui.memory_mut(|m| {
             m.set_focus_lock_filter(
                 self.id,
@@ -106,26 +112,22 @@ impl TreeView {
         });
 
         // Calculate the desired size of the tree view widget.
-        let size = {
-            let mut size = vec2(state.response.rect.width(), state.response.rect.height());
-            if self.settings.fill_space_horizontal || ui.layout().horizontal_justify() {
-                size.x = ui.available_width();
-            }
-            if let Some(max_width) = self.settings.max_width {
-                if max_width < size.x {
-                    size.x = max_width;
-                }
-            }
-            if self.settings.fill_space_vertical || ui.layout().vertical_justify() {
-                size.y = ui.available_height();
-            }
-            if let Some(max_height) = self.settings.max_height {
-                if max_height < size.y {
-                    size.y = max_height;
-                }
-            }
-            size
-        };
+        let size = vec2(
+            if ui.layout().horizontal_justify() {
+                ui.available_width()
+            } else if self.settings.fill_space_horizontal {
+                self.settings.max_width.at_most(ui.available_width())
+            } else {
+                state.peristant.size.x.at_most(self.settings.max_width)
+            },
+            if ui.layout().vertical_justify() {
+                ui.available_height()
+            } else if self.settings.fill_space_vertical {
+                self.settings.max_height.at_most(ui.available_height())
+            } else {
+                state.peristant.size.y.at_most(self.settings.max_height)
+            },
+        );
 
         // Run the build tree view closure
         let used_rect = ui
@@ -202,7 +204,7 @@ impl TreeView {
         }
 
         // Reset the drag state.
-        if state.response.drag_released() {
+        if state.interaction_response.drag_released() {
             state.peristant.dragged = None;
         }
 
@@ -210,7 +212,7 @@ impl TreeView {
         state.peristant.size = used_rect.size();
 
         let res = TreeViewResponse {
-            response: state.response,
+            response: state.interaction_response,
             drop_marker_idx: state.drop_marker_idx,
             context_menu_marker_idx: state.context_menu_marker_idx,
             selected_node: state.peristant.selected,
@@ -350,7 +352,7 @@ where
     /// State of the tree that is persistant across frames.
     peristant: TreeViewPersistantState<NodeIdType>,
     /// Response of the interaction.
-    response: Response,
+    interaction_response: Response,
     /// NodeId and Drop position of the drop target.
     drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     /// Shape index of the drop marker
@@ -373,7 +375,7 @@ where
             .data_mut(|d| d.get_persisted::<TreeViewPersistantState<NodeIdType>>(id))
             .unwrap_or_default();
 
-        let response = interact_no_expansion(
+        let interaction_response = interact_no_expansion(
             ui,
             Rect::from_min_size(ui.cursor().min, state.size),
             id,
@@ -386,7 +388,7 @@ where
             drop: None,
             drop_marker_idx: ui.painter().add(Shape::Noop),
             context_menu_marker_idx: ui.painter().add(Shape::Noop),
-            response,
+            interaction_response,
             has_focus,
             node_info: Vec::new(),
             actions: Vec::new(),
@@ -399,7 +401,7 @@ where
 {
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
-            .response
+            .interaction_response
             .hover_pos()
             .is_some_and(|pos| rect.contains(pos))
         {
@@ -412,10 +414,12 @@ where
         }
 
         Interaction {
-            clicked: self.response.clicked(),
-            double_clicked: self.response.double_clicked(),
-            hovered: self.response.hovered(),
-            drag_started: self.response.drag_started_by(egui::PointerButton::Primary),
+            clicked: self.interaction_response.clicked(),
+            double_clicked: self.interaction_response.double_clicked(),
+            hovered: self.interaction_response.hovered(),
+            drag_started: self
+                .interaction_response
+                .drag_started_by(egui::PointerButton::Primary),
         }
     }
     /// Is the current drag valid.
@@ -484,8 +488,8 @@ struct TreeViewSettings {
     override_indent: Option<f32>,
     vline_style: VLineStyle,
     row_layout: RowLayout,
-    max_width: Option<f32>,
-    max_height: Option<f32>,
+    max_width: f32,
+    max_height: f32,
     fill_space_horizontal: bool,
     fill_space_vertical: bool,
 }
@@ -496,8 +500,8 @@ impl Default for TreeViewSettings {
             override_indent: None,
             vline_style: Default::default(),
             row_layout: Default::default(),
-            max_width: None,
-            max_height: None,
+            max_width: f32::INFINITY,
+            max_height: f32::INFINITY,
             fill_space_horizontal: true,
             fill_space_vertical: false,
         }
