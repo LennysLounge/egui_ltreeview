@@ -1,12 +1,11 @@
 use egui::{
     epaint::{self, RectShape},
     layers::ShapeIdx,
-    pos2, vec2, CursorIcon, Id, InnerResponse, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui,
-    WidgetText,
+    pos2, vec2, CursorIcon, Id, InnerResponse, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText,
 };
 
 use crate::{
-    row::{paint_default_icon, DropQuarter, Row},
+    row::{paint_default_icon, DropQuarter},
     DragState, DropPosition, NodeInfo, RowLayout, TreeViewSettings, TreeViewState, VLineStyle,
 };
 
@@ -183,7 +182,7 @@ where
         }
 
         node.set_is_open(false);
-        let row = self.node_internal(node, add_label);
+        let (row, _) = self.node_internal(&mut node, add_label);
 
         Some(row)
     }
@@ -228,37 +227,39 @@ where
             .copied()
             .unwrap_or(node.default_open);
 
-        let row_config = Row {
-            id: node.id,
-            drop_on_allowed: node.is_dir,
-            is_open: open,
-            is_dir: node.is_dir,
-            depth: self.get_indent_level() as f32
-                * self
-                    .settings
-                    .override_indent
-                    .unwrap_or(self.ui.spacing().indent),
-            is_selected: self.state.is_selected(&node.id),
-            is_focused: self.state.has_focus,
-        };
+        node.set_is_open(open);
+        let (row, closer) = self.node_internal(&mut node, add_label);
 
-        let (row_response, closer_response) = self.row(
-            &row_config,
-            add_label,
-            node.icon.as_deref_mut(),
-            node.closer.as_deref_mut(),
-        );
+        // let row_config = Row {
+        //     id: node.id,
+        //     drop_on_allowed: node.is_dir,
+        //     is_open: open,
+        //     is_dir: node.is_dir,
+        //     depth: self.get_indent_level() as f32
+        //         * self
+        //             .settings
+        //             .override_indent
+        //             .unwrap_or(self.ui.spacing().indent),
+        //     is_selected: self.state.is_selected(&node.id),
+        //     is_focused: self.state.has_focus,
+        // };
 
-        let closer_response =
-            closer_response.expect("Closer response should be availabel for dirs");
+        // let (row_response, closer_response) = self.row(
+        //     &row_config,
+        //     add_label,
+        //     node.icon.as_deref_mut(),
+        //     node.closer.as_deref_mut(),
+        // );
 
-        let closer_interaction = self.state.interact(&closer_response.rect);
+        let closer = closer.expect("Closer response should be availabel for dirs");
+
+        let closer_interaction = self.state.interact(&closer);
         if closer_interaction.clicked {
             open = !open;
             self.state.peristant.selected = Some(node.id);
         }
 
-        let row_interaction = self.state.interact(&row_response.rect);
+        let row_interaction = self.state.interact(&row);
         if row_interaction.double_clicked {
             open = !open;
         }
@@ -274,103 +275,20 @@ where
             is_open: open,
             id: node.id,
             drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
-            row_rect: row_response.rect,
-            icon_rect: closer_response.rect,
+            row_rect: row,
+            icon_rect: closer,
             child_node_positions: Vec::new(),
             indent_level: self.get_indent_level() + 1,
             flattened: false,
         });
-        Some(row_response.rect)
-    }
-
-    fn row(
-        &mut self,
-        row_config: &Row<NodeIdType>,
-        mut add_label: impl FnMut(&mut Ui),
-        mut add_icon: Option<&mut AddIcon<'_>>,
-        mut add_closer: Option<&mut AddCloser<'_>>,
-    ) -> (Response, Option<Response>) {
-        let (row_response, closer_response, label_rect) = row_config.draw_row(
-            self.ui,
-            self.state,
-            self.settings,
-            &mut add_label,
-            &mut add_icon,
-            &mut add_closer,
-        );
-
-        let row_interaction = self.state.interact(&row_response.rect);
-
-        if row_interaction.clicked {
-            self.state.peristant.selected = Some(row_config.id);
-        }
-        if self.state.is_selected(&row_config.id) {
-            self.ui.painter().set(
-                self.background_idx,
-                epaint::RectShape::new(
-                    row_response.rect,
-                    self.ui.visuals().widgets.active.rounding,
-                    if self.state.has_focus {
-                        self.ui.visuals().selection.bg_fill
-                    } else {
-                        self.ui
-                            .visuals()
-                            .widgets
-                            .inactive
-                            .weak_bg_fill
-                            .linear_multiply(0.3)
-                    },
-                    Stroke::NONE,
-                ),
-            );
-        }
-        if row_interaction.drag_started {
-            let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
-            self.state.peristant.dragged = Some(DragState {
-                node_id: row_config.id,
-                drag_row_offset: row_response.rect.min - pointer_pos,
-                drag_start_pos: pointer_pos,
-                drag_valid: false,
-            });
-        }
-        if let Some(drag_state) = self.state.peristant.dragged.as_mut() {
-            // Test if the drag becomes valid
-            if !drag_state.drag_valid {
-                drag_state.drag_valid = drag_state
-                    .drag_start_pos
-                    .distance(self.ui.ctx().pointer_latest_pos().unwrap_or_default())
-                    > 5.0;
-            }
-            if drag_state.node_id == row_config.id && drag_state.drag_valid {
-                row_config.draw_row_dragged(
-                    self.ui,
-                    self.settings,
-                    self.state,
-                    &mut add_label,
-                    &mut add_icon,
-                    &mut add_closer,
-                );
-            }
-        }
-        if let Some(drop_quarter) = self
-            .state
-            .interaction_response
-            .hover_pos()
-            .and_then(|pos| DropQuarter::new(row_response.rect.y_range(), pos.y))
-        {
-            self.do_drop(row_config, &row_response.rect, drop_quarter);
-        }
-
-        self.push_child_node_position(label_rect.left_center());
-
-        (row_response, closer_response)
+        Some(row)
     }
 
     fn node_internal(
         &mut self,
-        mut node: NodeBuilder<NodeIdType>,
+        node: &mut NodeBuilder<NodeIdType>,
         add_label: impl FnMut(&mut Ui),
-    ) -> Rect {
+    ) -> (Rect, Option<Rect>) {
         node.set_indent(self.get_indent_level());
         let (row, closer, icon, label) = self
             .ui
@@ -474,42 +392,7 @@ where
         //     .painter()
         //     .rect_filled(label, 0.0, Color32::GREEN.linear_multiply(0.2));
 
-        row
-    }
-
-    fn do_drop(&mut self, row_config: &Row<NodeIdType>, row: &Rect, drop_quarter: DropQuarter) {
-        if !self.ui.ctx().memory(|m| m.is_anything_being_dragged()) {
-            return;
-        }
-        if self.state.peristant.dragged.is_none() {
-            return;
-        }
-        if !self.state.drag_valid() {
-            return;
-        }
-        if self.parent_dir_drop_forbidden() {
-            return;
-        }
-        // For dirs and for nodes that allow dropping on them, it is not
-        // allowed to drop itself onto itself.
-        if self.state.is_dragged(&row_config.id) && row_config.drop_on_allowed {
-            return;
-        }
-
-        let drop_position = self.get_drop_position(row_config, &drop_quarter);
-        let shape = self.drop_marker_shape(row, drop_position.as_ref());
-
-        // It is allowed to drop itself `After´ or `Before` itself.
-        // This however doesn't make sense and makes executing the command more
-        // difficult for the caller.
-        // Instead we display the markers only.
-        if self.state.is_dragged(&row_config.id) {
-            self.ui.painter().set(self.state.drop_marker_idx, shape);
-            return;
-        }
-
-        self.state.drop = drop_position;
-        self.ui.painter().set(self.state.drop_marker_idx, shape);
+        (row, closer)
     }
 
     fn do_drop_node(
@@ -550,61 +433,6 @@ where
 
         self.state.drop = drop_position;
         self.ui.painter().set(self.state.drop_marker_idx, shape);
-    }
-
-    fn get_drop_position(
-        &self,
-        node_config: &Row<NodeIdType>,
-        drop_quater: &DropQuarter,
-    ) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
-        let Row {
-            id,
-            drop_on_allowed,
-            is_open,
-            ..
-        } = node_config;
-
-        match drop_quater {
-            DropQuarter::Top => {
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::Before(*id)));
-                }
-                if *drop_on_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                None
-            }
-            DropQuarter::MiddleTop => {
-                if *drop_on_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::Before(*id)));
-                }
-                None
-            }
-            DropQuarter::MiddleBottom => {
-                if *drop_on_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::After(*id)));
-                }
-                None
-            }
-            DropQuarter::Bottom => {
-                if *drop_on_allowed && *is_open {
-                    return Some((*id, DropPosition::First));
-                }
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::After(*id)));
-                }
-                if *drop_on_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                None
-            }
-        }
     }
 
     fn get_drop_position_node(
