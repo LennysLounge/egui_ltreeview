@@ -356,44 +356,24 @@ where
                 node.show_node_dragged(self.ui, add_label, self.state, self.settings);
             }
         }
-        if let Some(drop_quarter) = self
-            .state
-            .interaction_response
-            .hover_pos()
-            .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
-        {
-            self.do_drop_node(&node, &row, drop_quarter);
-        }
+
+        self.do_drop_node(&node, &row);
 
         self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());
-
-        // self.ui.painter().rect_filled(
-        //     closer.unwrap_or(Rect::NOTHING),
-        //     0.0,
-        //     Color32::RED.linear_multiply(0.2),
-        // );
-        // self.ui.painter().rect_filled(
-        //     icon.unwrap_or(Rect::NOTHING),
-        //     0.0,
-        //     Color32::BLUE.linear_multiply(0.5),
-        // );
-        // self.ui
-        //     .painter()
-        //     .rect_filled(row, 0.0, Color32::YELLOW.linear_multiply(0.2));
-
-        // self.ui
-        //     .painter()
-        //     .rect_filled(label, 0.0, Color32::GREEN.linear_multiply(0.2));
 
         (row, closer)
     }
 
-    fn do_drop_node(
-        &mut self,
-        node: &NodeBuilder<NodeIdType>,
-        row: &Rect,
-        drop_quarter: DropQuarter,
-    ) {
+    fn do_drop_node(&mut self, node: &NodeBuilder<NodeIdType>, row: &Rect) {
+        let Some(drop_quarter) = self
+            .state
+            .interaction_response
+            .hover_pos()
+            .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
+        else {
+            return;
+        };
+
         if !self.ui.ctx().memory(|m| m.is_anything_being_dragged()) {
             return;
         }
