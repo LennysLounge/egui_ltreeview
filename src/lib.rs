@@ -4,8 +4,8 @@ mod row;
 use std::collections::HashMap;
 
 use egui::{
-    self, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
-    Response, Sense, Shape, Ui, Vec2,
+    self, epaint, layers::ShapeIdx, vec2, Color32, Event, EventFilter, Id, Key, Layout, NumExt,
+    Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -88,15 +88,22 @@ impl TreeView {
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
     /// directories or leaves to the tree.
     pub fn show<NodeIdType>(
-        self,
+        mut self,
         ui: &mut Ui,
         mut build_tree_view: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
     where
         NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
     {
-        let mut state = TreeViewState::load(ui, self.id);
-        let prev_selection = state.peristant.selected;
+        // Justified layouts override these settings
+        if ui.layout().horizontal_justify() {
+            self.settings.fill_space_horizontal = true;
+            self.settings.max_width = f32::INFINITY;
+        }
+        if ui.layout().vertical_justify() {
+            self.settings.fill_space_vertical = true;
+            self.settings.max_height = f32::INFINITY;
+        }
 
         // Set the focus filter to get correct keyboard navigation while focused.
         ui.memory_mut(|m| {
@@ -111,19 +118,19 @@ impl TreeView {
             )
         });
 
+        // Create the tree state by loading the previous frame and setting up the state.
+        let mut state = TreeViewState::load(ui, self.id);
+        let prev_selection = state.peristant.selected;
+
         // Calculate the desired size of the tree view widget.
         let size = vec2(
-            if ui.layout().horizontal_justify() {
-                ui.available_width()
-            } else if self.settings.fill_space_horizontal {
-                self.settings.max_width.at_most(ui.available_width())
+            if self.settings.fill_space_horizontal {
+                ui.available_width().at_most(self.settings.max_width)
             } else {
                 state.peristant.size.x.at_most(self.settings.max_width)
             },
-            if ui.layout().vertical_justify() {
-                ui.available_height()
-            } else if self.settings.fill_space_vertical {
-                self.settings.max_height.at_most(ui.available_height())
+            if self.settings.fill_space_vertical {
+                ui.available_height().at_most(self.settings.max_height)
             } else {
                 state.peristant.size.y.at_most(self.settings.max_height)
             },
@@ -136,15 +143,19 @@ impl TreeView {
                 build_tree_view(TreeViewBuilder::new(ui, &mut state, &self.settings));
                 // Add negative space because the place will add the item spacing on top of this.
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
+
                 if self.settings.fill_space_horizontal {
-                    ui.allocate_space(vec2(ui.available_width(), 0.0));
+                    ui.set_min_width(ui.available_width());
                 }
                 if self.settings.fill_space_vertical {
-                    ui.allocate_space(vec2(0.0, ui.available_height()));
+                    ui.set_min_height(ui.available_height());
                 }
             })
             .response
             .rect;
+
+        ui.painter()
+            .rect_stroke(used_rect, 0.0, (1.0, Color32::BLACK));
 
         // If the tree was clicked it should receive focus.
         let tree_view_interact = state.interact(&used_rect);
