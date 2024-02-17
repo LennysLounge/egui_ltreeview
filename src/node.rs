@@ -1,6 +1,6 @@
 use egui::{
     emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Rangef, Rect, Shape,
-    Stroke, Ui,
+    Stroke, Ui, Vec2,
 };
 
 use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
@@ -130,7 +130,12 @@ where
             inner: (closer, icon, label),
             response: row_response,
         } = ui.horizontal(|ui| {
-            ui.set_min_width(ui.available_width());
+            // The layouting in the row has to be pretty tight so we tunr of the item spacing here.
+            let original_item_spacing = ui.spacing().item_spacing;
+            ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+            ui.add_space(original_item_spacing.x);
+
             // Add a little space so the closer/icon/label doesnt touch the left side
             // and add the indentation space.
             ui.add_space(ui.spacing().item_spacing.x);
@@ -138,29 +143,13 @@ where
                 self.indent as f32 * settings.override_indent.unwrap_or(ui.spacing().indent),
             );
 
-            // The closer and the icon should be drawn vertically centered to the label.
-            // To do this we first have to draw the label and then the closer and icon
-            // to get the correct position.
-            let closer_pos = ui.cursor().min;
-            if reserve_closer {
-                ui.add_space(ui.spacing().icon_width);
-            }
+            // Draw the closer
+            let closer = draw_closer.then(|| {
+                let (small_rect, big_rect) = ui
+                    .spacing()
+                    .icon_rectangles(ui.available_rect_before_wrap());
 
-            let icon_pos = ui.cursor().min;
-            if reserve_icon {
-                ui.add_space(ui.spacing().icon_width);
-            };
-
-            ui.add_space(2.0);
-            let label = ui.scope(add_label).response.rect;
-
-            let closer = if draw_closer {
-                let (_small_rect, _big_rect) = ui.spacing().icon_rectangles(Rect::from_min_size(
-                    closer_pos,
-                    vec2(ui.spacing().icon_width, ui.min_size().y),
-                ));
-
-                let res = ui.allocate_ui_at_rect(_big_rect, |ui| {
+                let res = ui.allocate_ui_at_rect(big_rect, |ui| {
                     let closer_interaction = state.interact(&ui.max_rect());
                     if closer_interaction.hovered {
                         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
@@ -177,37 +166,55 @@ where
                         let icon_id = Id::new(&self.id).with("tree view closer icon");
                         let openness = ui.ctx().animate_bool(icon_id, self.is_open);
                         let closer_interaction = state.interact(&ui.max_rect());
-                        paint_default_icon(ui, openness, &_small_rect, &closer_interaction);
+                        paint_default_icon(ui, openness, &small_rect, &closer_interaction);
                     }
                     ui.allocate_space(ui.available_size_before_wrap());
                 });
-                Some(res.response.rect)
-            } else {
-                None
-            };
-            let icon = if draw_icon {
-                self.icon.as_mut().map(|add_icon| {
-                    let (_small_rect, _big_rect) =
-                        ui.spacing().icon_rectangles(Rect::from_min_size(
-                            icon_pos,
-                            vec2(ui.spacing().icon_width, ui.min_size().y),
-                        ));
-                    ui.allocate_ui_at_rect(_big_rect, |ui| {
-                        ui.set_min_size(_big_rect.size());
-                        add_icon(ui);
+                res.response.rect
+            });
+            if closer.is_none() && reserve_closer {
+                ui.add_space(ui.spacing().icon_width);
+            }
+
+            // Draw icon
+            let icon = draw_icon
+                .then(|| {
+                    self.icon.as_mut().map(|add_icon| {
+                        let (_, big_rect) = ui
+                            .spacing()
+                            .icon_rectangles(ui.available_rect_before_wrap());
+                        ui.allocate_ui_at_rect(big_rect, |ui| {
+                            ui.set_min_size(big_rect.size());
+                            add_icon(ui);
+                        })
+                        .response
+                        .rect
                     })
-                    .response
-                    .rect
                 })
-            } else {
-                None
-            };
+                .flatten();
+            if icon.is_none() && reserve_icon {
+                ui.add_space(ui.spacing().icon_width);
+            }
+
+            ui.add_space(2.0);
+            // Draw icon
+            let label = ui
+                .scope(|ui| {
+                    ui.spacing_mut().item_spacing = original_item_spacing;
+                    add_label(ui);
+                })
+                .response
+                .rect;
+
+            ui.add_space(original_item_spacing.x);
+
             (closer, icon, label)
         });
 
-        let row = row_response
+        let mut row = row_response
             .rect
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
+        row.set_width(ui.available_width());
 
         (row, closer, icon, label)
     }
