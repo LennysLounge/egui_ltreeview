@@ -230,27 +230,6 @@ where
         node.set_is_open(open);
         let (row, closer) = self.node_internal(&mut node, add_label);
 
-        // let row_config = Row {
-        //     id: node.id,
-        //     drop_on_allowed: node.is_dir,
-        //     is_open: open,
-        //     is_dir: node.is_dir,
-        //     depth: self.get_indent_level() as f32
-        //         * self
-        //             .settings
-        //             .override_indent
-        //             .unwrap_or(self.ui.spacing().indent),
-        //     is_selected: self.state.is_selected(&node.id),
-        //     is_focused: self.state.has_focus,
-        // };
-
-        // let (row_response, closer_response) = self.row(
-        //     &row_config,
-        //     add_label,
-        //     node.icon.as_deref_mut(),
-        //     node.closer.as_deref_mut(),
-        // );
-
         let closer = closer.expect("Closer response should be availabel for dirs");
 
         let closer_interaction = self.state.interact(&closer);
