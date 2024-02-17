@@ -2,7 +2,7 @@ mod data;
 use std::env;
 
 use data::*;
-use egui::{vec2, DragValue, Id, Label, Ui};
+use egui::{DragValue, Id, Label, Layout, Response, Ui};
 use egui_ltreeview::{
     builder::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle,
 };
@@ -36,6 +36,8 @@ struct MyApp {
 
 #[derive(Default)]
 struct Settings {
+    layout_h_justify: bool,
+    layout_v_justify: bool,
     override_indent: Option<f32>,
     vline_style: VLineStyle,
     row_layout: RowLayout,
@@ -70,8 +72,15 @@ impl eframe::App for MyApp {
         egui::SidePanel::left(Id::new("tree view"))
             .resizable(true)
             .show(ctx, |ui| {
-                ui.allocate_space(vec2(ui.available_width(), 0.0));
-                show_tree_view(ui, self);
+                ui.set_min_width(ui.available_width());
+                ui.with_layout(
+                    Layout::top_down(egui::Align::Min)
+                        .with_main_justify(self.settings.layout_v_justify)
+                        .with_cross_justify(self.settings.layout_h_justify),
+                    |ui| {
+                        show_tree_view(ui, self);
+                    },
+                );
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(selected_node) = self.selected_node.as_ref() {
@@ -87,7 +96,7 @@ impl eframe::App for MyApp {
     }
 }
 
-fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
+fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
     let response = TreeView::new(ui.make_persistent_id("Names tree view"))
         .override_indent(app.settings.override_indent)
         .vline_style(app.settings.vline_style)
@@ -149,6 +158,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) {
             }
         });
     });
+    response.response
 }
 
 fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
@@ -220,7 +230,6 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             style.spacing.indent = indent;
         });
         ui.end_row();
-        // TODO: settings the layout of the ui that contains the tree.
         ui.label("Item spacing:");
         ui.horizontal(|ui| {
             let mut spacing = ui.ctx().style().spacing.item_spacing;
@@ -230,6 +239,12 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
                 style.spacing.item_spacing = spacing;
             });
         });
+        ui.end_row();
+        ui.label("Layout h justify:");
+        ui.checkbox(&mut settings.layout_h_justify, "");
+        ui.end_row();
+        ui.label("Layout v justify:");
+        ui.checkbox(&mut settings.layout_v_justify, "");
         ui.end_row();
 
         ui.end_row();
