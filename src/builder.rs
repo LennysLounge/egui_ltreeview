@@ -1,7 +1,8 @@
 use egui::{
     epaint::{self, RectShape},
     layers::ShapeIdx,
-    pos2, vec2, CursorIcon, Id, InnerResponse, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText,
+    pos2, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Pos2, Rangef, Rect, Shape, Stroke,
+    Ui, WidgetText,
 };
 
 use crate::{
@@ -287,7 +288,7 @@ where
     fn node_internal(
         &mut self,
         node: &mut NodeBuilder<NodeIdType>,
-        add_label: impl FnMut(&mut Ui),
+        add_label: &mut dyn FnMut(&mut Ui),
     ) -> (Rect, Option<Rect>) {
         node.set_indent(self.get_indent_level());
         let (row, closer, icon, label) = self
@@ -352,15 +353,7 @@ where
                     > 5.0;
             }
             if drag_state.node_id == node.id && drag_state.drag_valid {
-                // TODO:
-                // row_config.draw_row_dragged(
-                //     self.ui,
-                //     self.settings,
-                //     self.state,
-                //     &mut add_label,
-                //     &mut add_icon,
-                //     &mut add_closer,
-                // );
+                node.show_node_dragged(self.ui, add_label, self.state, self.settings);
             }
         }
         if let Some(drop_quarter) = self
@@ -650,7 +643,7 @@ where
     fn show_node(
         &mut self,
         ui: &mut Ui,
-        add_label: impl FnMut(&mut Ui),
+        add_label: &mut dyn FnMut(&mut Ui),
         state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
@@ -752,6 +745,53 @@ where
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
 
         (row, closer, icon, label)
+    }
+
+    /// Draw the content as a drag overlay if it is beeing dragged.
+    fn show_node_dragged(
+        &mut self,
+        ui: &mut Ui,
+        add_label: &mut dyn FnMut(&mut Ui),
+        state: &TreeViewState<NodeIdType>,
+        settings: &TreeViewSettings,
+    ) -> bool {
+        ui.ctx().set_cursor_icon(CursorIcon::Alias);
+
+        let drag_source_id = ui.make_persistent_id("Drag source");
+
+        // Paint the content to a new layer for the drag overlay.
+        let layer_id = LayerId::new(Order::Tooltip, drag_source_id);
+
+        let background_rect = ui
+            .child_ui(ui.available_rect_before_wrap(), *ui.layout())
+            .with_layer_id(layer_id, |ui| {
+                let background_position = ui.painter().add(Shape::Noop);
+
+                let (row, _, _, _) = self.show_node(ui, add_label, state, settings);
+
+                ui.painter().set(
+                    background_position,
+                    epaint::RectShape::new(
+                        row,
+                        ui.visuals().widgets.active.rounding,
+                        ui.visuals().selection.bg_fill.linear_multiply(0.4),
+                        Stroke::NONE,
+                    ),
+                );
+                row
+            })
+            .inner;
+
+        // Move layer to the drag position
+        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+            //let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
+            let delta = -background_rect.min.to_vec2()
+                + pointer_pos.to_vec2()
+                + state.peristant.dragged.as_ref().unwrap().drag_row_offset;
+            ui.ctx().translate_layer(layer_id, delta);
+        }
+
+        true
     }
 }
 
