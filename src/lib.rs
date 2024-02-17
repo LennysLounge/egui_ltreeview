@@ -4,8 +4,8 @@ mod row;
 use std::collections::HashMap;
 
 use egui::{
-    self, epaint, layers::ShapeIdx, vec2, Color32, Event, EventFilter, Id, Key, Layout, NumExt,
-    Pos2, Rect, Response, Sense, Shape, Ui, Vec2,
+    self, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
+    Response, Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -154,8 +154,8 @@ impl TreeView {
             .response
             .rect;
 
-        ui.painter()
-            .rect_stroke(used_rect, 0.0, (1.0, Color32::BLACK));
+        // ui.painter()
+        //     .rect_stroke(used_rect, 0.0, (1.0, egui::Color32::BLACK));
 
         // If the tree was clicked it should receive focus.
         let tree_view_interact = state.interact(&used_rect);

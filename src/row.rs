@@ -97,6 +97,8 @@ where
             inner: (closer_response, label_rect_min),
             response: row_response,
         } = ui.horizontal(|ui| {
+            // Set the fg stroke colors here so that the ui added by the user
+            // has the correct colors when selected or focused.
             let fg_stroke = if self.is_selected && self.is_focused {
                 ui.visuals().selection.stroke
             } else if self.is_selected {
@@ -107,7 +109,11 @@ where
             ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
             ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
 
+            // Add a little space so the closer/icon/label doesnt touch the left side
+            // and add the indentation space.
+            ui.add_space(ui.spacing().item_spacing.x);
             ui.add_space(self.depth);
+            
             // The closer and the icon should be drawn vertically centered to the label.
             // To do this we first have to draw the label and then the closer and icon
             // to get the correct position.
