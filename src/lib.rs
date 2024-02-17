@@ -169,9 +169,6 @@ impl TreeView {
             .response
             .rect;
 
-        ui.painter()
-            .rect_stroke(used_rect, 0.0, (1.0, egui::Color32::BLACK));
-
         // If the tree was clicked it should receive focus.
         let tree_view_interact = state.interact(&used_rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {

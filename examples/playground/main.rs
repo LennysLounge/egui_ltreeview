@@ -2,7 +2,7 @@ mod data;
 use std::env;
 
 use data::*;
-use egui::{DragValue, Id, Label, Layout, Response, Ui};
+use egui::{Color32, DragValue, Id, Label, Layout, Response, Ui};
 use egui_ltreeview::{node::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle};
 use uuid::Uuid;
 
@@ -49,6 +49,7 @@ struct Settings {
     min_width: f32,
     min_height_enabled: bool,
     min_height: f32,
+    show_size: bool,
 }
 
 impl Default for MyApp {
@@ -63,6 +64,7 @@ impl Default for MyApp {
                 fill_space_vertical: false,
                 max_width: 100.0,
                 max_height: 100.0,
+                show_size: true,
                 ..Default::default()
             },
         }
@@ -172,6 +174,10 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             }
         });
     });
+    if app.settings.show_size {
+        ui.painter()
+            .rect_stroke(response.response.rect, 0.0, (1.0, Color32::BLACK));
+    }
     response.response
 }
 
@@ -259,6 +265,9 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.end_row();
         ui.label("Layout v justify:");
         ui.checkbox(&mut settings.layout_v_justify, "");
+        ui.end_row();
+        ui.label("Show size:");
+        ui.checkbox(&mut settings.show_size, "");
         ui.end_row();
 
         ui.end_row();
