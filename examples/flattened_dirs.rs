@@ -1,7 +1,7 @@
 #[path = "data.rs"]
 mod data;
 
-use egui_ltreeview::{builder::NodeBuilder, TreeView};
+use egui_ltreeview::{node::NodeBuilder, TreeView};
 
 fn main() -> Result<(), eframe::Error> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).

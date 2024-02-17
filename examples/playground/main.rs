@@ -3,9 +3,7 @@ use std::env;
 
 use data::*;
 use egui::{DragValue, Id, Label, Layout, Response, Ui};
-use egui_ltreeview::{
-    builder::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle,
-};
+use egui_ltreeview::{node::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {

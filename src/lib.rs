@@ -1,5 +1,5 @@
 pub mod builder;
-mod row;
+pub mod node;
 
 use std::collections::HashMap;
 
