@@ -132,17 +132,18 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                 .unwrap_or(0.0),
         )
         .show(ui, |mut builder| {
-            builder.node(NodeBuilder::dir(Uuid::default()).flatten(true), |_| {});
+            builder.node(NodeBuilder::dir(Uuid::default()).flatten(true));
             //builder.set_root_id(Uuid::default());
             builder.node(
-                NodeBuilder::leaf(app.settings_id).icon(|ui| {
-                    egui::Image::new(egui::include_image!("settings.png"))
-                        .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
-                        .paint_at(ui, ui.max_rect());
-                }),
-                |ui| {
-                    ui.add(Label::new("Settings").selectable(false));
-                },
+                NodeBuilder::leaf(app.settings_id)
+                    .icon(|ui| {
+                        egui::Image::new(egui::include_image!("settings.png"))
+                            .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
+                            .paint_at(ui, ui.max_rect());
+                    })
+                    .label(|ui| {
+                        ui.add(Label::new("Settings").selectable(false));
+                    }),
             );
             show_node(&mut builder, &app.tree);
             builder.close_dir();
@@ -214,9 +215,10 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
             }
         });
     }
-    builder.node(node, |ui| {
+    node = node.label(|ui| {
         ui.add(Label::new(&dir.name).selectable(false));
     });
+    builder.node(node);
 
     for node in dir.children.iter() {
         show_node(builder, node);
@@ -233,9 +235,10 @@ fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
                 .paint_at(ui, ui.max_rect());
         });
     }
-    builder.node(node, |ui| {
+    node = node.label(|ui| {
         ui.add(Label::new(&file.name).selectable(false));
     });
+    builder.node(node);
 }
 
 fn show_settings(ui: &mut Ui, settings: &mut Settings) {

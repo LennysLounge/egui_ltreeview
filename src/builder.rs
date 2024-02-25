@@ -69,18 +69,18 @@ where
     /// Add a leaf to the tree.
     pub fn leaf(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
-        self.node(NodeBuilder::leaf(id), |ui| {
+        self.node(NodeBuilder::leaf(id).label(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
-        });
+        }));
     }
 
     /// Add a directory to the tree.
     /// Must call [Self::close_dir] to close the directory.
     pub fn dir(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
-        self.node(NodeBuilder::dir(id), |ui| {
+        self.node(NodeBuilder::dir(id).label(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
-        });
+        }));
     }
 
     /// Close the current directory.
@@ -152,15 +152,15 @@ where
     }
 
     /// Add a node to the tree.
-    pub fn node(&mut self, node: NodeBuilder<NodeIdType>, mut add_label: impl FnMut(&mut Ui)) {
+    pub fn node(&mut self, node: NodeBuilder<NodeIdType>) {
         let parent_node_id = self.parent_dir().map(|dir| dir.id);
         let depth = self.get_indent_level();
         let node_id = node.id;
 
         let rect = if node.is_dir {
-            self.dir_internal(node, &mut add_label)
+            self.dir_internal(node)
         } else {
-            self.leaf_internal(node, &mut add_label)
+            self.leaf_internal(node)
         };
 
         self.state.node_info.push(NodeInfo {
@@ -172,26 +172,18 @@ where
         });
     }
 
-    fn leaf_internal(
-        &mut self,
-        mut node: NodeBuilder<NodeIdType>,
-        add_label: &mut dyn FnMut(&mut Ui),
-    ) -> Option<Rect> {
+    fn leaf_internal(&mut self, mut node: NodeBuilder<NodeIdType>) -> Option<Rect> {
         if !self.parent_dir_is_open() {
             return None;
         }
 
         node.set_is_open(false);
-        let (row, _) = self.node_internal(&mut node, add_label);
+        let (row, _) = self.node_internal(&mut node);
 
         Some(row)
     }
 
-    fn dir_internal(
-        &mut self,
-        mut node: NodeBuilder<NodeIdType>,
-        add_label: &mut dyn FnMut(&mut Ui),
-    ) -> Option<Rect> {
+    fn dir_internal(&mut self, mut node: NodeBuilder<NodeIdType>) -> Option<Rect> {
         if !self.parent_dir_is_open() {
             self.stack.push(DirectoryState {
                 is_open: false,
@@ -228,7 +220,7 @@ where
             .unwrap_or(node.default_open);
 
         node.set_is_open(open);
-        let (row, closer) = self.node_internal(&mut node, add_label);
+        let (row, closer) = self.node_internal(&mut node);
 
         let closer = closer.expect("Closer response should be availabel for dirs");
 
@@ -263,11 +255,7 @@ where
         Some(row)
     }
 
-    fn node_internal(
-        &mut self,
-        node: &mut NodeBuilder<NodeIdType>,
-        add_label: &mut dyn FnMut(&mut Ui),
-    ) -> (Rect, Option<Rect>) {
+    fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> (Rect, Option<Rect>) {
         node.set_indent(self.get_indent_level());
         let (row, closer, icon, label) = self
             .ui
@@ -284,7 +272,7 @@ where
                 ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
                 ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
 
-                node.show_node(ui, add_label, self.state, self.settings)
+                node.show_node(ui, self.state, self.settings)
             })
             .inner;
 
@@ -331,7 +319,7 @@ where
                     > 5.0;
             }
             if drag_state.node_id == node.id && drag_state.drag_valid {
-                node.show_node_dragged(self.ui, add_label, self.state, self.settings);
+                node.show_node_dragged(self.ui, self.state, self.settings);
             }
         }
 

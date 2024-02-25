@@ -18,6 +18,7 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     indent: usize,
     icon: Option<Box<AddUi<'add_ui>>>,
     closer: Option<Box<AddCloser<'add_ui>>>,
+    label: Option<Box<AddUi<'add_ui>>>,
 }
 impl<'add_ui, NodeIdType> NodeBuilder<'add_ui, NodeIdType>
 where
@@ -32,6 +33,7 @@ where
             drop_allowed: false,
             icon: None,
             closer: None,
+            label: None,
             is_open: false,
             default_open: true,
             indent: 0,
@@ -47,6 +49,7 @@ where
             drop_allowed: true,
             icon: None,
             closer: None,
+            label: None,
             is_open: false,
             default_open: true,
             indent: 0,
@@ -93,6 +96,15 @@ where
         self
     }
 
+    /// Add a label to this node.
+    pub fn label(
+        mut self,
+        add_label: impl FnMut(&mut Ui) + 'add_ui,
+    ) -> NodeBuilder<'add_ui, NodeIdType> {
+        self.label = Some(Box::new(add_label));
+        self
+    }
+
     pub(crate) fn set_is_open(&mut self, open: bool) {
         self.is_open = open;
     }
@@ -104,7 +116,6 @@ where
     pub(crate) fn show_node(
         &mut self,
         ui: &mut Ui,
-        add_label: &mut dyn FnMut(&mut Ui),
         state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
@@ -193,11 +204,13 @@ where
             }
 
             ui.add_space(2.0);
-            // Draw icon
+            // Draw label
             let label = ui
                 .scope(|ui| {
                     ui.spacing_mut().item_spacing = original_item_spacing;
-                    add_label(ui);
+                    if let Some(add_label) = self.label.as_mut() {
+                        add_label(ui);
+                    }
                 })
                 .response
                 .rect;
@@ -219,7 +232,6 @@ where
     pub(crate) fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
-        add_label: &mut dyn FnMut(&mut Ui),
         state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> bool {
@@ -235,7 +247,7 @@ where
             .with_layer_id(layer_id, |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _, _) = self.show_node(ui, add_label, state, settings);
+                let (row, _, _, _) = self.show_node(ui, state, settings);
 
                 ui.painter().set(
                     background_position,
