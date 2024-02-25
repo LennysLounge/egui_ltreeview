@@ -40,6 +40,7 @@ where
     state: &'ui mut TreeViewState<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
     background_idx: ShapeIdx,
+    secondary_selection_idx: ShapeIdx,
     settings: &'ui TreeViewSettings,
 }
 
@@ -54,6 +55,7 @@ where
     ) -> Self {
         Self {
             background_idx: ui.painter().add(Shape::Noop),
+            secondary_selection_idx: ui.painter().add(Shape::Noop),
             ui,
             state,
             stack: Vec::new(),
@@ -167,7 +169,6 @@ where
             depth,
             node_id,
             visible: rect.is_some(),
-            rect: rect.unwrap_or(Rect::NOTHING),
             parent_node_id,
         });
     }
@@ -320,6 +321,24 @@ where
             }
             if drag_state.node_id == node.id && drag_state.drag_valid {
                 node.show_node_dragged(self.ui, self.state, self.settings);
+            }
+        }
+        if row_interaction.secondary_clicked {
+            self.state.peristant.secondary_selection = Some(node.id);
+        }
+        if self.state.is_secondary_selected(&node.id) {
+            let context_menu_visible = node.show_context_menu(&self.state.interaction_response);
+
+            if !self.state.is_selected(&node.id) && context_menu_visible {
+                self.ui.painter().set(
+                    self.secondary_selection_idx,
+                    epaint::RectShape::new(
+                        row,
+                        self.ui.visuals().widgets.active.rounding,
+                        egui::Color32::TRANSPARENT,
+                        self.ui.visuals().widgets.inactive.fg_stroke,
+                    ),
+                );
             }
         }
 

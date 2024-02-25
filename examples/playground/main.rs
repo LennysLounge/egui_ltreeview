@@ -163,18 +163,6 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             Action::Drag { .. } => (),
         }
     }
-    response.context_menu(ui, |ui, node_id| {
-        app.tree.find_mut(&node_id, &mut |node| match node {
-            Node::Directory(dir) => {
-                ui.label("dir:");
-                ui.label(&dir.name);
-            }
-            Node::File(file) => {
-                ui.label("file:");
-                ui.label(&file.name);
-            }
-        });
-    });
     if app.settings.show_size {
         ui.painter()
             .rect_stroke(response.response.rect, 0.0, (1.0, Color32::BLACK));
@@ -189,7 +177,14 @@ fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
     }
 }
 fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
-    let mut node = NodeBuilder::dir(dir.id);
+    let mut node = NodeBuilder::dir(dir.id)
+        .label(|ui| {
+            ui.add(Label::new(&dir.name).selectable(false));
+        })
+        .context_menu(|ui| {
+            ui.label("dir:");
+            ui.label(&dir.name);
+        });
     if dir.icon {
         node = node.icon(|ui| {
             egui::Image::new(egui::include_image!("folder.png"))
@@ -215,9 +210,6 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
             }
         });
     }
-    node = node.label(|ui| {
-        ui.add(Label::new(&dir.name).selectable(false));
-    });
     builder.node(node);
 
     for node in dir.children.iter() {
@@ -227,7 +219,14 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.close_dir();
 }
 fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
-    let mut node = NodeBuilder::leaf(file.id);
+    let mut node = NodeBuilder::leaf(file.id)
+        .label(|ui| {
+            ui.add(Label::new(&file.name).selectable(false));
+        })
+        .context_menu(|ui| {
+            ui.label("file:");
+            ui.label(&file.name);
+        });
     if file.icon {
         node = node.icon(|ui| {
             egui::Image::new(egui::include_image!("user.png"))
@@ -235,9 +234,6 @@ fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
                 .paint_at(ui, ui.max_rect());
         });
     }
-    node = node.label(|ui| {
-        ui.add(Label::new(&file.name).selectable(false));
-    });
     builder.node(node);
 }
 

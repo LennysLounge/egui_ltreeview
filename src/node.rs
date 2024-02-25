@@ -1,6 +1,6 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Rangef, Rect, Shape,
-    Stroke, Ui, Vec2,
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Rangef, Rect,
+    Response, Shape, Stroke, Ui, Vec2,
 };
 
 use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
@@ -19,6 +19,7 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     icon: Option<Box<AddUi<'add_ui>>>,
     closer: Option<Box<AddCloser<'add_ui>>>,
     label: Option<Box<AddUi<'add_ui>>>,
+    context_menu: Option<Box<AddUi<'add_ui>>>,
 }
 impl<'add_ui, NodeIdType> NodeBuilder<'add_ui, NodeIdType>
 where
@@ -34,6 +35,7 @@ where
             icon: None,
             closer: None,
             label: None,
+            context_menu: None,
             is_open: false,
             default_open: true,
             indent: 0,
@@ -50,6 +52,7 @@ where
             icon: None,
             closer: None,
             label: None,
+            context_menu: None,
             is_open: false,
             default_open: true,
             indent: 0,
@@ -102,6 +105,15 @@ where
         add_label: impl FnMut(&mut Ui) + 'add_ui,
     ) -> NodeBuilder<'add_ui, NodeIdType> {
         self.label = Some(Box::new(add_label));
+        self
+    }
+
+    /// Add a context menu to this node.
+    pub fn context_menu(
+        mut self,
+        add_context_menu: impl FnMut(&mut Ui) + 'add_ui,
+    ) -> NodeBuilder<'add_ui, NodeIdType> {
+        self.context_menu = Some(Box::new(add_context_menu));
         self
     }
 
@@ -272,6 +284,19 @@ where
         }
 
         true
+    }
+
+    pub fn show_context_menu(&mut self, response: &Response) -> bool {
+        if let Some(context_menu) = self.context_menu.as_mut() {
+            let mut was_open = false;
+            response.context_menu(|ui| {
+                context_menu(ui);
+                was_open = true;
+            });
+            was_open
+        } else {
+            false
+        }
     }
 }
 

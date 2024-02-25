@@ -4,7 +4,7 @@ pub mod node;
 use std::collections::HashMap;
 
 use egui::{
-    self, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
+    self, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
     Response, Sense, Shape, Ui, Vec2,
 };
 
@@ -237,8 +237,6 @@ impl TreeView {
         let res = TreeViewResponse {
             response: state.interaction_response,
             drop_marker_idx: state.drop_marker_idx,
-            context_menu_marker_idx: state.context_menu_marker_idx,
-            selected_node: state.peristant.selected,
             nodes: state.node_info,
             actions: state.actions,
         };
@@ -330,6 +328,8 @@ struct TreeViewPersistantState<NodeIdType> {
     selected: Option<NodeIdType>,
     /// Information about the dragged node.
     dragged: Option<DragState<NodeIdType>>,
+    /// Id of the node that was right clicked.
+    secondary_selection: Option<NodeIdType>,
     /// The rectangle the tree view occupied.
     size: Vec2,
     /// Open states of the dirs in this tree.
@@ -340,6 +340,7 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
         Self {
             selected: Default::default(),
             dragged: Default::default(),
+            secondary_selection: Default::default(),
             size: Vec2::ZERO,
             dir_states: HashMap::new(),
         }
@@ -380,8 +381,6 @@ where
     drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     /// Shape index of the drop marker
     drop_marker_idx: ShapeIdx,
-    /// Shape index of the right click context menu marker.
-    context_menu_marker_idx: ShapeIdx,
     /// Wether or not the tree view has keyboard focus.
     has_focus: bool,
     /// Info about each node in the tree.
@@ -410,7 +409,6 @@ where
             peristant: state,
             drop: None,
             drop_marker_idx: ui.painter().add(Shape::Noop),
-            context_menu_marker_idx: ui.painter().add(Shape::Noop),
             interaction_response,
             has_focus,
             node_info: Vec::new(),
@@ -431,6 +429,7 @@ where
             return Interaction {
                 clicked: false,
                 double_clicked: false,
+                secondary_clicked: false,
                 hovered: false,
                 drag_started: false,
             };
@@ -439,6 +438,7 @@ where
         Interaction {
             clicked: self.interaction_response.clicked(),
             double_clicked: self.interaction_response.double_clicked(),
+            secondary_clicked: self.interaction_response.secondary_clicked(),
             hovered: self.interaction_response.hovered(),
             drag_started: self
                 .interaction_response
@@ -470,13 +470,22 @@ where
     {
         self.peristant.selected.as_ref().is_some_and(|n| n == id)
     }
+
+    pub fn is_secondary_selected(&self, id: &NodeIdType) -> bool
+    where
+        NodeIdType: PartialEq + Eq,
+    {
+        self.peristant
+            .secondary_selection
+            .as_ref()
+            .is_some_and(|n| n == id)
+    }
 }
 
 #[derive(Clone)]
 struct NodeInfo<NodeIdType> {
     pub depth: usize,
     pub node_id: NodeIdType,
-    pub rect: Rect,
     pub parent_node_id: Option<NodeIdType>,
     pub visible: bool,
 }
@@ -484,6 +493,7 @@ struct NodeInfo<NodeIdType> {
 struct Interaction {
     pub clicked: bool,
     pub double_clicked: bool,
+    pub secondary_clicked: bool,
     pub hovered: bool,
     pub drag_started: bool,
 }
@@ -607,10 +617,7 @@ pub struct TreeViewResponse<NodeIdType> {
     // /// If a row was dragged in the tree this will contain information about
     // /// who was dragged to who and at what position.
     // pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
-    // /// Id of the selected node.
-    selected_node: Option<NodeIdType>,
     drop_marker_idx: ShapeIdx,
-    context_menu_marker_idx: ShapeIdx,
     nodes: Vec<NodeInfo<NodeIdType>>,
 }
 impl<NodeIdType> TreeViewResponse<NodeIdType>
@@ -631,51 +638,6 @@ where
             .iter()
             .find(|n| n.node_id == id)
             .and_then(|node_info| node_info.parent_node_id)
-    }
-
-    /// Show a context menu for the tree view.
-    ///
-    /// Use the provided node id to identify which node was clicked.
-    pub fn context_menu(&self, ui: &mut Ui, mut add_context_menu: impl FnMut(&mut Ui, NodeIdType)) {
-        let mut clicked_node = None;
-        self.response.clone().context_menu(|ui| {
-            let has_context_menu_moved = {
-                let last_pos_id = Id::new("Tree View context menu last pos");
-                let last_pos = ui.data_mut(|d| d.get_persisted::<Pos2>(last_pos_id));
-                ui.data_mut(|d| d.insert_persisted(last_pos_id, ui.cursor().min));
-                last_pos.map_or(true, |last_pos| last_pos != ui.cursor().min)
-            };
-            let cursor_position = {
-                let cursor_pos_id = Id::new("Tree view context menu cursor pos");
-                if has_context_menu_moved {
-                    let pos = ui.ctx().pointer_latest_pos();
-                    ui.data_mut(|d| d.insert_persisted(cursor_pos_id, pos));
-                    pos
-                } else {
-                    ui.data_mut(|d| d.get_persisted::<Option<Pos2>>(cursor_pos_id))
-                        .flatten()
-                }
-            };
-            clicked_node = cursor_position
-                .and_then(|pos| self.nodes.iter().find(|node| node.rect.contains(pos)));
-            if let Some(node) = clicked_node {
-                add_context_menu(ui, node.node_id)
-            }
-        });
-        if let Some(node) = clicked_node {
-            if Some(node.node_id) != self.selected_node {
-                let stroke = ui.visuals().widgets.inactive.fg_stroke;
-                ui.painter().set(
-                    self.context_menu_marker_idx,
-                    epaint::RectShape::new(
-                        node.rect.expand(-stroke.width),
-                        ui.visuals().widgets.active.rounding,
-                        egui::Color32::TRANSPARENT,
-                        stroke,
-                    ),
-                );
-            }
-        }
     }
 }
 
