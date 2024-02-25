@@ -68,6 +68,11 @@ where
         self.state.peristant.selected = Some(id);
     }
 
+    /// Get the current parent id if any.
+    pub fn parent_id(&self) -> Option<NodeIdType> {
+        self.parent_dir().map(|state| state.id)
+    }
+
     /// Add a leaf to the tree.
     pub fn leaf(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
