@@ -5,10 +5,10 @@ use egui::{
 
 use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
 
-pub type AddIcon<'icon> = dyn FnMut(&mut Ui) + 'icon;
-pub type AddCloser<'closer> = dyn FnMut(&mut Ui, CloserState) + 'closer;
+pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
+pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
 
-pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
+pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) id: NodeIdType,
     pub(crate) is_dir: bool,
     pub(crate) flatten: bool,
@@ -16,10 +16,10 @@ pub struct NodeBuilder<'icon, 'closer, NodeIdType> {
     pub(crate) default_open: bool,
     pub(crate) drop_allowed: bool,
     indent: usize,
-    icon: Option<Box<AddIcon<'icon>>>,
-    closer: Option<Box<AddCloser<'closer>>>,
+    icon: Option<Box<AddUi<'add_ui>>>,
+    closer: Option<Box<AddCloser<'add_ui>>>,
 }
-impl<'icon, 'closer, NodeIdType> NodeBuilder<'icon, 'closer, NodeIdType>
+impl<'add_ui, NodeIdType> NodeBuilder<'add_ui, NodeIdType>
 where
     NodeIdType: Clone + std::hash::Hash,
 {
@@ -75,26 +75,22 @@ where
     }
 
     /// Add a icon to the node.
-    pub fn icon<'new_icon>(
-        self,
-        add_icon: impl FnMut(&mut Ui) + 'new_icon,
-    ) -> NodeBuilder<'new_icon, 'closer, NodeIdType> {
-        NodeBuilder {
-            icon: Some(Box::new(add_icon)),
-            ..self
-        }
+    pub fn icon(
+        mut self,
+        add_icon: impl FnMut(&mut Ui) + 'add_ui,
+    ) -> NodeBuilder<'add_ui, NodeIdType> {
+        self.icon = Some(Box::new(add_icon));
+        self
     }
 
     /// Add a custom closer to the directory node.
     /// Leaves do not show a closer.
-    pub fn closer<'new_closer>(
-        self,
-        add_closer: impl FnMut(&mut Ui, CloserState) + 'new_closer,
-    ) -> NodeBuilder<'icon, 'new_closer, NodeIdType> {
-        NodeBuilder {
-            closer: Some(Box::new(add_closer)),
-            ..self
-        }
+    pub fn closer(
+        mut self,
+        add_closer: impl FnMut(&mut Ui, CloserState) + 'add_ui,
+    ) -> NodeBuilder<'add_ui, NodeIdType> {
+        self.closer = Some(Box::new(add_closer));
+        self
     }
 
     pub(crate) fn set_is_open(&mut self, open: bool) {
