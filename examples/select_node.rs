@@ -24,12 +24,14 @@ fn main() -> Result<(), eframe::Error> {
 
 struct MyApp {
     tree: TreeViewState<i32>,
+    should_open_dirs: bool,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             tree: TreeViewState::default(),
+            should_open_dirs: true,
         }
     }
 }
@@ -60,9 +62,13 @@ impl eframe::App for MyApp {
             );
         });
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.checkbox(&mut self.should_open_dirs, "Should open directories");
             if ui.button("select next").clicked() {
-                let selected_index = self.tree.selected().unwrap_or(0);
-                self.tree.set_selected(Some((selected_index + 1) % 11));
+                let selected_index = (self.tree.selected().unwrap_or(0) + 1) % 11;
+                self.tree.set_selected(Some(selected_index));
+                if self.should_open_dirs {
+                    self.tree.expand_parents_of(selected_index);
+                }
             }
         });
     }

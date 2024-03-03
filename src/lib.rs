@@ -1,7 +1,7 @@
 pub mod builder;
 pub mod node;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use egui::{
     self, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
@@ -9,6 +9,9 @@ use egui::{
 };
 
 pub use builder::TreeViewBuilder;
+
+pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash {}
+impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash {}
 
 /// Represents the state of the tree view.
 ///
@@ -25,7 +28,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     size: Vec2,
     /// Open states of the dirs in this tree.
-    dir_states: HashMap<NodeIdType, bool>,
+    dir_states: HashMap<NodeIdType, NodeState<NodeIdType>>,
 }
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
@@ -38,10 +41,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
         }
     }
 }
-impl<NodeIdType> TreeViewState<NodeIdType>
-where
-    NodeIdType: Clone,
-{
+impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     /// Return the selected node if any is selected.
     pub fn selected(&self) -> Option<NodeIdType> {
         self.selected.clone()
@@ -51,6 +51,22 @@ where
     /// If [`None`] then no node is selected.
     pub fn set_selected(&mut self, selected: Option<NodeIdType>) {
         self.selected = selected;
+    }
+
+    /// Expand all parent nodes of the node with the given id.
+    pub fn expand_parents_of(&mut self, id: NodeIdType) {
+        let mut current_node = self
+            .dir_states
+            .get(&id)
+            .and_then(|node_state| node_state.parent_id);
+        while let Some(node_id) = &current_node {
+            if let Some(node_state) = self.dir_states.get_mut(node_id) {
+                node_state.open = true;
+                current_node = node_state.parent_id;
+            } else {
+                current_node = None;
+            }
+        }
     }
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
@@ -73,6 +89,14 @@ struct DragState<NodeIdType> {
     /// A drag only becomes valid after it has been dragged for
     /// a short distance.
     pub drag_valid: bool,
+}
+/// State of each node in the tree.
+#[derive(Clone)]
+struct NodeState<NodeIdType> {
+    /// The parent node of this node.
+    parent_id: Option<NodeIdType>,
+    /// Wether the node is open or not.
+    open: bool,
 }
 
 pub struct TreeView {
@@ -372,9 +396,9 @@ where
             }
         }
         Key::ArrowLeft => {
-            if let Some(dir_open) = state.peristant.dir_states.get_mut(&selected_node) {
-                if *dir_open {
-                    *dir_open = false;
+            if let Some(node_state) = state.peristant.dir_states.get_mut(&selected_node) {
+                if node_state.open {
+                    node_state.open = false;
                 } else if let Some(first_parent) = first_parent {
                     state.peristant.selected = Some(first_parent);
                 }
@@ -383,8 +407,8 @@ where
             }
         }
         Key::ArrowRight => {
-            if let Some(dir_open) = state.peristant.dir_states.get_mut(&selected_node) {
-                if *dir_open {
+            if let Some(node_state) = state.peristant.dir_states.get_mut(&selected_node) {
+                if node_state.open {
                     if selected_index < state.node_info.len() - 1 {
                         // Search for previous visible node.
                         if let Some(node) = state.node_info[(selected_index + 1)..]
@@ -395,7 +419,7 @@ where
                         }
                     }
                 } else {
-                    *dir_open = true;
+                    node_state.open = true;
                 }
             }
         }

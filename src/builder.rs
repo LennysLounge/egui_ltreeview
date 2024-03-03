@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, NodeInfo, TreeViewData, TreeViewSettings, VLineStyle,
+    DragState, DropPosition, NodeInfo, NodeState, TreeViewData, TreeViewSettings, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -186,6 +186,14 @@ where
         node.set_is_open(false);
         let (row, _) = self.node_internal(&mut node);
 
+        self.state.peristant.dir_states.insert(
+            node.id,
+            NodeState {
+                parent_id: self.parent_id(),
+                open: false,
+            },
+        );
+
         Some(row)
     }
 
@@ -222,7 +230,7 @@ where
             .peristant
             .dir_states
             .get(&node.id)
-            .copied()
+            .map(|node_state| node_state.open)
             .unwrap_or(node.default_open);
 
         node.set_is_open(open);
@@ -241,12 +249,13 @@ where
             open = !open;
         }
 
-        self.state
-            .peristant
-            .dir_states
-            .entry(node.id)
-            .and_modify(|e| *e = open)
-            .or_insert(open);
+        self.state.peristant.dir_states.insert(
+            node.id,
+            NodeState {
+                parent_id: self.parent_id(),
+                open,
+            },
+        );
 
         self.stack.push(DirectoryState {
             is_open: open,
