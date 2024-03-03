@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, NodeInfo, TreeViewSettings, TreeViewData, VLineStyle,
+    DragState, DropPosition, NodeInfo, TreeViewData, TreeViewSettings, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -32,25 +32,25 @@ struct DirectoryState<NodeIdType> {
 /// The builder used to construct the tree view.
 ///
 /// Use this to add directories or leaves to the tree.
-pub struct TreeViewBuilder<'ui, NodeIdType>
+pub struct TreeViewBuilder<'ui, 'state, NodeIdType>
 where
     NodeIdType: Clone,
 {
     ui: &'ui mut Ui,
-    state: &'ui mut TreeViewData<NodeIdType>,
+    state: &'ui mut TreeViewData<'state, NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
     background_idx: ShapeIdx,
     secondary_selection_idx: ShapeIdx,
     settings: &'ui TreeViewSettings,
 }
 
-impl<'ui, NodeIdType> TreeViewBuilder<'ui, NodeIdType>
+impl<'ui, 'state, NodeIdType> TreeViewBuilder<'ui, 'state, NodeIdType>
 where
     NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
 {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        state: &'ui mut TreeViewData<NodeIdType>,
+        state: &'ui mut TreeViewData<'state, NodeIdType>,
         settings: &'ui TreeViewSettings,
     ) -> Self {
         Self {

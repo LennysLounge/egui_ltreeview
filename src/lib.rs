@@ -10,6 +10,56 @@ use egui::{
 
 pub use builder::TreeViewBuilder;
 
+/// Represents the state of the tree view.
+///
+/// This holds which node is selected and the open/close
+/// state of the directories.
+#[derive(Clone)]
+pub struct TreeViewState<NodeIdType> {
+    /// Id of the node that was selected.
+    selected: Option<NodeIdType>,
+    /// Information about the dragged node.
+    dragged: Option<DragState<NodeIdType>>,
+    /// Id of the node that was right clicked.
+    secondary_selection: Option<NodeIdType>,
+    /// The rectangle the tree view occupied.
+    size: Vec2,
+    /// Open states of the dirs in this tree.
+    dir_states: HashMap<NodeIdType, bool>,
+}
+impl<NodeIdType> Default for TreeViewState<NodeIdType> {
+    fn default() -> Self {
+        Self {
+            selected: Default::default(),
+            dragged: Default::default(),
+            secondary_selection: Default::default(),
+            size: Vec2::ZERO,
+            dir_states: HashMap::new(),
+        }
+    }
+}
+impl<NodeIdType> TreeViewState<NodeIdType>
+where
+    NodeIdType: Clone + Send + Sync + 'static,
+{
+    fn store(self, ui: &mut Ui, id: Id) {
+        ui.data_mut(|d| d.insert_persisted(id, self));
+    }
+}
+/// State of the dragged node.
+#[derive(Clone)]
+struct DragState<NodeIdType> {
+    /// Id of the dragged node.
+    pub node_id: NodeIdType,
+    /// Offset of the drag overlay to the pointer.
+    pub drag_row_offset: Vec2,
+    /// Position of the pointer when the drag started.
+    pub drag_start_pos: Pos2,
+    /// A drag only becomes valid after it has been dragged for
+    /// a short distance.
+    pub drag_valid: bool,
+}
+
 pub struct TreeView {
     id: Id,
     settings: TreeViewSettings,
@@ -100,9 +150,29 @@ impl TreeView {
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
     /// directories or leaves to the tree.
     pub fn show<NodeIdType>(
+        self,
+        ui: &mut Ui,
+        build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
+    ) -> TreeViewResponse<NodeIdType>
+    where
+        NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
+    {
+        let id = self.id;
+        let mut state = ui.data_mut(|d| d.get_persisted(id)).unwrap_or_default();
+        let res = self.show_state(ui, &mut state, build_tree_view);
+        state.store(ui, id);
+        res
+    }
+
+    /// Start displaying the tree view with a [`TreeViewState`].
+    ///
+    /// Construct the tree view using the [`TreeViewBuilder`] by addind
+    /// directories or leaves to the tree.
+    pub fn show_state<NodeIdType>(
         mut self,
         ui: &mut Ui,
-        mut build_tree_view: impl FnMut(TreeViewBuilder<'_, NodeIdType>),
+        state: &mut TreeViewState<NodeIdType>,
+        mut build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
     where
         NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
@@ -131,21 +201,21 @@ impl TreeView {
         });
 
         // Create the tree state by loading the previous frame and setting up the state.
-        let mut state = TreeViewData::load(ui, self.id);
-        let prev_selection = state.peristant.selected;
+        let mut data = TreeViewData::new(ui, state, self.id);
+        let prev_selection = data.peristant.selected;
 
         // Calculate the desired size of the tree view widget.
         let size = vec2(
             if self.settings.fill_space_horizontal {
                 ui.available_width().at_most(self.settings.max_width)
             } else {
-                state.peristant.size.x.at_most(self.settings.max_width)
+                data.peristant.size.x.at_most(self.settings.max_width)
             }
             .at_least(self.settings.min_width),
             if self.settings.fill_space_vertical {
                 ui.available_height().at_most(self.settings.max_height)
             } else {
-                state.peristant.size.y.at_most(self.settings.max_height)
+                data.peristant.size.y.at_most(self.settings.max_height)
             }
             .at_least(self.settings.min_height),
         );
@@ -155,7 +225,7 @@ impl TreeView {
             .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
                 ui.add_space(ui.spacing().item_spacing.y * 0.5);
-                build_tree_view(TreeViewBuilder::new(ui, &mut state, &self.settings));
+                build_tree_view(TreeViewBuilder::new(ui, &mut data, &self.settings));
                 // Add negative space because the place will add the item spacing on top of this.
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
 
@@ -170,7 +240,7 @@ impl TreeView {
             .rect;
 
         // If the tree was clicked it should receive focus.
-        let tree_view_interact = state.interact(&used_rect);
+        let tree_view_interact = data.interact(&used_rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
@@ -179,20 +249,18 @@ impl TreeView {
             // If the widget is focused but no node is selected we want to select any node
             // to allow navigating throught the tree.
             // In case we gain focus from a drag action we select the dragged node directly.
-            if state.peristant.selected.is_none() {
-                state.peristant.selected = state
+            if data.peristant.selected.is_none() {
+                data.peristant.selected = data
                     .peristant
                     .dragged
                     .as_ref()
                     .map(|drag_state| drag_state.node_id)
-                    .or(state.node_info.first().map(|n| n.node_id));
+                    .or(data.node_info.first().map(|n| n.node_id));
             }
             ui.input(|i| {
                 for event in i.events.iter() {
                     match event {
-                        Event::Key { key, pressed, .. } if *pressed => {
-                            handle_input(&mut state, key)
-                        }
+                        Event::Key { key, pressed, .. } if *pressed => handle_input(&mut data, key),
                         _ => (),
                     }
                 }
@@ -200,18 +268,18 @@ impl TreeView {
         }
 
         // Create a drag or move action.
-        if state.drag_valid() {
+        if data.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
-                state.peristant.dragged.as_ref().zip(state.drop)
+                data.peristant.dragged.as_ref().zip(data.drop)
             {
                 if ui.ctx().input(|i| i.pointer.any_released()) {
-                    state.actions.push(Action::Move {
+                    data.actions.push(Action::Move {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
                     })
                 } else {
-                    state.actions.push(Action::Drag {
+                    data.actions.push(Action::Drag {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
@@ -220,28 +288,26 @@ impl TreeView {
             }
         }
         // Create a selection action.
-        if state.peristant.selected != prev_selection {
-            state
-                .actions
-                .push(Action::SetSelected(state.peristant.selected));
+        if data.peristant.selected != prev_selection {
+            data.actions
+                .push(Action::SetSelected(data.peristant.selected));
         }
 
         // Reset the drag state.
-        if state.interaction_response.drag_released() {
-            state.peristant.dragged = None;
+        if data.interaction_response.drag_released() {
+            data.peristant.dragged = None;
         }
 
         // Remember the size of the tree for next frame.
-        state.peristant.size = used_rect.size();
+        data.peristant.size = used_rect.size();
 
         let res = TreeViewResponse {
-            response: state.interaction_response,
-            drop_marker_idx: state.drop_marker_idx,
-            nodes: state.node_info,
-            actions: state.actions,
+            response: data.interaction_response,
+            drop_marker_idx: data.drop_marker_idx,
+            nodes: data.node_info,
+            actions: data.actions,
         };
 
-        state.peristant.store(ui, self.id);
         res
     }
 }
@@ -322,63 +388,13 @@ where
     }
 }
 
-/// Represents the state of the tree view.
-///
-/// This holds which node is selected and the open/close
-/// state of the directories.
-#[derive(Clone)]
-struct TreeViewState<NodeIdType> {
-    /// Id of the node that was selected.
-    selected: Option<NodeIdType>,
-    /// Information about the dragged node.
-    dragged: Option<DragState<NodeIdType>>,
-    /// Id of the node that was right clicked.
-    secondary_selection: Option<NodeIdType>,
-    /// The rectangle the tree view occupied.
-    size: Vec2,
-    /// Open states of the dirs in this tree.
-    dir_states: HashMap<NodeIdType, bool>,
-}
-impl<NodeIdType> Default for TreeViewState<NodeIdType> {
-    fn default() -> Self {
-        Self {
-            selected: Default::default(),
-            dragged: Default::default(),
-            secondary_selection: Default::default(),
-            size: Vec2::ZERO,
-            dir_states: HashMap::new(),
-        }
-    }
-}
-impl<NodeIdType> TreeViewState<NodeIdType>
-where
-    NodeIdType: Clone + Send + Sync + 'static,
-{
-    fn store(self, ui: &mut Ui, id: Id) {
-        ui.data_mut(|d| d.insert_persisted(id, self));
-    }
-}
-/// State of the dragged node.
-#[derive(Clone)]
-struct DragState<NodeIdType> {
-    /// Id of the dragged node.
-    pub node_id: NodeIdType,
-    /// Offset of the drag overlay to the pointer.
-    pub drag_row_offset: Vec2,
-    /// Position of the pointer when the drag started.
-    pub drag_start_pos: Pos2,
-    /// A drag only becomes valid after it has been dragged for
-    /// a short distance.
-    pub drag_valid: bool,
-}
-
 /// Holds the data that is required to display a tree view.
 /// This is simply a blob of all the data together without
 /// further structure because abstracting this more simply
 /// increases the complexity without much benefit.
-struct TreeViewData<NodeIdType> {
+struct TreeViewData<'state, NodeIdType> {
     /// State of the tree that is persistant across frames.
-    peristant: TreeViewState<NodeIdType>,
+    peristant: &'state mut TreeViewState<NodeIdType>,
     /// Response of the interaction.
     interaction_response: Response,
     /// NodeId and Drop position of the drop target.
@@ -392,15 +408,11 @@ struct TreeViewData<NodeIdType> {
     /// Actions for the tree view.
     actions: Vec<Action<NodeIdType>>,
 }
-impl<NodeIdType> TreeViewData<NodeIdType>
+impl<'state, NodeIdType> TreeViewData<'state, NodeIdType>
 where
     NodeIdType: Clone + Send + Sync + 'static,
 {
-    fn load(ui: &mut Ui, id: Id) -> Self {
-        let state = ui
-            .data_mut(|d| d.get_persisted::<TreeViewState<NodeIdType>>(id))
-            .unwrap_or_default();
-
+    fn new(ui: &mut Ui, state: &'state mut TreeViewState<NodeIdType>, id: Id) -> Self {
         let interaction_response = interact_no_expansion(
             ui,
             Rect::from_min_size(ui.cursor().min, state.size),
@@ -420,7 +432,7 @@ where
         }
     }
 }
-impl<NodeIdType> TreeViewData<NodeIdType>
+impl<NodeIdType> TreeViewData<'_, NodeIdType>
 where
     NodeIdType: Clone,
 {
