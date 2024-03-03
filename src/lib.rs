@@ -40,6 +40,21 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
+    NodeIdType: Clone,
+{
+    /// Return the selected node if any is selected.
+    pub fn selected(&self) -> Option<NodeIdType> {
+        self.selected.clone()
+    }
+
+    /// Set the selected node for this tree.
+    /// If [`None`] then no node is selected.
+    pub fn set_selected(&mut self, selected: Option<NodeIdType>) {
+        self.selected = selected;
+    }
+}
+impl<NodeIdType> TreeViewState<NodeIdType>
+where
     NodeIdType: Clone + Send + Sync + 'static,
 {
     fn store(self, ui: &mut Ui, id: Id) {
