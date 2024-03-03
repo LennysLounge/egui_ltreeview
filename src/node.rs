@@ -3,7 +3,7 @@ use egui::{
     Response, Shape, Stroke, Ui, Vec2,
 };
 
-use crate::{TreeViewData, Interaction, RowLayout, TreeViewSettings};
+use crate::{Interaction, RowLayout, TreeViewData, TreeViewId, TreeViewSettings};
 
 pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
 pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
@@ -21,10 +21,7 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     label: Option<Box<AddUi<'add_ui>>>,
     context_menu: Option<Box<AddUi<'add_ui>>>,
 }
-impl<'add_ui, NodeIdType> NodeBuilder<'add_ui, NodeIdType>
-where
-    NodeIdType: Clone + std::hash::Hash,
-{
+impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     /// Create a new node builder from a leaf prototype.
     pub fn leaf(id: NodeIdType) -> Self {
         Self {
@@ -286,7 +283,7 @@ where
         true
     }
 
-    pub fn show_context_menu(&mut self, response: &Response) -> bool {
+    pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
         if let Some(context_menu) = self.context_menu.as_mut() {
             let mut was_open = false;
             response.context_menu(|ui| {

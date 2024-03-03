@@ -194,7 +194,7 @@ impl TreeView {
         build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
     where
-        NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
+        NodeIdType: TreeViewId + Send + Sync + 'static,
     {
         let id = self.id;
         let mut state = ui.data_mut(|d| d.get_persisted(id)).unwrap_or_default();
@@ -214,7 +214,7 @@ impl TreeView {
         mut build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
     where
-        NodeIdType: Clone + Copy + Send + Sync + std::hash::Hash + PartialEq + Eq + 'static,
+        NodeIdType: TreeViewId + Send + Sync + 'static,
     {
         // Justified layouts override these settings
         if ui.layout().horizontal_justify() {
@@ -351,10 +351,7 @@ impl TreeView {
     }
 }
 
-fn handle_input<NodeIdType>(state: &mut TreeViewData<NodeIdType>, key: &Key)
-where
-    NodeIdType: Clone + Copy + PartialEq + Eq + std::hash::Hash,
-{
+fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewData<NodeIdType>, key: &Key) {
     let Some(selected_index) = state
         .node_info
         .iter()
@@ -447,10 +444,7 @@ struct TreeViewData<'state, NodeIdType> {
     /// Actions for the tree view.
     actions: Vec<Action<NodeIdType>>,
 }
-impl<'state, NodeIdType> TreeViewData<'state, NodeIdType>
-where
-    NodeIdType: Clone + Send + Sync + 'static,
-{
+impl<'state, NodeIdType> TreeViewData<'state, NodeIdType> {
     fn new(ui: &mut Ui, state: &'state mut TreeViewState<NodeIdType>, id: Id) -> Self {
         let interaction_response = interact_no_expansion(
             ui,
@@ -471,10 +465,7 @@ where
         }
     }
 }
-impl<NodeIdType> TreeViewData<'_, NodeIdType>
-where
-    NodeIdType: Clone,
-{
+impl<NodeIdType: TreeViewId> TreeViewData<'_, NodeIdType> {
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
             .interaction_response
@@ -509,27 +500,18 @@ where
             .is_some_and(|drag_state| drag_state.drag_valid)
     }
     /// Is the given id part of a valid drag.
-    pub fn is_dragged(&self, id: &NodeIdType) -> bool
-    where
-        NodeIdType: PartialEq + Eq,
-    {
+    pub fn is_dragged(&self, id: &NodeIdType) -> bool {
         self.peristant
             .dragged
             .as_ref()
             .is_some_and(|drag_state| drag_state.drag_valid && &drag_state.node_id == id)
     }
 
-    pub fn is_selected(&self, id: &NodeIdType) -> bool
-    where
-        NodeIdType: PartialEq + Eq,
-    {
+    pub fn is_selected(&self, id: &NodeIdType) -> bool {
         self.peristant.selected.as_ref().is_some_and(|n| n == id)
     }
 
-    pub fn is_secondary_selected(&self, id: &NodeIdType) -> bool
-    where
-        NodeIdType: PartialEq + Eq,
-    {
+    pub fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
         self.peristant
             .secondary_selection
             .as_ref()
@@ -675,10 +657,7 @@ pub struct TreeViewResponse<NodeIdType> {
     drop_marker_idx: ShapeIdx,
     nodes: Vec<NodeInfo<NodeIdType>>,
 }
-impl<NodeIdType> TreeViewResponse<NodeIdType>
-where
-    NodeIdType: Clone + Copy + PartialEq + Eq,
-{
+impl<NodeIdType: TreeViewId> TreeViewResponse<NodeIdType> {
     /// Remove the drop marker from the tree view.
     ///
     /// Use this to remove the drop marker if a proposed drag and drop action
