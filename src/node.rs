@@ -3,7 +3,7 @@ use egui::{
     Response, Shape, Stroke, Ui, Vec2,
 };
 
-use crate::{Interaction, RowLayout, TreeViewSettings, TreeViewState};
+use crate::{TreeViewData, Interaction, RowLayout, TreeViewSettings};
 
 pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
 pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
@@ -128,7 +128,7 @@ where
     pub(crate) fn show_node(
         &mut self,
         ui: &mut Ui,
-        state: &TreeViewState<NodeIdType>,
+        state: &TreeViewData<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
@@ -244,7 +244,7 @@ where
     pub(crate) fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
-        state: &TreeViewState<NodeIdType>,
+        state: &TreeViewData<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> bool {
         ui.ctx().set_cursor_icon(CursorIcon::Alias);

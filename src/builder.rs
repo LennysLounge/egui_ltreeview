@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, NodeInfo, TreeViewSettings, TreeViewState, VLineStyle,
+    DragState, DropPosition, NodeInfo, TreeViewSettings, TreeViewData, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -37,7 +37,7 @@ where
     NodeIdType: Clone,
 {
     ui: &'ui mut Ui,
-    state: &'ui mut TreeViewState<NodeIdType>,
+    state: &'ui mut TreeViewData<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
     background_idx: ShapeIdx,
     secondary_selection_idx: ShapeIdx,
@@ -50,7 +50,7 @@ where
 {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        state: &'ui mut TreeViewState<NodeIdType>,
+        state: &'ui mut TreeViewData<NodeIdType>,
         settings: &'ui TreeViewSettings,
     ) -> Self {
         Self {

@@ -131,7 +131,7 @@ impl TreeView {
         });
 
         // Create the tree state by loading the previous frame and setting up the state.
-        let mut state = TreeViewState::load(ui, self.id);
+        let mut state = TreeViewData::load(ui, self.id);
         let prev_selection = state.peristant.selected;
 
         // Calculate the desired size of the tree view widget.
@@ -246,7 +246,7 @@ impl TreeView {
     }
 }
 
-fn handle_input<NodeIdType>(state: &mut TreeViewState<NodeIdType>, key: &Key)
+fn handle_input<NodeIdType>(state: &mut TreeViewData<NodeIdType>, key: &Key)
 where
     NodeIdType: Clone + Copy + PartialEq + Eq + std::hash::Hash,
 {
@@ -322,8 +322,12 @@ where
     }
 }
 
+/// Represents the state of the tree view.
+///
+/// This holds which node is selected and the open/close
+/// state of the directories.
 #[derive(Clone)]
-struct TreeViewPersistantState<NodeIdType> {
+struct TreeViewState<NodeIdType> {
     /// Id of the node that was selected.
     selected: Option<NodeIdType>,
     /// Information about the dragged node.
@@ -335,7 +339,7 @@ struct TreeViewPersistantState<NodeIdType> {
     /// Open states of the dirs in this tree.
     dir_states: HashMap<NodeIdType, bool>,
 }
-impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
+impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
         Self {
             selected: Default::default(),
@@ -346,7 +350,7 @@ impl<NodeIdType> Default for TreeViewPersistantState<NodeIdType> {
         }
     }
 }
-impl<NodeIdType> TreeViewPersistantState<NodeIdType>
+impl<NodeIdType> TreeViewState<NodeIdType>
 where
     NodeIdType: Clone + Send + Sync + 'static,
 {
@@ -354,7 +358,7 @@ where
         ui.data_mut(|d| d.insert_persisted(id, self));
     }
 }
-
+/// State of the dragged node.
 #[derive(Clone)]
 struct DragState<NodeIdType> {
     /// Id of the dragged node.
@@ -368,13 +372,13 @@ struct DragState<NodeIdType> {
     pub drag_valid: bool,
 }
 
-#[derive(Clone)]
-struct TreeViewState<NodeIdType>
-where
-    NodeIdType: Clone,
-{
+/// Holds the data that is required to display a tree view.
+/// This is simply a blob of all the data together without
+/// further structure because abstracting this more simply
+/// increases the complexity without much benefit.
+struct TreeViewData<NodeIdType> {
     /// State of the tree that is persistant across frames.
-    peristant: TreeViewPersistantState<NodeIdType>,
+    peristant: TreeViewState<NodeIdType>,
     /// Response of the interaction.
     interaction_response: Response,
     /// NodeId and Drop position of the drop target.
@@ -388,13 +392,13 @@ where
     /// Actions for the tree view.
     actions: Vec<Action<NodeIdType>>,
 }
-impl<NodeIdType> TreeViewState<NodeIdType>
+impl<NodeIdType> TreeViewData<NodeIdType>
 where
     NodeIdType: Clone + Send + Sync + 'static,
 {
     fn load(ui: &mut Ui, id: Id) -> Self {
         let state = ui
-            .data_mut(|d| d.get_persisted::<TreeViewPersistantState<NodeIdType>>(id))
+            .data_mut(|d| d.get_persisted::<TreeViewState<NodeIdType>>(id))
             .unwrap_or_default();
 
         let interaction_response = interact_no_expansion(
@@ -405,7 +409,7 @@ where
         );
         let has_focus = ui.memory(|m| m.has_focus(id));
 
-        TreeViewState {
+        TreeViewData {
             peristant: state,
             drop: None,
             drop_marker_idx: ui.painter().add(Shape::Noop),
@@ -416,7 +420,7 @@ where
         }
     }
 }
-impl<NodeIdType> TreeViewState<NodeIdType>
+impl<NodeIdType> TreeViewData<NodeIdType>
 where
     NodeIdType: Clone,
 {
