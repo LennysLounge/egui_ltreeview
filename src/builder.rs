@@ -6,8 +6,7 @@ use egui::{
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, NodeInfo, NodeState, TreeViewData, TreeViewId, TreeViewSettings,
-    VLineStyle,
+    DragState, DropPosition, NodeState, TreeViewData, TreeViewId, TreeViewSettings, VLineStyle,
 };
 
 #[derive(Clone)]
@@ -155,114 +154,77 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
 
     /// Add a node to the tree.
     pub fn node(&mut self, node: NodeBuilder<NodeIdType>) {
-        let parent_node_id = self.parent_dir().map(|dir| dir.id);
-        let depth = self.get_indent_level();
-        let node_id = node.id;
-
-        let rect = if node.is_dir {
-            self.dir_internal(node)
+        if node.is_dir {
+            self.dir_internal(node);
         } else {
-            self.leaf_internal(node)
+            self.leaf_internal(node);
         };
+    }
 
-        self.state.node_info.push(NodeInfo {
-            depth,
-            node_id,
-            visible: rect.is_some(),
-            parent_node_id,
+    fn leaf_internal(&mut self, mut node: NodeBuilder<NodeIdType>) {
+        if self.parent_dir_is_open() {
+            node.set_is_open(false);
+            let _ = self.node_internal(&mut node);
+        }
+
+        self.state.new_node_states.push(NodeState {
+            id: node.id,
+            parent_id: self.parent_id(),
+            open: false,
+            visible: self.parent_dir_is_open(),
         });
     }
 
-    fn leaf_internal(&mut self, mut node: NodeBuilder<NodeIdType>) -> Option<Rect> {
-        if !self.parent_dir_is_open() {
-            return None;
-        }
-
-        node.set_is_open(false);
-        let (row, _) = self.node_internal(&mut node);
-
-        self.state.peristant.dir_states.insert(
-            node.id,
-            NodeState {
-                parent_id: self.parent_id(),
-                open: false,
-            },
-        );
-
-        Some(row)
-    }
-
-    fn dir_internal(&mut self, mut node: NodeBuilder<NodeIdType>) -> Option<Rect> {
-        if !self.parent_dir_is_open() {
-            self.stack.push(DirectoryState {
-                is_open: false,
-                id: node.id,
-                drop_forbidden: true,
-                row_rect: Rect::NOTHING,
-                icon_rect: Rect::NOTHING,
-                child_node_positions: Vec::new(),
-                indent_level: self.get_indent_level(),
-                flattened: false,
-            });
-            return None;
-        }
-        if node.flatten {
-            self.stack.push(DirectoryState {
-                is_open: self.parent_dir_is_open(),
-                id: node.id,
-                drop_forbidden: self.parent_dir_drop_forbidden(),
-                row_rect: Rect::NOTHING,
-                icon_rect: Rect::NOTHING,
-                child_node_positions: Vec::new(),
-                indent_level: self.get_indent_level(),
-                flattened: true,
-            });
-            return None;
-        }
-
+    fn dir_internal(&mut self, mut node: NodeBuilder<NodeIdType>) {
         let mut open = self
             .state
             .peristant
-            .dir_states
-            .get(&node.id)
+            .node_state_of(&node.id)
             .map(|node_state| node_state.open)
             .unwrap_or(node.default_open);
 
-        node.set_is_open(open);
-        let (row, closer) = self.node_internal(&mut node);
+        let (row, closer) = if self.parent_dir_is_open() && !node.flatten {
+            node.set_is_open(open);
+            let (row, closer) = self.node_internal(&mut node);
 
-        let closer = closer.expect("Closer response should be availabel for dirs");
+            let closer = closer.expect("Closer response should be availabel for dirs");
 
-        let closer_interaction = self.state.interact(&closer);
-        if closer_interaction.clicked {
-            open = !open;
-            self.state.peristant.selected = Some(node.id);
-        }
+            let closer_interaction = self.state.interact(&closer);
+            if closer_interaction.clicked {
+                open = !open;
+                self.state.peristant.selected = Some(node.id);
+            }
 
-        let row_interaction = self.state.interact(&row);
-        if row_interaction.double_clicked {
-            open = !open;
-        }
+            let row_interaction = self.state.interact(&row);
+            if row_interaction.double_clicked {
+                open = !open;
+            }
+            (row, closer)
+        } else {
+            (Rect::NOTHING, Rect::NOTHING)
+        };
 
-        self.state.peristant.dir_states.insert(
-            node.id,
-            NodeState {
-                parent_id: self.parent_id(),
-                open,
-            },
-        );
+        self.state.new_node_states.push(NodeState {
+            id: node.id,
+            parent_id: self.parent_id(),
+            open,
+            visible: self.parent_dir_is_open() && !node.flatten,
+        });
 
         self.stack.push(DirectoryState {
-            is_open: open,
+            is_open: self.parent_dir_is_open() && open,
             id: node.id,
             drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
             row_rect: row,
             icon_rect: closer,
             child_node_positions: Vec::new(),
-            indent_level: self.get_indent_level() + 1,
-            flattened: false,
+            indent_level: if node.flatten {
+                self.get_indent_level()
+            } else {
+                self.get_indent_level() + 1
+            },
+            flattened: node.flatten,
         });
-        Some(row)
     }
 
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> (Rect, Option<Rect>) {

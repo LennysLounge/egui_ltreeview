@@ -1,7 +1,7 @@
 pub mod builder;
 pub mod node;
 
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
 
 use egui::{
     self, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
@@ -28,7 +28,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     size: Vec2,
     /// Open states of the dirs in this tree.
-    dir_states: HashMap<NodeIdType, NodeState<NodeIdType>>,
+    node_states: Vec<NodeState<NodeIdType>>,
 }
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
@@ -37,7 +37,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::ZERO,
-            dir_states: HashMap::new(),
+            node_states: Vec::new(),
         }
     }
 }
@@ -56,17 +56,29 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     /// Expand all parent nodes of the node with the given id.
     pub fn expand_parents_of(&mut self, id: NodeIdType) {
         let mut current_node = self
-            .dir_states
-            .get(&id)
+            .node_state_of(&id)
             .and_then(|node_state| node_state.parent_id);
+
         while let Some(node_id) = &current_node {
-            if let Some(node_state) = self.dir_states.get_mut(node_id) {
+            if let Some(node_state) = self.node_state_of_mut(node_id) {
                 node_state.open = true;
                 current_node = node_state.parent_id;
             } else {
                 current_node = None;
             }
         }
+    }
+
+    /// Get the node state for an id.
+    pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
+        self.node_states.iter().find(|ns| &ns.id == id)
+    }
+    /// Get the node state for an id.
+    pub(crate) fn node_state_of_mut(
+        &mut self,
+        id: &NodeIdType,
+    ) -> Option<&mut NodeState<NodeIdType>> {
+        self.node_states.iter_mut().find(|ns| &ns.id == id)
     }
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
@@ -93,10 +105,14 @@ struct DragState<NodeIdType> {
 /// State of each node in the tree.
 #[derive(Clone)]
 struct NodeState<NodeIdType> {
+    /// Id of this node.
+    id: NodeIdType,
     /// The parent node of this node.
     parent_id: Option<NodeIdType>,
     /// Wether the node is open or not.
     open: bool,
+    /// Wether the node is visible or not.
+    visible: bool,
 }
 
 pub struct TreeView {
@@ -278,6 +294,9 @@ impl TreeView {
             .response
             .rect;
 
+        // use new node states
+        data.peristant.node_states = data.new_node_states.clone();
+
         // If the tree was clicked it should receive focus.
         let tree_view_interact = data.interact(&used_rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {
@@ -294,12 +313,14 @@ impl TreeView {
                     .dragged
                     .as_ref()
                     .map(|drag_state| drag_state.node_id)
-                    .or(data.node_info.first().map(|n| n.node_id));
+                    .or(data.peristant.node_states.first().map(|n| n.id));
             }
             ui.input(|i| {
                 for event in i.events.iter() {
                     match event {
-                        Event::Key { key, pressed, .. } if *pressed => handle_input(&mut data, key),
+                        Event::Key { key, pressed, .. } if *pressed => {
+                            handle_input(&mut data.peristant, key)
+                        }
                         _ => (),
                     }
                 }
@@ -343,7 +364,6 @@ impl TreeView {
         let res = TreeViewResponse {
             response: data.interaction_response,
             drop_marker_idx: data.drop_marker_idx,
-            nodes: data.node_info,
             actions: data.actions,
         };
 
@@ -351,73 +371,64 @@ impl TreeView {
     }
 }
 
-fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewData<NodeIdType>, key: &Key) {
+fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, key: &Key) {
+    let Some(selected_id) = &state.selected else {
+        return;
+    };
     let Some(selected_index) = state
-        .node_info
+        .node_states
         .iter()
-        .position(|n| Some(n.node_id) == state.peristant.selected)
+        .position(|ns| &ns.id == selected_id)
     else {
         return;
     };
-    let selected_node = state.node_info[selected_index].node_id;
-    let selected_depth = state.node_info[selected_index].depth;
-    let first_parent = state.node_info[0..selected_index]
-        .iter()
-        .rev()
-        .find(|n| n.depth < selected_depth)
-        .map(|n| n.node_id);
+    let node_state = &mut state.node_states[selected_index];
 
     match key {
         Key::ArrowUp => {
             if selected_index > 0 {
                 if let Some(node) =
                     // Search for previous visible node.
-                    state.node_info[0..selected_index]
+                    state.node_states[0..selected_index]
                         .iter()
                         .rev()
                         .find(|node| node.visible)
                 {
-                    state.peristant.selected = Some(node.node_id);
+                    state.selected = Some(node.id);
                 }
             }
         }
         Key::ArrowDown => {
-            if selected_index < state.node_info.len() - 1 {
+            if selected_index < state.node_states.len() - 1 {
                 // Search for previous visible node.
-                if let Some(node) = state.node_info[(selected_index + 1)..]
+                if let Some(node) = state.node_states[(selected_index + 1)..]
                     .iter()
                     .find(|node| node.visible)
                 {
-                    state.peristant.selected = Some(node.node_id);
+                    state.selected = Some(node.id);
                 }
             }
         }
         Key::ArrowLeft => {
-            if let Some(node_state) = state.peristant.dir_states.get_mut(&selected_node) {
-                if node_state.open {
-                    node_state.open = false;
-                } else if let Some(first_parent) = first_parent {
-                    state.peristant.selected = Some(first_parent);
-                }
-            } else if let Some(first_parent) = first_parent {
-                state.peristant.selected = Some(first_parent);
+            if node_state.open {
+                node_state.open = false;
+            } else if node_state.parent_id.is_some() {
+                state.selected = node_state.parent_id;
             }
         }
         Key::ArrowRight => {
-            if let Some(node_state) = state.peristant.dir_states.get_mut(&selected_node) {
-                if node_state.open {
-                    if selected_index < state.node_info.len() - 1 {
-                        // Search for previous visible node.
-                        if let Some(node) = state.node_info[(selected_index + 1)..]
-                            .iter()
-                            .find(|node| node.visible)
-                        {
-                            state.peristant.selected = Some(node.node_id);
-                        }
+            if node_state.open {
+                if selected_index < state.node_states.len() - 1 {
+                    // Search for previous visible node.
+                    if let Some(node) = state.node_states[(selected_index + 1)..]
+                        .iter()
+                        .find(|node| node.visible)
+                    {
+                        state.selected = Some(node.id);
                     }
-                } else {
-                    node_state.open = true;
                 }
+            } else {
+                node_state.open = true;
             }
         }
         _ => (),
@@ -439,10 +450,10 @@ struct TreeViewData<'state, NodeIdType> {
     drop_marker_idx: ShapeIdx,
     /// Wether or not the tree view has keyboard focus.
     has_focus: bool,
-    /// Info about each node in the tree.
-    node_info: Vec<NodeInfo<NodeIdType>>,
     /// Actions for the tree view.
     actions: Vec<Action<NodeIdType>>,
+    /// New node states for when this frame is done.
+    new_node_states: Vec<NodeState<NodeIdType>>,
 }
 impl<'state, NodeIdType> TreeViewData<'state, NodeIdType> {
     fn new(ui: &mut Ui, state: &'state mut TreeViewState<NodeIdType>, id: Id) -> Self {
@@ -460,8 +471,8 @@ impl<'state, NodeIdType> TreeViewData<'state, NodeIdType> {
             drop_marker_idx: ui.painter().add(Shape::Noop),
             interaction_response,
             has_focus,
-            node_info: Vec::new(),
             actions: Vec::new(),
+            new_node_states: Vec::new(),
         }
     }
 }
@@ -517,14 +528,6 @@ impl<NodeIdType: TreeViewId> TreeViewData<'_, NodeIdType> {
             .as_ref()
             .is_some_and(|n| n == id)
     }
-}
-
-#[derive(Clone)]
-struct NodeInfo<NodeIdType> {
-    pub depth: usize,
-    pub node_id: NodeIdType,
-    pub parent_node_id: Option<NodeIdType>,
-    pub visible: bool,
 }
 
 struct Interaction {
@@ -655,7 +658,6 @@ pub struct TreeViewResponse<NodeIdType> {
     // /// who was dragged to who and at what position.
     // pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
     drop_marker_idx: ShapeIdx,
-    nodes: Vec<NodeInfo<NodeIdType>>,
 }
 impl<NodeIdType: TreeViewId> TreeViewResponse<NodeIdType> {
     /// Remove the drop marker from the tree view.
@@ -664,14 +666,6 @@ impl<NodeIdType: TreeViewId> TreeViewResponse<NodeIdType> {
     /// is disallowed.
     pub fn remove_drop_marker(&self, ui: &mut Ui) {
         ui.painter().set(self.drop_marker_idx, Shape::Noop);
-    }
-
-    /// Get the parent node id of a node.
-    pub fn parent_of(&self, id: NodeIdType) -> Option<NodeIdType> {
-        self.nodes
-            .iter()
-            .find(|n| n.node_id == id)
-            .and_then(|node_info| node_info.parent_node_id)
     }
 }
 
