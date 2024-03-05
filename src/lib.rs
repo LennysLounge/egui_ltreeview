@@ -85,7 +85,11 @@ impl<NodeIdType> TreeViewState<NodeIdType>
 where
     NodeIdType: Clone + Send + Sync + 'static,
 {
-    fn store(self, ui: &mut Ui, id: Id) {
+    pub fn load(ui: &mut Ui, id: Id) -> Option<Self> {
+        ui.data_mut(|d| d.get_persisted(id))
+    }
+
+    pub fn store(self, ui: &mut Ui, id: Id) {
         ui.data_mut(|d| d.insert_persisted(id, self));
     }
 }
@@ -213,7 +217,7 @@ impl TreeView {
         NodeIdType: TreeViewId + Send + Sync + 'static,
     {
         let id = self.id;
-        let mut state = ui.data_mut(|d| d.get_persisted(id)).unwrap_or_default();
+        let mut state = TreeViewState::load(ui, id).unwrap_or_default();
         let res = self.show_state(ui, &mut state, build_tree_view);
         state.store(ui, id);
         res
