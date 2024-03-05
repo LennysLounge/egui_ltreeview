@@ -57,11 +57,6 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         }
     }
 
-    /// Set the selected node id.
-    pub fn set_selected(&mut self, id: NodeIdType) {
-        self.data.peristant.selected = Some(id);
-    }
-
     /// Get the current parent id if any.
     pub fn parent_id(&self) -> Option<NodeIdType> {
         self.parent_dir().map(|state| state.id)
