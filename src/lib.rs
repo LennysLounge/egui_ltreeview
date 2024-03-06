@@ -54,10 +54,13 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     }
 
     /// Expand all parent nodes of the node with the given id.
-    pub fn expand_parents_of(&mut self, id: NodeIdType) {
-        let mut current_node = self
-            .node_state_of(&id)
-            .and_then(|node_state| node_state.parent_id);
+    pub fn expand_parents_of(&mut self, id: NodeIdType, include_self: bool) {
+        let mut current_node = if include_self {
+            Some(id)
+        } else {
+            self.node_state_of(&id)
+                .and_then(|node_state| node_state.parent_id)
+        };
 
         while let Some(node_id) = &current_node {
             if let Some(node_state) = self.node_state_of_mut(node_id) {
