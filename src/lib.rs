@@ -72,6 +72,12 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
         }
     }
 
+    /// Get the parent id of a node.
+    pub fn parent_id_of(&self, id: NodeIdType) -> Option<NodeIdType> {
+        self.node_state_of(&id)
+            .and_then(|node_state| node_state.parent_id)
+    }
+
     /// Get the node state for an id.
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
         self.node_states.iter().find(|ns| &ns.id == id)
