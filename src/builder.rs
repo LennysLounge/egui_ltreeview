@@ -245,6 +245,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
 
         let row_interaction = self.data.interact(&row);
 
+        // React to primary clicking
         if row_interaction.clicked {
             self.data.peristant.selected = Some(node.id);
         }
@@ -268,7 +269,17 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 ),
             );
         }
-        if row_interaction.drag_started {
+        // React to a dragging
+        // An egui drag only starts after the pointer has moved but with that first movement
+        // the pointer may have moved to a different node. Instead we want to find out update
+        // the drag state right when the priamry button was pressed.
+        // We also want to have our own rules when a drag really becomes valid to avoid
+        // graphical artifacts. Sometimes the user is a little fast with the mouse and
+        // it creates the drag overlay when it really shouldn't have.
+        let primary_pressed = self
+            .ui
+            .input(|i| i.pointer.button_pressed(egui::PointerButton::Primary));
+        if row_interaction.hovered && primary_pressed {
             let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
             self.data.peristant.dragged = Some(DragState {
                 node_id: node.id,
@@ -277,18 +288,11 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 drag_valid: false,
             });
         }
-        if let Some(drag_state) = self.data.peristant.dragged.as_mut() {
-            // Test if the drag becomes valid
-            if !drag_state.drag_valid {
-                drag_state.drag_valid = drag_state
-                    .drag_start_pos
-                    .distance(self.ui.ctx().pointer_latest_pos().unwrap_or_default())
-                    > 5.0;
-            }
-            if drag_state.node_id == node.id && drag_state.drag_valid {
-                node.show_node_dragged(self.ui, self.data, self.settings);
-            }
+        if self.data.is_dragged(&node.id) {
+            node.show_node_dragged(self.ui, self.data, self.settings);
         }
+
+        // React to secondary clicks
         if row_interaction.secondary_clicked {
             self.data.peristant.secondary_selection = Some(node.id);
         }

@@ -339,6 +339,16 @@ impl TreeView {
                 }
             });
         }
+        // Update the drag state
+        // A drag only becomes a valid drag after the pointer has traveled some distance.
+        if let Some(drag_state) = data.peristant.dragged.as_mut() {
+            if !drag_state.drag_valid {
+                drag_state.drag_valid = drag_state
+                    .drag_start_pos
+                    .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
+                    > 5.0;
+            }
+        }
 
         // Create a drag or move action.
         if data.drag_valid() {
@@ -367,7 +377,7 @@ impl TreeView {
         }
 
         // Reset the drag state.
-        if data.interaction_response.drag_released() {
+        if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
             data.peristant.dragged = None;
         }
 
