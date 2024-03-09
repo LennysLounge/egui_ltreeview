@@ -67,7 +67,7 @@ impl eframe::App for MyApp {
                 let selected_index = (self.tree.selected().unwrap_or(0) + 1) % 11;
                 self.tree.set_selected(Some(selected_index));
                 if self.should_open_dirs {
-                    self.tree.expand_parents_of(selected_index);
+                    self.tree.expand_parents_of(selected_index, true);
                 }
             }
         });
