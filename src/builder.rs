@@ -148,29 +148,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
     }
 
     /// Add a node to the tree.
-    pub fn node(&mut self, node: NodeBuilder<NodeIdType>) {
-        if node.is_dir {
-            self.dir_internal(node);
-        } else {
-            self.leaf_internal(node);
-        };
-    }
-
-    fn leaf_internal(&mut self, mut node: NodeBuilder<NodeIdType>) {
-        if self.parent_dir_is_open() {
-            node.set_is_open(false);
-            let _ = self.node_internal(&mut node);
-        }
-
-        self.data.new_node_states.push(NodeState {
-            id: node.id,
-            parent_id: self.parent_id(),
-            open: false,
-            visible: self.parent_dir_is_open(),
-        });
-    }
-
-    fn dir_internal(&mut self, mut node: NodeBuilder<NodeIdType>) {
+    pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
         let mut open = self
             .data
             .peristant
@@ -182,12 +160,12 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             node.set_is_open(open);
             let (row, closer) = self.node_internal(&mut node);
 
-            let closer = closer.expect("Closer response should be availabel for dirs");
-
-            let closer_interaction = self.data.interact(&closer);
-            if closer_interaction.clicked {
-                open = !open;
-                self.data.peristant.selected = Some(node.id);
+            if let Some(closer) = closer {
+                let closer_interaction = self.data.interact(&closer);
+                if closer_interaction.clicked {
+                    open = !open;
+                    self.data.peristant.selected = Some(node.id);
+                }
             }
 
             let row_interaction = self.data.interact(&row);
@@ -196,7 +174,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             }
             (row, closer)
         } else {
-            (Rect::NOTHING, Rect::NOTHING)
+            (Rect::NOTHING, Some(Rect::NOTHING))
         };
 
         self.data.new_node_states.push(NodeState {
@@ -206,20 +184,22 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             visible: self.parent_dir_is_open() && !node.flatten,
         });
 
-        self.stack.push(DirectoryState {
-            is_open: self.parent_dir_is_open() && open,
-            id: node.id,
-            drop_forbidden: self.parent_dir_drop_forbidden() || self.data.is_dragged(&node.id),
-            row_rect: row,
-            icon_rect: closer,
-            child_node_positions: Vec::new(),
-            indent_level: if node.flatten {
-                self.get_indent_level()
-            } else {
-                self.get_indent_level() + 1
-            },
-            flattened: node.flatten,
-        });
+        if node.is_dir {
+            self.stack.push(DirectoryState {
+                is_open: self.parent_dir_is_open() && open,
+                id: node.id,
+                drop_forbidden: self.parent_dir_drop_forbidden() || self.data.is_dragged(&node.id),
+                row_rect: row,
+                icon_rect: closer.expect("Closer response should be availabel for dirs"),
+                child_node_positions: Vec::new(),
+                indent_level: if node.flatten {
+                    self.get_indent_level()
+                } else {
+                    self.get_indent_level() + 1
+                },
+                flattened: node.flatten,
+            });
+        }
     }
 
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> (Rect, Option<Rect>) {
