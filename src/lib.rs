@@ -44,7 +44,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
 impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     /// Return the selected node if any is selected.
     pub fn selected(&self) -> Option<NodeIdType> {
-        self.selected.clone()
+        self.selected
     }
 
     /// Set the selected node for this tree.
@@ -332,7 +332,7 @@ impl TreeView {
                 for event in i.events.iter() {
                     match event {
                         Event::Key { key, pressed, .. } if *pressed => {
-                            handle_input(&mut data.peristant, key)
+                            handle_input(data.peristant, key)
                         }
                         _ => (),
                     }
@@ -384,13 +384,13 @@ impl TreeView {
         // Remember the size of the tree for next frame.
         data.peristant.size = used_rect.size();
 
-        let res = TreeViewResponse {
+        
+
+        TreeViewResponse {
             response: data.interaction_response,
             drop_marker_idx: data.drop_marker_idx,
             actions: data.actions,
-        };
-
-        res
+        }
     }
 }
 

@@ -292,7 +292,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             }
         }
 
-        self.do_drop_node(&node, &row);
+        self.do_drop_node(node, &row);
 
         self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());
 
