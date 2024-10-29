@@ -309,9 +309,6 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             return;
         };
 
-        if !self.ui.ctx().memory(|m| m.is_anything_being_dragged()) {
-            return;
-        }
         if self.data.peristant.dragged.is_none() {
             return;
         }
