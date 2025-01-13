@@ -7,9 +7,9 @@ use egui::{
     self, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
     Response, Sense, Shape, Ui, Vec2,
 };
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub use builder::TreeViewBuilder;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash {}
 impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash {}

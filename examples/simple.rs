@@ -1,6 +1,7 @@
 #[path = "data.rs"]
 mod data;
 
+use egui::ThemePreference;
 use egui_ltreeview::TreeView;
 
 fn main() -> Result<(), eframe::Error> {
@@ -12,7 +13,11 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Egui_ltreeview simple example",
         options,
-        Box::new(|_| Ok(Box::<MyApp>::default())),
+        Box::new(|cc| {
+            cc.egui_ctx
+                .options_mut(|options| options.theme_preference = ThemePreference::Dark);
+            Ok(Box::<MyApp>::default())
+        }),
     )
 }
 
