@@ -1,6 +1,6 @@
 use egui::{
     emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Rangef, Rect,
-    Response, Shape, Stroke, Ui, Vec2,
+    Response, Shape, Stroke, Ui, UiBuilder, Vec2,
 };
 
 use crate::{Interaction, RowLayout, TreeViewData, TreeViewId, TreeViewSettings};
@@ -165,7 +165,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                     .spacing()
                     .icon_rectangles(ui.available_rect_before_wrap());
 
-                let res = ui.allocate_ui_at_rect(big_rect, |ui| {
+                let res = ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
                     let closer_interaction = state.interact(&ui.max_rect());
                     if closer_interaction.hovered {
                         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
@@ -199,7 +199,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                         let (_, big_rect) = ui
                             .spacing()
                             .icon_rectangles(ui.available_rect_before_wrap());
-                        ui.allocate_ui_at_rect(big_rect, |ui| {
+                        ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
                             ui.set_min_size(big_rect.size());
                             add_icon(ui);
                         })
@@ -252,8 +252,12 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
         let layer_id = LayerId::new(Order::Tooltip, drag_source_id);
 
         let background_rect = ui
-            .child_ui(ui.available_rect_before_wrap(), *ui.layout(), None)
-            .with_layer_id(layer_id, |ui| {
+            .new_child(
+                UiBuilder::new()
+                    .max_rect(ui.available_rect_before_wrap())
+                    .layout(*ui.layout()),
+            )
+            .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
                 let (row, _, _, _) = self.show_node(ui, state, settings);
@@ -277,7 +281,10 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
             let delta = -background_rect.min.to_vec2()
                 + pointer_pos.to_vec2()
                 + state.peristant.dragged.as_ref().unwrap().drag_row_offset;
-            ui.ctx().translate_layer(layer_id, delta);
+            if delta != Vec2::ZERO {
+                let transform = emath::TSTransform::from_translation(delta);
+                ui.ctx().transform_layer_shapes(layer_id, transform);
+            }
         }
 
         true
