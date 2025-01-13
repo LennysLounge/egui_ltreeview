@@ -7,18 +7,34 @@ use egui::{
     self, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
     Response, Sense, Shape, Ui, Vec2,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub use builder::TreeViewBuilder;
 
 pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash {}
 impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash {}
 
+#[cfg(feature = "persistence")]
+pub trait NodeId:
+    TreeViewId + Send + Sync + 'static + serde::de::DeserializeOwned + serde::Serialize
+{
+}
+#[cfg(feature = "persistence")]
+impl<T> NodeId for T where
+    T: TreeViewId + Send + Sync + 'static + serde::de::DeserializeOwned + serde::Serialize
+{
+}
+
+#[cfg(not(feature = "persistence"))]
+pub trait NodeId: TreeViewId + Send + Sync + 'static {}
+#[cfg(not(feature = "persistence"))]
+impl<T> NodeId for T where T: TreeViewId + Send + Sync + 'static {}
+
 /// Represents the state of the tree view.
 ///
 /// This holds which node is selected and the open/close
 /// state of the directories.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct TreeViewState<NodeIdType> {
     /// Id of the node that was selected.
     selected: Option<NodeIdType>,
@@ -94,7 +110,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
 
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
-    NodeIdType: Clone + Send + Sync + 'static + Serialize + DeserializeOwned,
+    NodeIdType: NodeId,
 {
     pub fn load(ui: &mut Ui, id: Id) -> Option<Self> {
         ui.data_mut(|d| d.get_persisted(id))
@@ -105,7 +121,8 @@ where
     }
 }
 /// State of the dragged node.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 struct DragState<NodeIdType> {
     /// Id of the dragged node.
     pub node_id: NodeIdType,
@@ -118,7 +135,8 @@ struct DragState<NodeIdType> {
     pub drag_valid: bool,
 }
 /// State of each node in the tree.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 struct NodeState<NodeIdType> {
     /// Id of this node.
     id: NodeIdType,
@@ -225,7 +243,7 @@ impl TreeView {
         build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
     ) -> TreeViewResponse<NodeIdType>
     where
-        NodeIdType: TreeViewId + Send + Sync + 'static + Serialize + DeserializeOwned,
+        NodeIdType: NodeId,
     {
         let id = self.id;
         let mut state = TreeViewState::load(ui, id).unwrap_or_default();
