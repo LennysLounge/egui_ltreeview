@@ -375,7 +375,7 @@ impl TreeView {
             if let Some((drag_state, (drop_id, position))) =
                 data.peristant.dragged.as_ref().zip(data.drop)
             {
-                if ui.ctx().input(|i| i.pointer.any_released()) {
+                if ui.ctx().input(|i| i.pointer.primary_released()) {
                     data.actions.push(Action::Move {
                         source: drag_state.node_id,
                         target: drop_id,

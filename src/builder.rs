@@ -253,14 +253,12 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         }
         // React to a dragging
         // An egui drag only starts after the pointer has moved but with that first movement
-        // the pointer may have moved to a different node. Instead we want to find out update
+        // the pointer may have moved to a different node. Instead we want to update
         // the drag state right when the priamry button was pressed.
         // We also want to have our own rules when a drag really becomes valid to avoid
         // graphical artifacts. Sometimes the user is a little fast with the mouse and
         // it creates the drag overlay when it really shouldn't have.
-        let primary_pressed = self
-            .ui
-            .input(|i| i.pointer.button_pressed(egui::PointerButton::Primary));
+        let primary_pressed = self.ui.input(|i| i.pointer.primary_pressed());
         if row_interaction.hovered && primary_pressed {
             let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
             self.data.peristant.dragged = Some(DragState {
@@ -275,7 +273,8 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         }
 
         // React to secondary clicks
-        if row_interaction.secondary_clicked {
+        if row_interaction.secondary_clicked && !self.data.drag_valid() {
+            self.data.peristant.dragged = None;
             self.data.peristant.secondary_selection = Some(node.id);
         }
         if self.data.is_secondary_selected(&node.id) {
@@ -304,9 +303,9 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
 
     fn do_drop_node(&mut self, node: &NodeBuilder<NodeIdType>, row: &Rect) {
         let Some(drop_quarter) = self
-            .data
-            .interaction_response
-            .hover_pos()
+            .ui
+            .ctx()
+            .pointer_latest_pos()
             .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
         else {
             return;
