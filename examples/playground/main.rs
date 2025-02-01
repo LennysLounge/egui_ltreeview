@@ -2,8 +2,10 @@ mod data;
 use std::env;
 
 use data::*;
-use egui::{Color32, DragValue, Id, Label, Layout, Response, Ui};
-use egui_ltreeview::{node::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, VLineStyle};
+use egui::{Color32, DragValue, Id, Label, Layout, Response, ThemePreference, Ui};
+use egui_ltreeview::{
+    node::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, TreeViewState, VLineStyle,
+};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -17,10 +19,17 @@ fn main() -> Result<(), eframe::Error> {
         "Egui_ltreeview example",
         options,
         Box::new(|cc| {
+            cc.egui_ctx.set_theme(ThemePreference::Dark);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::<MyApp>::default())
         }),
     )
+}
+
+enum ContextMenuActions {
+    Delete(Uuid),
+    AddLeaf(Uuid, Uuid),
+    AddDir(Uuid, Uuid),
 }
 
 struct MyApp {
@@ -99,7 +108,11 @@ impl eframe::App for MyApp {
 }
 
 fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
-    let response = TreeView::new(ui.make_persistent_id("Names tree view"))
+    let mut context_menu_actions = Vec::<ContextMenuActions>::new();
+    let tree_id = ui.make_persistent_id("Names tree view");
+    let mut state = TreeViewState::<Uuid>::load(ui, tree_id).unwrap_or_default();
+    state.set_selected(app.selected_node);
+    let response = TreeView::new(tree_id)
         .override_indent(app.settings.override_indent)
         .vline_style(app.settings.vline_style)
         .row_layout(app.settings.row_layout)
@@ -125,7 +138,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
         } else {
             0.0
         })
-        .show(ui, |mut builder| {
+        .show_state(ui, &mut state, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true));
             //builder.set_root_id(Uuid::default());
             builder.node(
@@ -139,9 +152,10 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                         ui.add(Label::new("Settings").selectable(false));
                     }),
             );
-            show_node(&mut builder, &app.tree);
+            show_node(&mut builder, &app.tree, &mut context_menu_actions);
             builder.close_dir();
         });
+    state.store(ui, tree_id);
     for action in response.actions.iter() {
         match action {
             Action::SetSelected(id) => app.selected_node = *id,
@@ -165,16 +179,53 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             egui::StrokeKind::Inside,
         );
     }
+    for action in context_menu_actions {
+        match action {
+            ContextMenuActions::Delete(uuid) => {
+                app.tree.remove(&uuid);
+            }
+            ContextMenuActions::AddLeaf(parent_uuid, source_uuid) => {
+                let leaf = Node::file("new file");
+                let id = *leaf.id();
+                _ = app.tree.insert(
+                    &parent_uuid,
+                    egui_ltreeview::DropPosition::After(source_uuid),
+                    leaf,
+                );
+                app.selected_node = Some(id);
+            }
+            ContextMenuActions::AddDir(parent_uuid, source_uuid) => {
+                let dir = Node::dir("new directory", vec![]);
+                let id = *dir.id();
+                _ = app.tree.insert(
+                    &parent_uuid,
+                    egui_ltreeview::DropPosition::After(source_uuid),
+                    dir,
+                );
+                app.selected_node = Some(id);
+            }
+        }
+    }
+
     response.response
 }
 
-fn show_node(builder: &mut TreeViewBuilder<Uuid>, node: &Node) {
+fn show_node(
+    builder: &mut TreeViewBuilder<Uuid>,
+    node: &Node,
+    actions: &mut Vec<ContextMenuActions>,
+) {
     match node {
-        Node::Directory(dir) => show_dir(builder, dir),
-        Node::File(file) => show_file(builder, file),
+        Node::Directory(dir) => show_dir(builder, dir, actions),
+        Node::File(file) => show_file(builder, file, actions),
     }
 }
-fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
+fn show_dir(
+    builder: &mut TreeViewBuilder<Uuid>,
+    dir: &Directory,
+    actions: &mut Vec<ContextMenuActions>,
+) {
+    let parent_node = builder.parent_id().expect("All nodes should have a parent");
     let mut node = NodeBuilder::dir(dir.id)
         .label(|ui| {
             ui.add(Label::new(&dir.name).selectable(false));
@@ -182,6 +233,20 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
         .context_menu(|ui| {
             ui.label("dir:");
             ui.label(&dir.name);
+            ui.separator();
+            if ui.button("delete").clicked() {
+                actions.push(ContextMenuActions::Delete(dir.id));
+                ui.close_menu();
+            }
+            ui.separator();
+            if ui.button("new file").clicked() {
+                actions.push(ContextMenuActions::AddLeaf(parent_node, dir.id));
+                ui.close_menu();
+            }
+            if ui.button("new directory").clicked() {
+                actions.push(ContextMenuActions::AddDir(parent_node, dir.id));
+                ui.close_menu();
+            }
         });
     if dir.icon {
         node = node.icon(|ui| {
@@ -211,12 +276,17 @@ fn show_dir(builder: &mut TreeViewBuilder<Uuid>, dir: &Directory) {
     builder.node(node);
 
     for node in dir.children.iter() {
-        show_node(builder, node);
+        show_node(builder, node, actions);
     }
 
     builder.close_dir();
 }
-fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
+fn show_file(
+    builder: &mut TreeViewBuilder<Uuid>,
+    file: &File,
+    actions: &mut Vec<ContextMenuActions>,
+) {
+    let parent_node = builder.parent_id().expect("All nodes should have a parent");
     let mut node = NodeBuilder::leaf(file.id)
         .label(|ui| {
             ui.add(Label::new(&file.name).selectable(false));
@@ -224,6 +294,19 @@ fn show_file(builder: &mut TreeViewBuilder<Uuid>, file: &File) {
         .context_menu(|ui| {
             ui.label("file:");
             ui.label(&file.name);
+            if ui.button("delete").clicked() {
+                actions.push(ContextMenuActions::Delete(file.id));
+                ui.close_menu();
+            }
+            ui.separator();
+            if ui.button("new file").clicked() {
+                actions.push(ContextMenuActions::AddLeaf(parent_node, file.id));
+                ui.close_menu();
+            }
+            if ui.button("new directory").clicked() {
+                actions.push(ContextMenuActions::AddDir(parent_node, file.id));
+                ui.close_menu();
+            }
         });
     if file.icon {
         node = node.icon(|ui| {
