@@ -579,22 +579,6 @@ struct Interaction {
     pub drag_started: bool,
 }
 
-/// Contains information about a drag and drop that the
-/// tree view produced.
-#[derive(Debug)]
-pub struct DragDropAction<NodeIdType> {
-    /// Id of the dragged node.
-    pub source: NodeIdType,
-    /// Id of the node where the dragged node is added to.
-    pub target: NodeIdType,
-    /// Position of the dragged node in the drop node.
-    pub position: DropPosition<NodeIdType>,
-    /// Wether or not the dnd is just hovering or should be commited.  
-    /// `true` -> The drag and drop should be commited.  
-    /// `false` -> The drag and drop is hovering.
-    pub commit: bool,
-}
-
 /// Where a dragged item should be dropped to in a container.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DropPosition<NodeIdType> {
