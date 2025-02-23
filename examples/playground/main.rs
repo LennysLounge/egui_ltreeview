@@ -4,7 +4,8 @@ use std::env;
 use data::*;
 use egui::{Color32, DragValue, Id, Label, Layout, Response, ThemePreference, Ui};
 use egui_ltreeview::{
-    node::NodeBuilder, Action, RowLayout, TreeView, TreeViewBuilder, TreeViewState, VLineStyle,
+    node::NodeBuilder, Action, DropPosition, RowLayout, TreeView, TreeViewBuilder, TreeViewState,
+    IndentHintStyle,
 };
 use uuid::Uuid;
 
@@ -12,7 +13,6 @@ fn main() -> Result<(), eframe::Error> {
     env::set_var("RUST_BACKTRACE", "1");
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
-        //viewport: egui::ViewportBuilder::default().with_inner_size([300.0, 500.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -26,17 +26,11 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-enum ContextMenuActions {
-    Delete(Uuid),
-    AddLeaf(Uuid, Uuid),
-    AddDir(Uuid, Uuid),
-}
-
 struct MyApp {
     tree: Node,
     settings_id: Uuid,
-    selected_node: Option<Uuid>,
     settings: Settings,
+    tree_view_state: TreeViewState<Uuid>,
 }
 
 #[derive(Default)]
@@ -44,7 +38,7 @@ struct Settings {
     layout_h_justify: bool,
     layout_v_justify: bool,
     override_indent: Option<f32>,
-    vline_style: VLineStyle,
+    indent_hint: IndentHintStyle,
     row_layout: RowLayout,
     fill_space_horizontal: bool,
     fill_space_vertical: bool,
@@ -59,12 +53,17 @@ struct Settings {
     show_size: bool,
 }
 
+enum ContextMenuActions {
+    Delete(Uuid),
+    AddLeaf(Uuid, DropPosition<Uuid>),
+    AddDir(Uuid, DropPosition<Uuid>),
+}
+
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             tree: make_tree(),
             settings_id: Uuid::new_v4(),
-            selected_node: None,
             settings: Settings {
                 row_layout: RowLayout::CompactAlignedLables,
                 fill_space_horizontal: true,
@@ -74,6 +73,7 @@ impl Default for MyApp {
                 show_size: true,
                 ..Default::default()
             },
+            tree_view_state: TreeViewState::default(),
         }
     }
 }
@@ -94,11 +94,11 @@ impl eframe::App for MyApp {
                 );
             });
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(selected_node) = self.selected_node.as_ref() {
-                if selected_node == &self.settings_id {
+            if let Some(selected_node) = self.tree_view_state.selected() {
+                if selected_node == self.settings_id {
                     show_settings(ui, &mut self.settings);
                 } else {
-                    self.tree.find_mut(selected_node, &mut |node| {
+                    self.tree.find_mut(&selected_node, &mut |node| {
                         show_node_content(ui, node);
                     });
                 }
@@ -109,12 +109,9 @@ impl eframe::App for MyApp {
 
 fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
     let mut context_menu_actions = Vec::<ContextMenuActions>::new();
-    let tree_id = ui.make_persistent_id("Names tree view");
-    let mut state = TreeViewState::<Uuid>::load(ui, tree_id).unwrap_or_default();
-    state.set_selected(app.selected_node);
-    let response = TreeView::new(tree_id)
+    let (response, actions) = TreeView::new(ui.make_persistent_id("Names tree view"))
         .override_indent(app.settings.override_indent)
-        .vline_style(app.settings.vline_style)
+        .indent_hint_style(app.settings.indent_hint)
         .row_layout(app.settings.row_layout)
         .fill_space_horizontal(app.settings.fill_space_horizontal)
         .fill_space_vertical(app.settings.fill_space_vertical)
@@ -138,9 +135,8 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
         } else {
             0.0
         })
-        .show_state(ui, &mut state, |mut builder| {
+        .show_state(ui, &mut app.tree_view_state, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true));
-            //builder.set_root_id(Uuid::default());
             builder.node(
                 NodeBuilder::leaf(app.settings_id)
                     .icon(|ui| {
@@ -155,25 +151,21 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             show_node(&mut builder, &app.tree, &mut context_menu_actions);
             builder.close_dir();
         });
-    state.store(ui, tree_id);
-    for action in response.actions.iter() {
+
+    for action in actions.iter() {
         match action {
-            Action::SetSelected(id) => app.selected_node = *id,
-            Action::Move {
-                source,
-                target,
-                position,
-            } => {
-                if let Some(source) = app.tree.remove(source) {
-                    _ = app.tree.insert(target, *position, source);
+            Action::Move(dnd) => {
+                if let Some(source) = app.tree.remove(&dnd.source) {
+                    _ = app.tree.insert(&dnd.target, dnd.position, source);
                 }
             }
-            Action::Drag { .. } => (),
+            Action::SetSelected(_) => {}
+            Action::Drag(_dnd) => {}
         }
     }
     if app.settings.show_size {
         ui.painter().rect_stroke(
-            response.response.rect,
+            response.rect,
             0.0,
             (1.0, Color32::BLACK),
             egui::StrokeKind::Inside,
@@ -184,30 +176,24 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             ContextMenuActions::Delete(uuid) => {
                 app.tree.remove(&uuid);
             }
-            ContextMenuActions::AddLeaf(parent_uuid, source_uuid) => {
+            ContextMenuActions::AddLeaf(parent_uuid, position) => {
                 let leaf = Node::file("new file");
                 let id = *leaf.id();
-                _ = app.tree.insert(
-                    &parent_uuid,
-                    egui_ltreeview::DropPosition::After(source_uuid),
-                    leaf,
-                );
-                app.selected_node = Some(id);
+                _ = app.tree.insert(&parent_uuid, position, leaf);
+                app.tree_view_state.set_selected(Some(id));
+                app.tree_view_state.expand_node(parent_uuid);
             }
-            ContextMenuActions::AddDir(parent_uuid, source_uuid) => {
+            ContextMenuActions::AddDir(parent_uuid, parent) => {
                 let dir = Node::dir("new directory", vec![]);
                 let id = *dir.id();
-                _ = app.tree.insert(
-                    &parent_uuid,
-                    egui_ltreeview::DropPosition::After(source_uuid),
-                    dir,
-                );
-                app.selected_node = Some(id);
+                _ = app.tree.insert(&parent_uuid, parent, dir);
+                app.tree_view_state.set_selected(Some(id));
+                app.tree_view_state.expand_node(parent_uuid);
             }
         }
     }
 
-    response.response
+    response
 }
 
 fn show_node(
@@ -225,11 +211,8 @@ fn show_dir(
     dir: &Directory,
     actions: &mut Vec<ContextMenuActions>,
 ) {
-    let parent_node = builder.parent_id().expect("All nodes should have a parent");
     let mut node = NodeBuilder::dir(dir.id)
-        .label(|ui| {
-            ui.add(Label::new(&dir.name).selectable(false));
-        })
+        .label_text(&dir.name)
         .context_menu(|ui| {
             ui.label("dir:");
             ui.label(&dir.name);
@@ -240,11 +223,11 @@ fn show_dir(
             }
             ui.separator();
             if ui.button("new file").clicked() {
-                actions.push(ContextMenuActions::AddLeaf(parent_node, dir.id));
+                actions.push(ContextMenuActions::AddLeaf(dir.id, DropPosition::Last));
                 ui.close_menu();
             }
             if ui.button("new directory").clicked() {
-                actions.push(ContextMenuActions::AddDir(parent_node, dir.id));
+                actions.push(ContextMenuActions::AddDir(dir.id, DropPosition::Last));
                 ui.close_menu();
             }
         });
@@ -288,9 +271,7 @@ fn show_file(
 ) {
     let parent_node = builder.parent_id().expect("All nodes should have a parent");
     let mut node = NodeBuilder::leaf(file.id)
-        .label(|ui| {
-            ui.add(Label::new(&file.name).selectable(false));
-        })
+        .label_text(&file.name)
         .context_menu(|ui| {
             ui.label("file:");
             ui.label(&file.name);
@@ -300,11 +281,11 @@ fn show_file(
             }
             ui.separator();
             if ui.button("new file").clicked() {
-                actions.push(ContextMenuActions::AddLeaf(parent_node, file.id));
+                actions.push(ContextMenuActions::AddLeaf(parent_node, DropPosition::After(file.id)));
                 ui.close_menu();
             }
             if ui.button("new directory").clicked() {
-                actions.push(ContextMenuActions::AddDir(parent_node, file.id));
+                actions.push(ContextMenuActions::AddDir(parent_node, DropPosition::After(file.id)));
                 ui.close_menu();
             }
         });
@@ -378,17 +359,17 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         });
         ui.end_row();
 
-        ui.label("Vline style");
-        egui::ComboBox::from_id_salt("vline style combo box")
-            .selected_text(match settings.vline_style {
-                VLineStyle::None => "None",
-                VLineStyle::VLine => "VLine",
-                VLineStyle::Hook => "Hook",
+        ui.label("Indent hint");
+        egui::ComboBox::from_id_salt("indent hint style combo box")
+            .selected_text(match settings.indent_hint {
+                IndentHintStyle::None => "None",
+                IndentHintStyle::Line => "Line",
+                IndentHintStyle::Hook => "Hook",
             })
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut settings.vline_style, VLineStyle::None, "None");
-                ui.selectable_value(&mut settings.vline_style, VLineStyle::VLine, "VLine");
-                ui.selectable_value(&mut settings.vline_style, VLineStyle::Hook, "Hook");
+                ui.selectable_value(&mut settings.indent_hint, IndentHintStyle::None, "None");
+                ui.selectable_value(&mut settings.indent_hint, IndentHintStyle::Line, "Line");
+                ui.selectable_value(&mut settings.indent_hint, IndentHintStyle::Hook, "Hook");
             });
         ui.end_row();
 

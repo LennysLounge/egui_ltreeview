@@ -6,7 +6,7 @@ use egui::{
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, NodeState, TreeViewData, TreeViewId, TreeViewSettings, VLineStyle,
+    DragState, DropPosition, NodeState, TreeViewData, TreeViewId, TreeViewSettings, IndentHintStyle,
 };
 
 #[derive(Clone)]
@@ -104,17 +104,17 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             }
         }
 
-        // Draw vline
+        // Draw indent hint
         if current_dir.is_open {
             let top = current_dir.icon_rect.center_bottom() + vec2(0.0, 2.0);
 
-            let bottom = match self.settings.vline_style {
-                VLineStyle::None => top,
-                VLineStyle::VLine => pos2(
+            let bottom = match self.settings.indent_hint_style {
+                IndentHintStyle::None => top,
+                IndentHintStyle::Line => pos2(
                     top.x,
                     self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
                 ),
-                VLineStyle::Hook => pos2(
+                IndentHintStyle::Hook => pos2(
                     top.x,
                     current_dir
                         .child_node_positions
@@ -127,7 +127,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 [top, bottom],
                 self.ui.visuals().widgets.noninteractive.bg_stroke,
             );
-            if matches!(self.settings.vline_style, VLineStyle::Hook) {
+            if matches!(self.settings.indent_hint_style, IndentHintStyle::Hook) {
                 for child_pos in current_dir.child_node_positions.iter() {
                     let p1 = pos2(top.x, child_pos.y);
                     let p2 = *child_pos + vec2(-2.0, 0.0);

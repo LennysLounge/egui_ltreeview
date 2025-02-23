@@ -36,13 +36,13 @@ impl eframe::App for MyApp {
                 builder.node(
                     NodeBuilder::dir(1)
                         .flatten(true)
-                        .label(|ui| _ = ui.label("Foo")),
+                        .label_text("Foo")
                 );
                 builder.leaf(2, "Ava");
                 builder.node(
                     NodeBuilder::dir(3)
                         .flatten(true)
-                        .label(|ui| _ = ui.label("Bar")),
+                        .label_text("Bar")
                 );
                 builder.leaf(4, "Benjamin");
                 builder.leaf(5, "Charlotte");
@@ -53,12 +53,11 @@ impl eframe::App for MyApp {
                 builder.node(
                     NodeBuilder::dir(8)
                         .flatten(true)
-                        .label(|ui| _ = ui.label("Baz")),
+                        .label_text("Baz")
                 );
                 builder.leaf(9, "Finn");
                 builder.leaf(10, "Grayson");
                 builder.close_dir();
-
                 builder.close_dir();
             });
         });

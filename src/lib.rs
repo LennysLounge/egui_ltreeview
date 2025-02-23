@@ -72,19 +72,25 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
 
     /// Expand all parent nodes of the node with the given id.
     pub fn expand_parents_of(&mut self, id: NodeIdType, include_self: bool) {
-        let mut current_node = if include_self {
-            Some(id)
+        if include_self {
+            self.expand_node(id);
         } else {
-            self.node_state_of(&id)
-                .and_then(|node_state| node_state.parent_id)
+            if let Some(parent_id) = self.parent_id_of(id){
+                self.expand_node(parent_id);
+            }
         };
+    }
 
-        while let Some(node_id) = &current_node {
-            if let Some(node_state) = self.node_state_of_mut(node_id) {
+    pub fn expand_node(&mut self, mut id: NodeIdType){
+        loop{
+            if let Some(node_state) = self.node_state_of_mut(&id) {
                 node_state.open = true;
-                current_node = node_state.parent_id;
-            } else {
-                current_node = None;
+                id = match node_state.parent_id{
+                    Some(id) => id,
+                    None => break,
+                }
+            }else{
+                break;
             }
         }
     }
@@ -169,9 +175,9 @@ impl TreeView {
         self
     }
 
-    /// Set the style of the vline to show the indentation level.
-    pub fn vline_style(mut self, style: VLineStyle) -> Self {
-        self.settings.vline_style = style;
+    /// Set the style of the indent hint to show the indentation level.
+    pub fn indent_hint_style(mut self, style: IndentHintStyle) -> Self {
+        self.settings.indent_hint_style = style;
         self
     }
 
@@ -241,7 +247,7 @@ impl TreeView {
         self,
         ui: &mut Ui,
         build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
-    ) -> TreeViewResponse<NodeIdType>
+    ) -> (Response, Vec<Action<NodeIdType>>)
     where
         NodeIdType: NodeId,
     {
@@ -261,7 +267,7 @@ impl TreeView {
         ui: &mut Ui,
         state: &mut TreeViewState<NodeIdType>,
         mut build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
-    ) -> TreeViewResponse<NodeIdType>
+    ) -> (Response, Vec<Action<NodeIdType>>)
     where
         NodeIdType: TreeViewId + Send + Sync + 'static,
     {
@@ -376,17 +382,19 @@ impl TreeView {
                 data.peristant.dragged.as_ref().zip(data.drop)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
-                    data.actions.push(Action::Move {
+                    data.actions.push(Action::Move(DragAndDrop{
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
-                    })
+                        drop_marker_idx: data.drop_marker_idx,
+                    }))
                 } else {
-                    data.actions.push(Action::Drag {
+                    data.actions.push(Action::Drag(DragAndDrop{
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
-                    })
+                        drop_marker_idx: data.drop_marker_idx,
+                    }))
                 }
             }
         }
@@ -404,11 +412,10 @@ impl TreeView {
         // Remember the size of the tree for next frame.
         data.peristant.size = used_rect.size();
 
-        TreeViewResponse {
-            response: data.interaction_response,
-            drop_marker_idx: data.drop_marker_idx,
-            actions: data.actions,
-        }
+        (
+            data.interaction_response,
+            data.actions,
+        )
     }
 }
 
@@ -590,7 +597,7 @@ pub enum DropPosition<NodeIdType> {
 
 struct TreeViewSettings {
     override_indent: Option<f32>,
-    vline_style: VLineStyle,
+    indent_hint_style: IndentHintStyle,
     row_layout: RowLayout,
     max_width: f32,
     max_height: f32,
@@ -604,7 +611,7 @@ impl Default for TreeViewSettings {
     fn default() -> Self {
         Self {
             override_indent: None,
-            vline_style: Default::default(),
+            indent_hint_style: Default::default(),
             row_layout: Default::default(),
             max_width: f32::INFINITY,
             max_height: f32::INFINITY,
@@ -618,12 +625,12 @@ impl Default for TreeViewSettings {
 
 /// Style of the vertical line to show the indentation level.
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
-pub enum VLineStyle {
-    /// No vline is shown.
+pub enum IndentHintStyle {
+    /// No indent hint is shown.
     None,
     /// A single vertical line is show for the full hight of the directory.
-    VLine,
-    /// A vline is show with horizontal hooks to the child nodes of the directory.
+    Line,
+    /// A vertical line is show with horizontal hooks to the child nodes of the directory.
     #[default]
     Hook,
 }
@@ -661,30 +668,26 @@ pub enum Action<NodeIdType> {
     /// Set the selected node to be this.
     SetSelected(Option<NodeIdType>),
     /// Move a node from one place to another.
-    Move {
-        source: NodeIdType,
-        target: NodeIdType,
-        position: DropPosition<NodeIdType>,
-    },
+    Move(DragAndDrop<NodeIdType>),
     /// An inprocess drag and drop action where the node
     /// is currently dragged but not yet dropped.
-    Drag {
-        source: NodeIdType,
-        target: NodeIdType,
-        position: DropPosition<NodeIdType>,
-    },
+    Drag(DragAndDrop<NodeIdType>),
 }
 
-pub struct TreeViewResponse<NodeIdType> {
-    pub response: Response,
-    /// Actions this tree view would like to perform.
-    pub actions: Vec<Action<NodeIdType>>,
-    // /// If a row was dragged in the tree this will contain information about
-    // /// who was dragged to who and at what position.
-    // pub drag_drop_action: Option<DragDropAction<NodeIdType>>,
+/// Information about drag and drop action that is currently
+/// happening on the tree.
+#[derive(Clone)]
+pub struct DragAndDrop<NodeIdType>{
+    /// The node that is beeing dragged
+    pub source: NodeIdType,
+    /// The node where the dragged node is dropped on.
+    pub target: NodeIdType,
+    /// The position where the dragged node is dropped inside the target node.
+    pub position: DropPosition<NodeIdType>,
+    /// The shape index of the drop marker.
     drop_marker_idx: ShapeIdx,
 }
-impl<NodeIdType: TreeViewId> TreeViewResponse<NodeIdType> {
+impl <NodeIdType> DragAndDrop<NodeIdType>{
     /// Remove the drop marker from the tree view.
     ///
     /// Use this to remove the drop marker if a proposed drag and drop action

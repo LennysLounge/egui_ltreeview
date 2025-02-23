@@ -1,6 +1,5 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, LayerId, Order, Rangef, Rect,
-    Response, Shape, Stroke, Ui, UiBuilder, Vec2,
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Order, Rangef, Rect, Response, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText
 };
 
 use crate::{Interaction, RowLayout, TreeViewData, TreeViewId, TreeViewSettings};
@@ -103,6 +102,16 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     ) -> NodeBuilder<'add_ui, NodeIdType> {
         self.label = Some(Box::new(add_label));
         self
+    }
+
+    pub fn label_text(
+        self,
+        text: impl Into<WidgetText> + 'add_ui,
+    ) -> Self{
+        let widget_text = text.into();
+        self.label(move |ui|{
+            ui.add(Label::new(widget_text.clone()).selectable(false));
+        })
     }
 
     /// Add a context menu to this node.
