@@ -266,9 +266,10 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                     background_position,
                     epaint::RectShape::new(
                         row,
-                        ui.visuals().widgets.active.rounding,
+                        ui.visuals().widgets.active.corner_radius,
                         ui.visuals().selection.bg_fill.linear_multiply(0.4),
                         Stroke::NONE,
+                        egui::StrokeKind::Inside,
                     ),
                 );
                 row

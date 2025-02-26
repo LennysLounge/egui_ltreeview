@@ -95,9 +95,10 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                     self.data.drop_marker_idx,
                     RectShape::new(
                         rect,
-                        self.ui.visuals().widgets.active.rounding,
+                        self.ui.visuals().widgets.active.corner_radius,
                         self.ui.visuals().selection.bg_fill.linear_multiply(0.5),
                         Stroke::NONE,
+                        egui::StrokeKind::Inside,
                     ),
                 );
             }
@@ -234,7 +235,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 self.background_idx,
                 epaint::RectShape::new(
                     row,
-                    self.ui.visuals().widgets.active.rounding,
+                    self.ui.visuals().widgets.active.corner_radius,
                     if self.data.has_focus {
                         self.ui.visuals().selection.bg_fill
                     } else {
@@ -246,6 +247,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                             .linear_multiply(0.3)
                     },
                     Stroke::NONE,
+                    egui::StrokeKind::Inside,
                 ),
             );
         }
@@ -284,9 +286,10 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                     self.secondary_selection_idx,
                     epaint::RectShape::new(
                         row,
-                        self.ui.visuals().widgets.active.rounding,
+                        self.ui.visuals().widgets.active.corner_radius,
                         egui::Color32::TRANSPARENT,
                         self.ui.visuals().widgets.inactive.fg_stroke,
+                        egui::StrokeKind::Inside,
                     ),
                 );
             }
@@ -415,7 +418,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
 
         epaint::RectShape::new(
             Rect::from_x_y_ranges(interaction.x_range(), drop_marker),
-            self.ui.visuals().widgets.active.rounding,
+            self.ui.visuals().widgets.active.corner_radius,
             self.ui
                 .style()
                 .visuals
@@ -423,6 +426,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 .bg_fill
                 .linear_multiply(0.6),
             Stroke::NONE,
+            egui::StrokeKind::Inside,
         )
         .into()
     }
@@ -435,7 +439,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         }
     }
     fn parent_dir_is_open(&self) -> bool {
-        self.parent_dir().map_or(true, |dir| dir.is_open)
+        self.parent_dir().is_none_or(|dir| dir.is_open)
     }
 
     fn parent_dir_drop_forbidden(&self) -> bool {

@@ -158,8 +158,12 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
         }
     }
     if app.settings.show_size {
-        ui.painter()
-            .rect_stroke(response.response.rect, 0.0, (1.0, Color32::BLACK));
+        ui.painter().rect_stroke(
+            response.response.rect,
+            0.0,
+            (1.0, Color32::BLACK),
+            egui::StrokeKind::Inside,
+        );
     }
     response.response
 }
