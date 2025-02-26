@@ -37,7 +37,7 @@ impl<T> NodeId for T where T: TreeViewId + Send + Sync + 'static {}
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct TreeViewState<NodeIdType> {
     /// Id of the node that was selected.
-    selected: Option<NodeIdType>,
+    selected: Vec<NodeIdType>,
     /// Information about the dragged node.
     dragged: Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
@@ -59,37 +59,34 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     }
 }
 impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
-    /// Return the selected node if any is selected.
-    pub fn selected(&self) -> Option<NodeIdType> {
-        self.selected
+    /// Return the list of selected nodes
+    pub fn selected(&self) -> &Vec<NodeIdType> {
+        &self.selected
     }
 
-    /// Set the selected node for this tree.
-    /// If [`None`] then no node is selected.
-    pub fn set_selected(&mut self, selected: Option<NodeIdType>) {
+    /// Set which nodes are selected in the tree
+    pub fn set_selected(&mut self, selected: Vec<NodeIdType>) {
         self.selected = selected;
     }
 
     /// Expand all parent nodes of the node with the given id.
-    pub fn expand_parents_of(&mut self, id: NodeIdType, include_self: bool) {
-        if include_self {
-            self.expand_node(id);
-        } else {
-            if let Some(parent_id) = self.parent_id_of(id){
-                self.expand_node(parent_id);
-            }
-        };
+    pub fn expand_parents_of(&mut self, id: NodeIdType) {
+        if let Some(parent_id) = self.parent_id_of(id) {
+            self.expand_node(parent_id);
+        }
     }
 
-    pub fn expand_node(&mut self, mut id: NodeIdType){
-        loop{
+    /// Expand the node and all its parent nodes.
+    /// Effectively this makes the node visible in the tree.
+    pub fn expand_node(&mut self, mut id: NodeIdType) {
+        loop {
             if let Some(node_state) = self.node_state_of_mut(&id) {
                 node_state.open = true;
-                id = match node_state.parent_id{
+                id = match node_state.parent_id {
                     Some(id) => id,
                     None => break,
                 }
-            }else{
+            } else {
                 break;
             }
         }
@@ -296,7 +293,7 @@ impl TreeView {
 
         // Create the tree state by loading the previous frame and setting up the state.
         let mut data = TreeViewData::new(ui, state, self.id);
-        let prev_selection = data.peristant.selected;
+        let prev_selection = data.peristant.selected.clone();
 
         // Calculate the desired size of the tree view widget.
         let size = vec2(
@@ -346,13 +343,15 @@ impl TreeView {
             // If the widget is focused but no node is selected we want to select any node
             // to allow navigating throught the tree.
             // In case we gain focus from a drag action we select the dragged node directly.
-            if data.peristant.selected.is_none() {
+            if data.peristant.selected.is_empty() {
+                // todo: fix this
                 data.peristant.selected = data
                     .peristant
                     .dragged
                     .as_ref()
-                    .map(|drag_state| drag_state.node_id)
-                    .or(data.peristant.node_states.first().map(|n| n.id));
+                    .map(|drag_state| vec![drag_state.node_id])
+                    .or(data.peristant.node_states.first().map(|n| vec![n.id]))
+                    .unwrap();
             }
             ui.input(|i| {
                 for event in i.events.iter() {
@@ -382,14 +381,14 @@ impl TreeView {
                 data.peristant.dragged.as_ref().zip(data.drop)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
-                    data.actions.push(Action::Move(DragAndDrop{
+                    data.actions.push(Action::Move(DragAndDrop {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
                         drop_marker_idx: data.drop_marker_idx,
                     }))
                 } else {
-                    data.actions.push(Action::Drag(DragAndDrop{
+                    data.actions.push(Action::Drag(DragAndDrop {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
@@ -401,7 +400,7 @@ impl TreeView {
         // Create a selection action.
         if data.peristant.selected != prev_selection {
             data.actions
-                .push(Action::SetSelected(data.peristant.selected));
+                .push(Action::SetSelected(data.peristant.selected.clone()));
         }
 
         // Reset the drag state.
@@ -412,71 +411,87 @@ impl TreeView {
         // Remember the size of the tree for next frame.
         data.peristant.size = used_rect.size();
 
-        (
-            data.interaction_response,
-            data.actions,
-        )
+        (data.interaction_response, data.actions)
     }
 }
 
 fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, key: &Key) {
-    let Some(selected_id) = &state.selected else {
+    if state.selected.is_empty() {
         return;
-    };
-    let Some(selected_index) = state
-        .node_states
-        .iter()
-        .position(|ns| &ns.id == selected_id)
-    else {
-        return;
-    };
-    let node_state = &mut state.node_states[selected_index];
+    }
+
+    let first_selected_node_index = state
+        .selected
+        .first()
+        .and_then(|first_selected_node| {
+            state
+                .node_states
+                .iter()
+                .position(|ns| &ns.id == first_selected_node)
+        })
+        .expect("List is not empty to this must exists");
+    let last_selected_node_index = state
+        .selected
+        .last()
+        .and_then(|last_selected_node| {
+            state
+                .node_states
+                .iter()
+                .position(|ns| &ns.id == last_selected_node)
+        })
+        .expect("List is not empty to this must exists");
 
     match key {
         Key::ArrowUp => {
-            if selected_index > 0 {
+            if first_selected_node_index > 0 {
                 if let Some(node) =
                     // Search for previous visible node.
-                    state.node_states[0..selected_index]
+                    state.node_states[0..first_selected_node_index]
                         .iter()
                         .rev()
                         .find(|node| node.visible)
                 {
-                    state.selected = Some(node.id);
+                    state.selected = vec![node.id];
                 }
             }
         }
         Key::ArrowDown => {
-            if selected_index < state.node_states.len() - 1 {
-                // Search for previous visible node.
-                if let Some(node) = state.node_states[(selected_index + 1)..]
+            if last_selected_node_index < state.node_states.len() - 1 {
+                // Search for next visible node.
+                if let Some(node) = state.node_states[(last_selected_node_index + 1)..]
                     .iter()
                     .find(|node| node.visible)
                 {
-                    state.selected = Some(node.id);
+                    state.selected = vec![node.id];
                 }
             }
         }
         Key::ArrowLeft => {
-            if node_state.open {
-                node_state.open = false;
-            } else if node_state.parent_id.is_some() {
-                state.selected = node_state.parent_id;
+            if state.selected.len() == 1{
+                let node_state = &mut state.node_states[first_selected_node_index];
+                if node_state.open {
+                    node_state.open = false;
+                } else if let Some(parent_id) = node_state.parent_id {
+                    state.selected = vec![parent_id];
+                }
             }
         }
         Key::ArrowRight => {
-            if node_state.open {
-                if selected_index < state.node_states.len() - 1 {
-                    // Search for previous visible node.
-                    if let Some(node) = state.node_states[(selected_index + 1)..]
-                        .iter()
-                        .find(|node| node.visible)
-                    {
-                        state.selected = Some(node.id);
+            if state.selected.len() == 1{
+                let node_state = &mut state.node_states[first_selected_node_index];
+                if node_state.open {
+                    if first_selected_node_index < state.node_states.len() - 1 {
+                        // Search for next visible node.
+                        if let Some(node) = state.node_states[(first_selected_node_index + 1)..]
+                            .iter()
+                            .find(|node| node.visible)
+                        {
+                            state.selected = vec![node.id];
+                        }
                     }
+                } else {
+                    node_state.open = true;
                 }
-            } else {
-                node_state.open = true;
             }
         }
         _ => (),
@@ -567,7 +582,7 @@ impl<NodeIdType: TreeViewId> TreeViewData<'_, NodeIdType> {
     }
 
     pub fn is_selected(&self, id: &NodeIdType) -> bool {
-        self.peristant.selected.as_ref().is_some_and(|n| n == id)
+        self.peristant.selected.contains(id)
     }
 
     pub fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
@@ -666,7 +681,7 @@ pub enum RowLayout {
 #[derive(Clone)]
 pub enum Action<NodeIdType> {
     /// Set the selected node to be this.
-    SetSelected(Option<NodeIdType>),
+    SetSelected(Vec<NodeIdType>),
     /// Move a node from one place to another.
     Move(DragAndDrop<NodeIdType>),
     /// An inprocess drag and drop action where the node
@@ -677,7 +692,7 @@ pub enum Action<NodeIdType> {
 /// Information about drag and drop action that is currently
 /// happening on the tree.
 #[derive(Clone)]
-pub struct DragAndDrop<NodeIdType>{
+pub struct DragAndDrop<NodeIdType> {
     /// The node that is beeing dragged
     pub source: NodeIdType,
     /// The node where the dragged node is dropped on.
@@ -687,7 +702,7 @@ pub struct DragAndDrop<NodeIdType>{
     /// The shape index of the drop marker.
     drop_marker_idx: ShapeIdx,
 }
-impl <NodeIdType> DragAndDrop<NodeIdType>{
+impl<NodeIdType> DragAndDrop<NodeIdType> {
     /// Remove the drop marker from the tree view.
     ///
     /// Use this to remove the drop marker if a proposed drag and drop action

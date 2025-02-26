@@ -165,7 +165,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 let closer_interaction = self.data.interact(&closer);
                 if closer_interaction.clicked {
                     open = !open;
-                    self.data.peristant.selected = Some(node.id);
+                    self.data.peristant.selected = vec![node.id];
                 }
             }
 
@@ -228,7 +228,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
 
         // React to primary clicking
         if row_interaction.clicked {
-            self.data.peristant.selected = Some(node.id);
+            self.data.peristant.selected = vec![node.id];
         }
         if self.data.is_selected(&node.id) {
             self.ui.painter().set(

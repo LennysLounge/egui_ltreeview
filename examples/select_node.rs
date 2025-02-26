@@ -66,10 +66,10 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.checkbox(&mut self.should_open_dirs, "Should open directories");
             if ui.button("select next").clicked() {
-                let selected_index = (self.tree.selected().unwrap_or(0) + 1) % 11;
-                self.tree.set_selected(Some(selected_index));
+                let selected_index = (self.tree.selected().last().unwrap_or(&0) + 1) % 11;
+                self.tree.set_selected(vec![selected_index]);
                 if self.should_open_dirs {
-                    self.tree.expand_parents_of(selected_index, true);
+                    self.tree.expand_node(selected_index);
                 }
             }
         });

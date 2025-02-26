@@ -94,13 +94,17 @@ impl eframe::App for MyApp {
                 );
             });
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(selected_node) = self.tree_view_state.selected() {
-                if selected_node == self.settings_id {
-                    show_settings(ui, &mut self.settings);
-                } else {
-                    self.tree.find_mut(&selected_node, &mut |node| {
-                        show_node_content(ui, node);
-                    });
+            if self.tree_view_state.selected().len() > 1{
+                ui.label("Multiple nodes selected");
+            }else{
+                if let Some(selected_node) = self.tree_view_state.selected().first() {
+                    if *selected_node == self.settings_id {
+                        show_settings(ui, &mut self.settings);
+                    } else {
+                        self.tree.find_mut(selected_node, &mut |node| {
+                            show_node_content(ui, node);
+                        });
+                    }
                 }
             }
         });
@@ -180,14 +184,14 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                 let leaf = Node::file("new file");
                 let id = *leaf.id();
                 _ = app.tree.insert(&parent_uuid, position, leaf);
-                app.tree_view_state.set_selected(Some(id));
+                app.tree_view_state.set_selected(vec![id]);
                 app.tree_view_state.expand_node(parent_uuid);
             }
             ContextMenuActions::AddDir(parent_uuid, parent) => {
                 let dir = Node::dir("new directory", vec![]);
                 let id = *dir.id();
                 _ = app.tree.insert(&parent_uuid, parent, dir);
-                app.tree_view_state.set_selected(Some(id));
+                app.tree_view_state.set_selected(vec![id]);
                 app.tree_view_state.expand_node(parent_uuid);
             }
         }
