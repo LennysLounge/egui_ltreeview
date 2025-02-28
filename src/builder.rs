@@ -30,29 +30,36 @@ struct DirectoryState<NodeIdType> {
     flattened: bool,
 }
 
+pub(crate) struct TreeViewBuilderResult<NodeIdType>{
+    pub(crate) background_idx: HashMap<NodeIdType, ShapeIdx>,
+    pub(crate) background_idx_backup: ShapeIdx,
+    pub(crate) secondary_selection_idx: ShapeIdx,
+    pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
+    /// NodeId and Drop position of the drop target.
+    pub(crate) drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
+    /// Shape index of the drop marker
+    pub(crate) drop_marker_idx: ShapeIdx,
+}
+
 /// The builder used to construct the tree view.
 ///
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
-    data: &'ui mut TreeViewData<NodeIdType>,
+    data: &'ui mut TreeViewData,
     state: &'ui mut TreeViewState<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
-    background_idx: HashMap<NodeIdType, ShapeIdx>,
-    background_idx_backup: ShapeIdx,
-    secondary_selection_idx: ShapeIdx,
     settings: &'ui TreeViewSettings,
     tree_has_focus: bool,
-    new_node_states: &'ui mut Vec<NodeState<NodeIdType>>,
+    result: TreeViewBuilderResult<NodeIdType>,
 }
 
 impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        data: &'ui mut TreeViewData<NodeIdType>,
+        data: &'ui mut TreeViewData,
         state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
-        new_node_states: &'ui mut Vec<NodeState<NodeIdType>>,
         tree_has_focus: bool,
     ) -> Self {
         let mut background_indices = HashMap::new();
@@ -61,16 +68,20 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         });
 
         Self {
-            background_idx: background_indices,
-            background_idx_backup: ui.painter().add(Shape::Noop),
-            secondary_selection_idx: ui.painter().add(Shape::Noop),
+            result: TreeViewBuilderResult{
+                background_idx: background_indices,
+                background_idx_backup: ui.painter().add(Shape::Noop),
+                secondary_selection_idx: ui.painter().add(Shape::Noop),
+                new_node_states: Vec::new(),
+                drop: None,
+                drop_marker_idx: ui.painter().add(Shape::Noop),
+            },
             ui,
             data,
             state,
             stack: Vec::new(),
             settings,
             tree_has_focus,
-            new_node_states,
         }
     }
 
@@ -96,6 +107,10 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         }));
     }
 
+    pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType>{
+        self.result
+    }
+
     /// Close the current directory.
     pub fn close_dir(&mut self) {
         let Some(current_dir) = self.stack.pop() else {
@@ -103,13 +118,13 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         };
 
         // Draw the drop marker over the entire dir if it is the target.
-        if let Some((drop_parent, DropPosition::Last)) = &self.data.drop {
+        if let Some((drop_parent, DropPosition::Last)) = &self.result.drop {
             if drop_parent == &current_dir.id {
                 let mut rect = current_dir.row_rect;
                 *rect.bottom_mut() =
                     self.ui.cursor().top() - self.ui.spacing().item_spacing.y * 0.5;
                 self.ui.painter().set(
-                    self.data.drop_marker_idx,
+                    self.result.drop_marker_idx,
                     RectShape::new(
                         rect,
                         self.ui.visuals().widgets.active.corner_radius,
@@ -194,7 +209,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             (Rect::NOTHING, Some(Rect::NOTHING))
         };
 
-        self.new_node_states.push(NodeState {
+        self.result.new_node_states.push(NodeState {
             id: node.id,
             parent_id: self.parent_id(),
             open,
@@ -252,10 +267,10 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         }
         if self.state.is_selected(&node.id) {
             self.ui.painter().set(
-                *self
+                *self.result
                     .background_idx
                     .get(&node.id)
-                    .unwrap_or(&self.background_idx_backup),
+                    .unwrap_or(&self.result.background_idx_backup),
                 epaint::RectShape::new(
                     row,
                     self.ui.visuals().widgets.active.corner_radius,
@@ -305,7 +320,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
 
             if !self.state.is_selected(&node.id) && context_menu_visible {
                 self.ui.painter().set(
-                    self.secondary_selection_idx,
+                    self.result.secondary_selection_idx,
                     epaint::RectShape::new(
                         row,
                         self.ui.visuals().widgets.active.corner_radius,
@@ -357,12 +372,12 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         // difficult for the caller.
         // Instead we display the markers only.
         if self.state.is_dragged(&node.id) {
-            self.ui.painter().set(self.data.drop_marker_idx, shape);
+            self.ui.painter().set(self.result.drop_marker_idx, shape);
             return;
         }
 
-        self.data.drop = drop_position;
-        self.ui.painter().set(self.data.drop_marker_idx, shape);
+        self.result.drop = drop_position;
+        self.ui.painter().set(self.result.drop_marker_idx, shape);
     }
 
     fn get_drop_position_node(

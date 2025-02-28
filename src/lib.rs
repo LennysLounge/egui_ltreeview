@@ -4,8 +4,8 @@ pub mod node;
 use std::hash::Hash;
 
 use egui::{
-    self, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, Layout, NumExt, Pos2, Rect,
-    Response, Sense, Shape, Ui, Vec2,
+    self, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key, Layout, NumExt, Pos2,
+    Rect, Response, Sense, Shape, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -334,41 +334,43 @@ impl TreeView {
         );
 
         // Run the build tree view closure
-        let tree_builder_response =
-            ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
-                ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
-                ui.add_space(ui.spacing().item_spacing.y * 0.5);
+        let InnerResponse {
+            inner: tree_builder_result,
+            response,
+        } = ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
+            ui.add_space(ui.spacing().item_spacing.y * 0.5);
 
-                let mut new_node_states = Vec::new();
-                build_tree_view(&mut TreeViewBuilder::new(
-                    ui,
-                    &mut data,
-                    state,
-                    &self.settings,
-                    &mut new_node_states,
-                    ui.memory(|m| m.has_focus(self.id)),
-                ));
+            let mut tree_builder = TreeViewBuilder::new(
+                ui,
+                &mut data,
+                state,
+                &self.settings,
+                ui.memory(|m| m.has_focus(self.id)),
+            );
+            build_tree_view(&mut tree_builder);
+            let tree_builder_response = tree_builder.get_result();
 
-                // Add negative space because the place will add the item spacing on top of this.
-                ui.add_space(-ui.spacing().item_spacing.y * 0.5);
+            // Add negative space because the place will add the item spacing on top of this.
+            ui.add_space(-ui.spacing().item_spacing.y * 0.5);
 
-                if self.settings.fill_space_horizontal {
-                    ui.set_min_width(ui.available_width());
-                }
-                if self.settings.fill_space_vertical {
-                    ui.set_min_height(ui.available_height());
-                }
-                new_node_states
-            });
+            if self.settings.fill_space_horizontal {
+                ui.set_min_width(ui.available_width());
+            }
+            if self.settings.fill_space_vertical {
+                ui.set_min_height(ui.available_height());
+            }
+            tree_builder_response
+        });
 
         // use new node states
-        state.node_states = tree_builder_response.inner;
+        state.node_states = tree_builder_result.new_node_states;
 
         // Remember the size of the tree for next frame.
-        state.size = tree_builder_response.response.rect.size();
+        state.size = response.rect.size();
 
         // If the tree was clicked it should receive focus.
-        let tree_view_interact = data.interact(&tree_builder_response.response.rect);
+        let tree_view_interact = data.interact(&response.rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
@@ -409,20 +411,22 @@ impl TreeView {
         let mut actions = Vec::new();
         // Create a drag or move action.
         if state.drag_valid() {
-            if let Some((drag_state, (drop_id, position))) = state.dragged.as_ref().zip(data.drop) {
+            if let Some((drag_state, (drop_id, position))) =
+                state.dragged.as_ref().zip(tree_builder_result.drop)
+            {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     actions.push(Action::Move(DragAndDrop {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
-                        drop_marker_idx: data.drop_marker_idx,
+                        drop_marker_idx: tree_builder_result.drop_marker_idx,
                     }))
                 } else {
                     actions.push(Action::Drag(DragAndDrop {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
-                        drop_marker_idx: data.drop_marker_idx,
+                        drop_marker_idx: tree_builder_result.drop_marker_idx,
                     }))
                 }
             }
@@ -528,15 +532,11 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
 /// This is simply a blob of all the data together without
 /// further structure because abstracting this more simply
 /// increases the complexity without much benefit.
-struct TreeViewData<NodeIdType> {
+struct TreeViewData {
     /// Response of the interaction.
     interaction_response: Response,
-    /// NodeId and Drop position of the drop target.
-    drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
-    /// Shape index of the drop marker
-    drop_marker_idx: ShapeIdx,
 }
-impl<NodeIdType> TreeViewData<NodeIdType> {
+impl TreeViewData {
     fn new(ui: &mut Ui, id: Id, size: Vec2) -> Self {
         let interaction_response = interact_no_expansion(
             ui,
@@ -546,13 +546,11 @@ impl<NodeIdType> TreeViewData<NodeIdType> {
         );
 
         TreeViewData {
-            drop: None,
-            drop_marker_idx: ui.painter().add(Shape::Noop),
             interaction_response,
         }
     }
 }
-impl<NodeIdType: TreeViewId> TreeViewData<NodeIdType> {
+impl TreeViewData {
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
             .interaction_response
