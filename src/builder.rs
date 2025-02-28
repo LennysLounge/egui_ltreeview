@@ -33,23 +33,27 @@ struct DirectoryState<NodeIdType> {
 /// The builder used to construct the tree view.
 ///
 /// Use this to add directories or leaves to the tree.
-pub struct TreeViewBuilder<'ui, 'state, NodeIdType> {
+pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
     data: &'ui mut TreeViewData<NodeIdType>,
-    state: &'state mut TreeViewState<NodeIdType>,
+    state: &'ui mut TreeViewState<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
     background_idx: HashMap<NodeIdType, ShapeIdx>,
     background_idx_backup: ShapeIdx,
     secondary_selection_idx: ShapeIdx,
     settings: &'ui TreeViewSettings,
+    tree_has_focus: bool,
+    new_node_states: &'ui mut Vec<NodeState<NodeIdType>>,
 }
 
-impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdType> {
+impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
         data: &'ui mut TreeViewData<NodeIdType>,
-        state: &'state mut TreeViewState<NodeIdType>,
+        state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
+        new_node_states: &'ui mut Vec<NodeState<NodeIdType>>,
+        tree_has_focus: bool,
     ) -> Self {
         let mut background_indices = HashMap::new();
         state.node_states.iter().for_each(|ns| {
@@ -65,6 +69,8 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             state,
             stack: Vec::new(),
             settings,
+            tree_has_focus,
+            new_node_states,
         }
     }
 
@@ -188,7 +194,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             (Rect::NOTHING, Some(Rect::NOTHING))
         };
 
-        self.data.new_node_states.push(NodeState {
+        self.new_node_states.push(NodeState {
             id: node.id,
             parent_id: self.parent_id(),
             open,
@@ -220,7 +226,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             .scope(|ui| {
                 // Set the fg stroke colors here so that the ui added by the user
                 // has the correct colors when selected or focused.
-                let fg_stroke = if self.state.is_selected(&node.id) && self.data.has_focus {
+                let fg_stroke = if self.state.is_selected(&node.id) && self.tree_has_focus {
                     ui.visuals().selection.stroke
                 } else if self.state.is_selected(&node.id) {
                     ui.visuals().widgets.inactive.fg_stroke
@@ -253,7 +259,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 epaint::RectShape::new(
                     row,
                     self.ui.visuals().widgets.active.corner_radius,
-                    if self.data.has_focus {
+                    if self.tree_has_focus {
                         self.ui.visuals().selection.bg_fill
                     } else {
                         self.ui

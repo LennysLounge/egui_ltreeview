@@ -44,7 +44,7 @@ impl eframe::App for MyApp {
             TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                 ui,
                 &mut self.tree,
-                |mut builder| {
+                |builder| {
                     builder.dir(0, "Root");
                     builder.dir(1, "Foo");
                     builder.leaf(2, "Ava");

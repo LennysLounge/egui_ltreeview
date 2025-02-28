@@ -27,7 +27,7 @@ struct MyApp {}
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |mut builder| {
+            TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |builder| {
                 builder.dir(0, "root");
 
                 // Sometimes you want to a section of the tree to behave like a dir

@@ -28,7 +28,7 @@ struct MyApp {}
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |mut builder| {
+            TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |builder| {
                 builder.node(
                     NodeBuilder::dir(0)
                         .default_open(false)

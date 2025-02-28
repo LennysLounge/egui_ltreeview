@@ -110,7 +110,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
         self.node_states.iter_mut().find(|ns| &ns.id == id)
     }
 
-        /// Is the current drag valid.
+    /// Is the current drag valid.
     /// `false` if no drag is currently registered.
     pub(crate) fn drag_valid(&self) -> bool {
         self.dragged
@@ -129,9 +129,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     }
 
     pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
-        self.secondary_selection
-            .as_ref()
-            .is_some_and(|n| n == id)
+        self.secondary_selection.as_ref().is_some_and(|n| n == id)
     }
 }
 
@@ -267,7 +265,7 @@ impl TreeView {
     pub fn show<NodeIdType>(
         self,
         ui: &mut Ui,
-        build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
+        build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> (Response, Vec<Action<NodeIdType>>)
     where
         NodeIdType: NodeId,
@@ -287,7 +285,7 @@ impl TreeView {
         mut self,
         ui: &mut Ui,
         state: &mut TreeViewState<NodeIdType>,
-        mut build_tree_view: impl FnMut(TreeViewBuilder<'_, '_, NodeIdType>),
+        mut build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> (Response, Vec<Action<NodeIdType>>)
     where
         NodeIdType: TreeViewId + Send + Sync + 'static,
@@ -336,11 +334,20 @@ impl TreeView {
         );
 
         // Run the build tree view closure
-        let used_rect = ui
-            .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
+        let tree_builder_response =
+            ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
                 ui.add_space(ui.spacing().item_spacing.y * 0.5);
-                build_tree_view(TreeViewBuilder::new(ui, &mut data, state, &self.settings));
+
+                let mut new_node_states = Vec::new();
+                build_tree_view(&mut TreeViewBuilder::new(
+                    ui,
+                    &mut data,
+                    state,
+                    &self.settings,
+                    &mut new_node_states,
+                    ui.memory(|m| m.has_focus(self.id)),
+                ));
 
                 // Add negative space because the place will add the item spacing on top of this.
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
@@ -351,15 +358,17 @@ impl TreeView {
                 if self.settings.fill_space_vertical {
                     ui.set_min_height(ui.available_height());
                 }
-            })
-            .response
-            .rect;
+                new_node_states
+            });
 
         // use new node states
-        state.node_states = data.new_node_states.clone();
+        state.node_states = tree_builder_response.inner;
+
+        // Remember the size of the tree for next frame.
+        state.size = tree_builder_response.response.rect.size();
 
         // If the tree was clicked it should receive focus.
-        let tree_view_interact = data.interact(&used_rect);
+        let tree_view_interact = data.interact(&tree_builder_response.response.rect);
         if tree_view_interact.clicked || tree_view_interact.drag_started {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
@@ -380,9 +389,7 @@ impl TreeView {
             ui.input(|i| {
                 for event in i.events.iter() {
                     match event {
-                        Event::Key { key, pressed, .. } if *pressed => {
-                            handle_input(state, key)
-                        }
+                        Event::Key { key, pressed, .. } if *pressed => handle_input(state, key),
                         _ => (),
                     }
                 }
@@ -399,20 +406,19 @@ impl TreeView {
             }
         }
 
+        let mut actions = Vec::new();
         // Create a drag or move action.
         if state.drag_valid() {
-            if let Some((drag_state, (drop_id, position))) =
-            state.dragged.as_ref().zip(data.drop)
-            {
+            if let Some((drag_state, (drop_id, position))) = state.dragged.as_ref().zip(data.drop) {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
-                    data.actions.push(Action::Move(DragAndDrop {
+                    actions.push(Action::Move(DragAndDrop {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
                         drop_marker_idx: data.drop_marker_idx,
                     }))
                 } else {
-                    data.actions.push(Action::Drag(DragAndDrop {
+                    actions.push(Action::Drag(DragAndDrop {
                         source: drag_state.node_id,
                         target: drop_id,
                         position,
@@ -423,8 +429,7 @@ impl TreeView {
         }
         // Create a selection action.
         if state.selected != prev_selection {
-            data.actions
-                .push(Action::SetSelected(state.selected.clone()));
+            actions.push(Action::SetSelected(state.selected.clone()));
         }
 
         // Reset the drag state.
@@ -432,10 +437,7 @@ impl TreeView {
             state.dragged = None;
         }
 
-        // Remember the size of the tree for next frame.
-        state.size = used_rect.size();
-
-        (data.interaction_response, data.actions)
+        (data.interaction_response, actions)
     }
 }
 
@@ -533,12 +535,6 @@ struct TreeViewData<NodeIdType> {
     drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     /// Shape index of the drop marker
     drop_marker_idx: ShapeIdx,
-    /// Wether or not the tree view has keyboard focus.
-    has_focus: bool,
-    /// Actions for the tree view.
-    actions: Vec<Action<NodeIdType>>,
-    /// New node states for when this frame is done.
-    new_node_states: Vec<NodeState<NodeIdType>>,
 }
 impl<NodeIdType> TreeViewData<NodeIdType> {
     fn new(ui: &mut Ui, id: Id, size: Vec2) -> Self {
@@ -548,15 +544,11 @@ impl<NodeIdType> TreeViewData<NodeIdType> {
             id,
             Sense::click_and_drag(),
         );
-        let has_focus = ui.memory(|m| m.has_focus(id));
 
         TreeViewData {
             drop: None,
             drop_marker_idx: ui.painter().add(Shape::Noop),
             interaction_response,
-            has_focus,
-            actions: Vec::new(),
-            new_node_states: Vec::new(),
         }
     }
 }
