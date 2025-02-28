@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use egui::{
-    epaint::{self, RectShape}, layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText
+    epaint::{self, RectShape},
+    layers::ShapeIdx,
+    pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText,
 };
 
 use crate::{
@@ -30,15 +32,21 @@ struct DirectoryState<NodeIdType> {
     flattened: bool,
 }
 
-pub(crate) struct TreeViewBuilderResult<NodeIdType>{
+pub(crate) struct TreeViewBuilderResult<NodeIdType> {
     pub(crate) background_idx: HashMap<NodeIdType, ShapeIdx>,
     pub(crate) background_idx_backup: ShapeIdx,
     pub(crate) secondary_selection_idx: ShapeIdx,
-    pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
+    pub(crate) new_node_states: Vec<NodeStateWithRect<NodeIdType>>,
     /// NodeId and Drop position of the drop target.
     pub(crate) drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     /// Shape index of the drop marker
     pub(crate) drop_marker_idx: ShapeIdx,
+}
+
+pub(crate) struct NodeStateWithRect<NodeIdType> {
+    pub(crate) state: NodeState<NodeIdType>,
+    pub(crate) row: Rect,
+    pub(crate) closer: Option<Rect>,
 }
 
 /// The builder used to construct the tree view.
@@ -68,7 +76,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         });
 
         Self {
-            result: TreeViewBuilderResult{
+            result: TreeViewBuilderResult {
                 background_idx: background_indices,
                 background_idx_backup: ui.painter().add(Shape::Noop),
                 secondary_selection_idx: ui.painter().add(Shape::Noop),
@@ -107,7 +115,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         }));
     }
 
-    pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType>{
+    pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType> {
         self.result
     }
 
@@ -190,30 +198,20 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
 
         let (row, closer) = if self.parent_dir_is_open() && !node.flatten {
             node.set_is_open(open);
-            let (row, closer) = self.node_internal(&mut node);
-
-            if let Some(closer) = closer {
-                let closer_interaction = self.data.interact(&closer);
-                if closer_interaction.clicked {
-                    open = !open;
-                    self.state.selected = vec![node.id];
-                }
-            }
-
-            let row_interaction = self.data.interact(&row);
-            if row_interaction.double_clicked {
-                open = !open;
-            }
-            (row, closer)
+            self.node_internal(&mut node)
         } else {
             (Rect::NOTHING, Some(Rect::NOTHING))
         };
 
-        self.result.new_node_states.push(NodeState {
-            id: node.id,
-            parent_id: self.parent_id(),
-            open,
-            visible: self.parent_dir_is_open() && !node.flatten,
+        self.result.new_node_states.push(NodeStateWithRect {
+            state: NodeState {
+                id: node.id,
+                parent_id: self.parent_id(),
+                open,
+                visible: self.parent_dir_is_open() && !node.flatten,
+            },
+            row,
+            closer,
         });
 
         if node.is_dir {
@@ -259,15 +257,16 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
 
         // React to primary clicking
         if row_interaction.clicked {
-            if self.ui.ctx().input(|is| is.modifiers.ctrl){
+            if self.ui.ctx().input(|is| is.modifiers.ctrl) {
                 self.state.selected.push(node.id);
-            }else{
+            } else {
                 self.state.selected = vec![node.id];
             }
         }
         if self.state.is_selected(&node.id) {
             self.ui.painter().set(
-                *self.result
+                *self
+                    .result
                     .background_idx
                     .get(&node.id)
                     .unwrap_or(&self.result.background_idx_backup),

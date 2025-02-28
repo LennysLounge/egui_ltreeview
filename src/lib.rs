@@ -3,6 +3,7 @@ pub mod node;
 
 use std::hash::Hash;
 
+use builder::TreeViewBuilderResult;
 use egui::{
     self, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key, Layout, NumExt, Pos2,
     Rect, Response, Sense, Shape, Ui, Vec2,
@@ -10,8 +11,8 @@ use egui::{
 
 pub use builder::TreeViewBuilder;
 
-pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash {}
-impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash {}
+pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
+impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
 
 #[cfg(feature = "persistence")]
 pub trait NodeId:
@@ -285,7 +286,7 @@ impl TreeView {
         mut self,
         ui: &mut Ui,
         state: &mut TreeViewState<NodeIdType>,
-        mut build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
+        build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> (Response, Vec<Action<NodeIdType>>)
     where
         NodeIdType: TreeViewId + Send + Sync + 'static,
@@ -313,10 +314,6 @@ impl TreeView {
             )
         });
 
-        // Create the tree state by loading the previous frame and setting up the state.
-        let mut data = TreeViewData::new(ui, self.id, state.size);
-        let prev_selection = state.selected.clone();
-
         // Calculate the desired size of the tree view widget.
         let size = vec2(
             if self.settings.fill_space_horizontal {
@@ -333,80 +330,31 @@ impl TreeView {
             .at_least(self.settings.min_height),
         );
 
+        let mut data = TreeViewData::new(ui, self.id, state.size);
+        let prev_selection = state.selected.clone();
+
+        let interaction_response = data.interaction_response.clone();
+        // todo: allocate background shapes
+
         // Run the build tree view closure
         let InnerResponse {
-            inner: tree_builder_result,
+            inner: mut tree_builder_result,
             response,
-        } = ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
-            ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
-            ui.add_space(ui.spacing().item_spacing.y * 0.5);
+        } = self.draw_foreground(ui, size, state, &mut data, build_tree_view);
 
-            let mut tree_builder = TreeViewBuilder::new(
-                ui,
-                &mut data,
-                state,
-                &self.settings,
-                ui.memory(|m| m.has_focus(self.id)),
-            );
-            build_tree_view(&mut tree_builder);
-            let tree_builder_response = tree_builder.get_result();
+        self.handle_input(ui, &interaction_response, &mut tree_builder_result, state);
 
-            // Add negative space because the place will add the item spacing on top of this.
-            ui.add_space(-ui.spacing().item_spacing.y * 0.5);
-
-            if self.settings.fill_space_horizontal {
-                ui.set_min_width(ui.available_width());
-            }
-            if self.settings.fill_space_vertical {
-                ui.set_min_height(ui.available_height());
-            }
-            tree_builder_response
-        });
+        // todo: Draw background
 
         // use new node states
-        state.node_states = tree_builder_result.new_node_states;
+        state.node_states = tree_builder_result
+            .new_node_states
+            .iter()
+            .map(|nswr| nswr.state.clone())
+            .collect();
 
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
-
-        // If the tree was clicked it should receive focus.
-        let tree_view_interact = data.interact(&response.rect);
-        if tree_view_interact.clicked || tree_view_interact.drag_started {
-            ui.memory_mut(|m| m.request_focus(self.id));
-        }
-
-        if ui.memory(|m| m.has_focus(self.id)) {
-            // If the widget is focused but no node is selected we want to select any node
-            // to allow navigating throught the tree.
-            // In case we gain focus from a drag action we select the dragged node directly.
-            if state.selected.is_empty() {
-                // todo: fix this
-                state.selected = state
-                    .dragged
-                    .as_ref()
-                    .map(|drag_state| vec![drag_state.node_id])
-                    .or(state.node_states.first().map(|n| vec![n.id]))
-                    .unwrap();
-            }
-            ui.input(|i| {
-                for event in i.events.iter() {
-                    match event {
-                        Event::Key { key, pressed, .. } if *pressed => handle_input(state, key),
-                        _ => (),
-                    }
-                }
-            });
-        }
-        // Update the drag state
-        // A drag only becomes a valid drag after the pointer has traveled some distance.
-        if let Some(drag_state) = state.dragged.as_mut() {
-            if !drag_state.drag_valid {
-                drag_state.drag_valid = drag_state
-                    .drag_start_pos
-                    .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
-                    > 5.0;
-            }
-        }
 
         let mut actions = Vec::new();
         // Create a drag or move action.
@@ -442,6 +390,118 @@ impl TreeView {
         }
 
         (data.interaction_response, actions)
+    }
+
+    fn draw_foreground<NodeIdType: TreeViewId>(
+        &mut self,
+        ui: &mut Ui,
+        size: Vec2,
+        state: &mut TreeViewState<NodeIdType>,
+        data: &mut TreeViewData,
+        mut build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
+    ) -> InnerResponse<TreeViewBuilderResult<NodeIdType>> {
+        // Run the build tree view closure
+        ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
+            ui.add_space(ui.spacing().item_spacing.y * 0.5);
+
+            let mut tree_builder = TreeViewBuilder::new(
+                ui,
+                data,
+                state,
+                &self.settings,
+                ui.memory(|m| m.has_focus(self.id)),
+            );
+            build_tree_view(&mut tree_builder);
+            let tree_builder_response = tree_builder.get_result();
+
+            // Add negative space because the place will add the item spacing on top of this.
+            ui.add_space(-ui.spacing().item_spacing.y * 0.5);
+
+            if self.settings.fill_space_horizontal {
+                ui.set_min_width(ui.available_width());
+            }
+            if self.settings.fill_space_vertical {
+                ui.set_min_height(ui.available_height());
+            }
+            tree_builder_response
+        })
+    }
+
+    fn handle_input<NodeIdType: TreeViewId>(
+        &mut self,
+        ui: &mut Ui,
+        interaction_response: &Response,
+        tree_view_result: &mut TreeViewBuilderResult<NodeIdType>,
+        state: &mut TreeViewState<NodeIdType>,
+    ) {
+        if interaction_response.clicked() || interaction_response.drag_started() {
+            ui.memory_mut(|m| m.request_focus(self.id));
+        }
+
+        for node_state in &mut tree_view_result.new_node_states {
+            // was closed clicked
+            if let Some(closer_rect) = node_state.closer {
+                if interaction_response
+                    .hover_pos()
+                    .is_some_and(|pos| closer_rect.contains(pos))
+                {
+                    if interaction_response.clicked() {
+                        node_state.state.open = !node_state.state.open;
+                        println!(
+                            "Closed clicked on {:?}, new state: {}",
+                            node_state.state.id, node_state.state.open
+                        );
+                    }
+                }
+            }
+            // was row double clicked
+            if interaction_response
+                .hover_pos()
+                .is_some_and(|pos| node_state.row.contains(pos))
+            {
+                if interaction_response.double_clicked() {
+                    node_state.state.open = !node_state.state.open;
+                    println!(
+                        "Double clicked on {:?}, new state: {}",
+                        node_state.state.id, node_state.state.open
+                    );
+                }
+            }
+        }
+
+        if ui.memory(|m| m.has_focus(self.id)) {
+            // If the widget is focused but no node is selected we want to select any node
+            // to allow navigating throught the tree.
+            // In case we gain focus from a drag action we select the dragged node directly.
+            if state.selected.is_empty() {
+                // todo: fix this
+                state.selected = state
+                    .dragged
+                    .as_ref()
+                    .map(|drag_state| vec![drag_state.node_id])
+                    .or(state.node_states.first().map(|n| vec![n.id]))
+                    .unwrap();
+            }
+            ui.input(|i| {
+                for event in i.events.iter() {
+                    match event {
+                        Event::Key { key, pressed, .. } if *pressed => handle_input(state, key),
+                        _ => (),
+                    }
+                }
+            });
+        }
+        // Update the drag state
+        // A drag only becomes a valid drag after the pointer has traveled some distance.
+        if let Some(drag_state) = state.dragged.as_mut() {
+            if !drag_state.drag_valid {
+                drag_state.drag_valid = drag_state
+                    .drag_start_pos
+                    .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
+                    > 5.0;
+            }
+        }
     }
 }
 

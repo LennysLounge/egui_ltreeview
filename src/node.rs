@@ -134,7 +134,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn show_node(
         &mut self,
         ui: &mut Ui,
-        data: &TreeViewData<NodeIdType>,
+        data: &TreeViewData,
         settings: &TreeViewSettings,
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
@@ -250,7 +250,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
-        data: &TreeViewData<NodeIdType>,
+        data: &TreeViewData,
         state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> bool {
