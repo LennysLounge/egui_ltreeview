@@ -1,12 +1,13 @@
+use std::collections::HashMap;
+
 use egui::{
-    epaint::{self, RectShape},
-    layers::ShapeIdx,
-    pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText,
+    epaint::{self, RectShape}, layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText
 };
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, NodeState, TreeViewData, TreeViewId, TreeViewSettings, IndentHintStyle,
+    DragState, DropPosition, IndentHintStyle, NodeState, TreeViewData, TreeViewId,
+    TreeViewSettings, TreeViewState,
 };
 
 #[derive(Clone)]
@@ -34,9 +35,11 @@ struct DirectoryState<NodeIdType> {
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, 'state, NodeIdType> {
     ui: &'ui mut Ui,
-    data: &'ui mut TreeViewData<'state, NodeIdType>,
+    data: &'ui mut TreeViewData<NodeIdType>,
+    state: &'state mut TreeViewState<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
-    background_idx: ShapeIdx,
+    background_idx: HashMap<NodeIdType, ShapeIdx>,
+    background_idx_backup: ShapeIdx,
     secondary_selection_idx: ShapeIdx,
     settings: &'ui TreeViewSettings,
 }
@@ -44,14 +47,22 @@ pub struct TreeViewBuilder<'ui, 'state, NodeIdType> {
 impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        state: &'ui mut TreeViewData<'state, NodeIdType>,
+        data: &'ui mut TreeViewData<NodeIdType>,
+        state: &'state mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
     ) -> Self {
+        let mut background_indices = HashMap::new();
+        state.node_states.iter().for_each(|ns| {
+            background_indices.insert(ns.id, ui.painter().add(Shape::Noop));
+        });
+
         Self {
-            background_idx: ui.painter().add(Shape::Noop),
+            background_idx: background_indices,
+            background_idx_backup: ui.painter().add(Shape::Noop),
             secondary_selection_idx: ui.painter().add(Shape::Noop),
             ui,
-            data: state,
+            data,
+            state,
             stack: Vec::new(),
             settings,
         }
@@ -151,8 +162,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
     /// Add a node to the tree.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
         let mut open = self
-            .data
-            .peristant
+            .state
             .node_state_of(&node.id)
             .map(|node_state| node_state.open)
             .unwrap_or(node.default_open);
@@ -165,7 +175,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
                 let closer_interaction = self.data.interact(&closer);
                 if closer_interaction.clicked {
                     open = !open;
-                    self.data.peristant.selected = vec![node.id];
+                    self.state.selected = vec![node.id];
                 }
             }
 
@@ -189,7 +199,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             self.stack.push(DirectoryState {
                 is_open: self.parent_dir_is_open() && open,
                 id: node.id,
-                drop_forbidden: self.parent_dir_drop_forbidden() || self.data.is_dragged(&node.id),
+                drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
                 row_rect: row,
                 icon_rect: closer.expect("Closer response should be availabel for dirs"),
                 child_node_positions: Vec::new(),
@@ -210,9 +220,9 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             .scope(|ui| {
                 // Set the fg stroke colors here so that the ui added by the user
                 // has the correct colors when selected or focused.
-                let fg_stroke = if self.data.is_selected(&node.id) && self.data.has_focus {
+                let fg_stroke = if self.state.is_selected(&node.id) && self.data.has_focus {
                     ui.visuals().selection.stroke
-                } else if self.data.is_selected(&node.id) {
+                } else if self.state.is_selected(&node.id) {
                     ui.visuals().widgets.inactive.fg_stroke
                 } else {
                     ui.visuals().widgets.noninteractive.fg_stroke
@@ -228,11 +238,18 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
 
         // React to primary clicking
         if row_interaction.clicked {
-            self.data.peristant.selected = vec![node.id];
+            if self.ui.ctx().input(|is| is.modifiers.ctrl){
+                self.state.selected.push(node.id);
+            }else{
+                self.state.selected = vec![node.id];
+            }
         }
-        if self.data.is_selected(&node.id) {
+        if self.state.is_selected(&node.id) {
             self.ui.painter().set(
-                self.background_idx,
+                *self
+                    .background_idx
+                    .get(&node.id)
+                    .unwrap_or(&self.background_idx_backup),
                 epaint::RectShape::new(
                     row,
                     self.ui.visuals().widgets.active.corner_radius,
@@ -261,26 +278,26 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         let primary_pressed = self.ui.input(|i| i.pointer.primary_pressed());
         if row_interaction.hovered && primary_pressed {
             let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
-            self.data.peristant.dragged = Some(DragState {
+            self.state.dragged = Some(DragState {
                 node_id: node.id,
                 drag_row_offset: row.min - pointer_pos,
                 drag_start_pos: pointer_pos,
                 drag_valid: false,
             });
         }
-        if self.data.is_dragged(&node.id) {
-            node.show_node_dragged(self.ui, self.data, self.settings);
+        if self.state.is_dragged(&node.id) {
+            node.show_node_dragged(self.ui, self.data, self.state, self.settings);
         }
 
         // React to secondary clicks
-        if row_interaction.secondary_clicked && !self.data.drag_valid() {
-            self.data.peristant.dragged = None;
-            self.data.peristant.secondary_selection = Some(node.id);
+        if row_interaction.secondary_clicked && !self.state.drag_valid() {
+            self.state.dragged = None;
+            self.state.secondary_selection = Some(node.id);
         }
-        if self.data.is_secondary_selected(&node.id) {
+        if self.state.is_secondary_selected(&node.id) {
             let context_menu_visible = node.show_context_menu(&self.data.interaction_response);
 
-            if !self.data.is_selected(&node.id) && context_menu_visible {
+            if !self.state.is_selected(&node.id) && context_menu_visible {
                 self.ui.painter().set(
                     self.secondary_selection_idx,
                     epaint::RectShape::new(
@@ -311,10 +328,10 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
             return;
         };
 
-        if self.data.peristant.dragged.is_none() {
+        if self.state.dragged.is_none() {
             return;
         }
-        if !self.data.drag_valid() {
+        if !self.state.drag_valid() {
             return;
         }
         if self.parent_dir_drop_forbidden() {
@@ -322,7 +339,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         }
         // For dirs and for nodes that allow dropping on them, it is not
         // allowed to drop itself onto itself.
-        if self.data.is_dragged(&node.id) && node.drop_allowed {
+        if self.state.is_dragged(&node.id) && node.drop_allowed {
             return;
         }
 
@@ -333,7 +350,7 @@ impl<'ui, 'state, NodeIdType: TreeViewId> TreeViewBuilder<'ui, 'state, NodeIdTyp
         // This however doesn't make sense and makes executing the command more
         // difficult for the caller.
         // Instead we display the markers only.
-        if self.data.is_dragged(&node.id) {
+        if self.state.is_dragged(&node.id) {
             self.ui.painter().set(self.data.drop_marker_idx, shape);
             return;
         }

@@ -2,7 +2,7 @@ use egui::{
     emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Order, Rangef, Rect, Response, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText
 };
 
-use crate::{Interaction, RowLayout, TreeViewData, TreeViewId, TreeViewSettings};
+use crate::{Interaction, RowLayout, TreeViewData, TreeViewId, TreeViewSettings, TreeViewState};
 
 pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
 pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
@@ -134,7 +134,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn show_node(
         &mut self,
         ui: &mut Ui,
-        state: &TreeViewData<NodeIdType>,
+        data: &TreeViewData<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
@@ -175,7 +175,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                     .icon_rectangles(ui.available_rect_before_wrap());
 
                 let res = ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
-                    let closer_interaction = state.interact(&ui.max_rect());
+                    let closer_interaction = data.interact(&ui.max_rect());
                     if closer_interaction.hovered {
                         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
                     }
@@ -190,7 +190,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                     } else {
                         let icon_id = Id::new(self.id).with("tree view closer icon");
                         let openness = ui.ctx().animate_bool(icon_id, self.is_open);
-                        let closer_interaction = state.interact(&ui.max_rect());
+                        let closer_interaction = data.interact(&ui.max_rect());
                         paint_default_icon(ui, openness, &small_rect, &closer_interaction);
                     }
                     ui.allocate_space(ui.available_size_before_wrap());
@@ -250,7 +250,8 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
-        state: &TreeViewData<NodeIdType>,
+        data: &TreeViewData<NodeIdType>,
+        state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> bool {
         ui.ctx().set_cursor_icon(CursorIcon::Alias);
@@ -269,7 +270,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
             .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _, _) = self.show_node(ui, state, settings);
+                let (row, _, _, _) = self.show_node(ui, data, settings);
 
                 ui.painter().set(
                     background_position,
@@ -290,7 +291,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
             //let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
             let delta = -background_rect.min.to_vec2()
                 + pointer_pos.to_vec2()
-                + state.peristant.dragged.as_ref().unwrap().drag_row_offset;
+                + state.dragged.as_ref().unwrap().drag_row_offset;
             if delta != Vec2::ZERO {
                 let transform = emath::TSTransform::from_translation(delta);
                 ui.ctx().transform_layer_shapes(layer_id, transform);

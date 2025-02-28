@@ -109,6 +109,30 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     ) -> Option<&mut NodeState<NodeIdType>> {
         self.node_states.iter_mut().find(|ns| &ns.id == id)
     }
+
+        /// Is the current drag valid.
+    /// `false` if no drag is currently registered.
+    pub(crate) fn drag_valid(&self) -> bool {
+        self.dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid)
+    }
+    /// Is the given id part of a valid drag.
+    pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
+        self.dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid && &drag_state.node_id == id)
+    }
+
+    pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
+        self.selected.contains(id)
+    }
+
+    pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
+        self.secondary_selection
+            .as_ref()
+            .is_some_and(|n| n == id)
+    }
 }
 
 impl<NodeIdType> TreeViewState<NodeIdType>
@@ -292,21 +316,21 @@ impl TreeView {
         });
 
         // Create the tree state by loading the previous frame and setting up the state.
-        let mut data = TreeViewData::new(ui, state, self.id);
-        let prev_selection = data.peristant.selected.clone();
+        let mut data = TreeViewData::new(ui, self.id, state.size);
+        let prev_selection = state.selected.clone();
 
         // Calculate the desired size of the tree view widget.
         let size = vec2(
             if self.settings.fill_space_horizontal {
                 ui.available_width().at_most(self.settings.max_width)
             } else {
-                data.peristant.size.x.at_most(self.settings.max_width)
+                state.size.x.at_most(self.settings.max_width)
             }
             .at_least(self.settings.min_width),
             if self.settings.fill_space_vertical {
                 ui.available_height().at_most(self.settings.max_height)
             } else {
-                data.peristant.size.y.at_most(self.settings.max_height)
+                state.size.y.at_most(self.settings.max_height)
             }
             .at_least(self.settings.min_height),
         );
@@ -316,7 +340,8 @@ impl TreeView {
             .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
                 ui.add_space(ui.spacing().item_spacing.y * 0.5);
-                build_tree_view(TreeViewBuilder::new(ui, &mut data, &self.settings));
+                build_tree_view(TreeViewBuilder::new(ui, &mut data, state, &self.settings));
+
                 // Add negative space because the place will add the item spacing on top of this.
                 ui.add_space(-ui.spacing().item_spacing.y * 0.5);
 
@@ -331,7 +356,7 @@ impl TreeView {
             .rect;
 
         // use new node states
-        data.peristant.node_states = data.new_node_states.clone();
+        state.node_states = data.new_node_states.clone();
 
         // If the tree was clicked it should receive focus.
         let tree_view_interact = data.interact(&used_rect);
@@ -343,21 +368,20 @@ impl TreeView {
             // If the widget is focused but no node is selected we want to select any node
             // to allow navigating throught the tree.
             // In case we gain focus from a drag action we select the dragged node directly.
-            if data.peristant.selected.is_empty() {
+            if state.selected.is_empty() {
                 // todo: fix this
-                data.peristant.selected = data
-                    .peristant
+                state.selected = state
                     .dragged
                     .as_ref()
                     .map(|drag_state| vec![drag_state.node_id])
-                    .or(data.peristant.node_states.first().map(|n| vec![n.id]))
+                    .or(state.node_states.first().map(|n| vec![n.id]))
                     .unwrap();
             }
             ui.input(|i| {
                 for event in i.events.iter() {
                     match event {
                         Event::Key { key, pressed, .. } if *pressed => {
-                            handle_input(data.peristant, key)
+                            handle_input(state, key)
                         }
                         _ => (),
                     }
@@ -366,7 +390,7 @@ impl TreeView {
         }
         // Update the drag state
         // A drag only becomes a valid drag after the pointer has traveled some distance.
-        if let Some(drag_state) = data.peristant.dragged.as_mut() {
+        if let Some(drag_state) = state.dragged.as_mut() {
             if !drag_state.drag_valid {
                 drag_state.drag_valid = drag_state
                     .drag_start_pos
@@ -376,9 +400,9 @@ impl TreeView {
         }
 
         // Create a drag or move action.
-        if data.drag_valid() {
+        if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
-                data.peristant.dragged.as_ref().zip(data.drop)
+            state.dragged.as_ref().zip(data.drop)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     data.actions.push(Action::Move(DragAndDrop {
@@ -398,18 +422,18 @@ impl TreeView {
             }
         }
         // Create a selection action.
-        if data.peristant.selected != prev_selection {
+        if state.selected != prev_selection {
             data.actions
-                .push(Action::SetSelected(data.peristant.selected.clone()));
+                .push(Action::SetSelected(state.selected.clone()));
         }
 
         // Reset the drag state.
         if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
-            data.peristant.dragged = None;
+            state.dragged = None;
         }
 
         // Remember the size of the tree for next frame.
-        data.peristant.size = used_rect.size();
+        state.size = used_rect.size();
 
         (data.interaction_response, data.actions)
     }
@@ -467,7 +491,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
             }
         }
         Key::ArrowLeft => {
-            if state.selected.len() == 1{
+            if state.selected.len() == 1 {
                 let node_state = &mut state.node_states[first_selected_node_index];
                 if node_state.open {
                     node_state.open = false;
@@ -477,7 +501,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
             }
         }
         Key::ArrowRight => {
-            if state.selected.len() == 1{
+            if state.selected.len() == 1 {
                 let node_state = &mut state.node_states[first_selected_node_index];
                 if node_state.open {
                     if first_selected_node_index < state.node_states.len() - 1 {
@@ -502,9 +526,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
 /// This is simply a blob of all the data together without
 /// further structure because abstracting this more simply
 /// increases the complexity without much benefit.
-struct TreeViewData<'state, NodeIdType> {
-    /// State of the tree that is persistant across frames.
-    peristant: &'state mut TreeViewState<NodeIdType>,
+struct TreeViewData<NodeIdType> {
     /// Response of the interaction.
     interaction_response: Response,
     /// NodeId and Drop position of the drop target.
@@ -518,18 +540,17 @@ struct TreeViewData<'state, NodeIdType> {
     /// New node states for when this frame is done.
     new_node_states: Vec<NodeState<NodeIdType>>,
 }
-impl<'state, NodeIdType> TreeViewData<'state, NodeIdType> {
-    fn new(ui: &mut Ui, state: &'state mut TreeViewState<NodeIdType>, id: Id) -> Self {
+impl<NodeIdType> TreeViewData<NodeIdType> {
+    fn new(ui: &mut Ui, id: Id, size: Vec2) -> Self {
         let interaction_response = interact_no_expansion(
             ui,
-            Rect::from_min_size(ui.cursor().min, state.size),
+            Rect::from_min_size(ui.cursor().min, size),
             id,
             Sense::click_and_drag(),
         );
         let has_focus = ui.memory(|m| m.has_focus(id));
 
         TreeViewData {
-            peristant: state,
             drop: None,
             drop_marker_idx: ui.painter().add(Shape::Noop),
             interaction_response,
@@ -539,7 +560,7 @@ impl<'state, NodeIdType> TreeViewData<'state, NodeIdType> {
         }
     }
 }
-impl<NodeIdType: TreeViewId> TreeViewData<'_, NodeIdType> {
+impl<NodeIdType: TreeViewId> TreeViewData<NodeIdType> {
     pub fn interact(&self, rect: &Rect) -> Interaction {
         if !self
             .interaction_response
@@ -554,7 +575,6 @@ impl<NodeIdType: TreeViewId> TreeViewData<'_, NodeIdType> {
                 drag_started: false,
             };
         }
-
         Interaction {
             clicked: self.interaction_response.clicked(),
             double_clicked: self.interaction_response.double_clicked(),
@@ -564,32 +584,6 @@ impl<NodeIdType: TreeViewId> TreeViewData<'_, NodeIdType> {
                 .interaction_response
                 .drag_started_by(egui::PointerButton::Primary),
         }
-    }
-    /// Is the current drag valid.
-    /// `false` if no drag is currently registered.
-    pub fn drag_valid(&self) -> bool {
-        self.peristant
-            .dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid)
-    }
-    /// Is the given id part of a valid drag.
-    pub fn is_dragged(&self, id: &NodeIdType) -> bool {
-        self.peristant
-            .dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid && &drag_state.node_id == id)
-    }
-
-    pub fn is_selected(&self, id: &NodeIdType) -> bool {
-        self.peristant.selected.contains(id)
-    }
-
-    pub fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
-        self.peristant
-            .secondary_selection
-            .as_ref()
-            .is_some_and(|n| n == id)
     }
 }
 
