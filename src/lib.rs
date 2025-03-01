@@ -161,7 +161,7 @@ struct DragState<NodeIdType> {
     pub drag_valid: bool,
 }
 /// State of each node in the tree.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 struct NodeState<NodeIdType> {
     /// Id of this node.
@@ -330,17 +330,19 @@ impl TreeView {
             .at_least(self.settings.min_height),
         );
 
-        let mut data = TreeViewData::new(ui, self.id, state.size);
         let prev_selection = state.selected.clone();
-
-        let interaction_response = data.interaction_response.clone();
+        let interaction_response = interact_no_expansion(
+            ui,
+            Rect::from_min_size(ui.cursor().min, size),
+            self.id,
+            Sense::click_and_drag(),
+        );
         // todo: allocate background shapes
-
         // Run the build tree view closure
         let InnerResponse {
             inner: mut tree_builder_result,
             response,
-        } = self.draw_foreground(ui, size, state, &mut data, build_tree_view);
+        } = self.draw_foreground(ui, size, state, &interaction_response, build_tree_view);
 
         self.handle_input(ui, &interaction_response, &mut tree_builder_result, state);
 
@@ -389,7 +391,7 @@ impl TreeView {
             state.dragged = None;
         }
 
-        (data.interaction_response, actions)
+        (interaction_response, actions)
     }
 
     fn draw_foreground<NodeIdType: TreeViewId>(
@@ -397,7 +399,7 @@ impl TreeView {
         ui: &mut Ui,
         size: Vec2,
         state: &mut TreeViewState<NodeIdType>,
-        data: &mut TreeViewData,
+        interaction: &Response,
         mut build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> InnerResponse<TreeViewBuilderResult<NodeIdType>> {
         // Run the build tree view closure
@@ -407,7 +409,7 @@ impl TreeView {
 
             let mut tree_builder = TreeViewBuilder::new(
                 ui,
-                data,
+                interaction,
                 state,
                 &self.settings,
                 ui.memory(|m| m.has_focus(self.id)),
@@ -440,12 +442,13 @@ impl TreeView {
         }
 
         for node_state in &mut tree_view_result.new_node_states {
-            // was closed clicked
+            // Closer interactions
             if let Some(closer_rect) = node_state.closer {
                 if interaction_response
                     .hover_pos()
                     .is_some_and(|pos| closer_rect.contains(pos))
                 {
+                    // was closed clicked
                     if interaction_response.clicked() {
                         node_state.state.open = !node_state.state.open;
                         println!(
@@ -455,17 +458,49 @@ impl TreeView {
                     }
                 }
             }
-            // was row double clicked
+            // Row interaction
             if interaction_response
                 .hover_pos()
                 .is_some_and(|pos| node_state.row.contains(pos))
             {
+                // was clicked
+                if interaction_response.clicked() {
+                    // React to primary clicking
+                    if ui.ctx().input(|is| is.modifiers.ctrl) {
+                        state.selected.push(node_state.state.id);
+                    } else {
+                        state.selected = vec![node_state.state.id];
+                    }
+                }
+                // was row double clicked
                 if interaction_response.double_clicked() {
                     node_state.state.open = !node_state.state.open;
                     println!(
                         "Double clicked on {:?}, new state: {}",
                         node_state.state.id, node_state.state.open
                     );
+                }
+                // React to a dragging
+                // An egui drag only starts after the pointer has moved but with that first movement
+                // the pointer may have moved to a different node. Instead we want to update
+                // the drag state right when the priamry button was pressed.
+                // We also want to have our own rules when a drag really becomes valid to avoid
+                // graphical artifacts. Sometimes the user is a little fast with the mouse and
+                // it creates the drag overlay when it really shouldn't have.
+                let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
+                if primary_pressed {
+                    let pointer_pos = ui.ctx().pointer_latest_pos().unwrap_or_default();
+                    state.dragged = Some(DragState {
+                        node_id: node_state.state.id,
+                        drag_row_offset: node_state.row.min - pointer_pos,
+                        drag_start_pos: pointer_pos,
+                        drag_valid: false,
+                    });
+                }
+                // React to secondary clicks
+                if interaction_response.secondary_clicked() && !state.drag_valid() {
+                    state.dragged = None;
+                    state.secondary_selection = Some(node_state.state.id);
                 }
             }
         }
@@ -557,8 +592,10 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
             }
         }
         Key::ArrowLeft => {
+            println!("Selected len: {}", state.selected.len());
             if state.selected.len() == 1 {
                 let node_state = &mut state.node_states[first_selected_node_index];
+                println!("node state: {:?}", node_state);
                 if node_state.open {
                     node_state.open = false;
                 } else if let Some(parent_id) = node_state.parent_id {
@@ -586,63 +623,6 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
         }
         _ => (),
     }
-}
-
-/// Holds the data that is required to display a tree view.
-/// This is simply a blob of all the data together without
-/// further structure because abstracting this more simply
-/// increases the complexity without much benefit.
-struct TreeViewData {
-    /// Response of the interaction.
-    interaction_response: Response,
-}
-impl TreeViewData {
-    fn new(ui: &mut Ui, id: Id, size: Vec2) -> Self {
-        let interaction_response = interact_no_expansion(
-            ui,
-            Rect::from_min_size(ui.cursor().min, size),
-            id,
-            Sense::click_and_drag(),
-        );
-
-        TreeViewData {
-            interaction_response,
-        }
-    }
-}
-impl TreeViewData {
-    pub fn interact(&self, rect: &Rect) -> Interaction {
-        if !self
-            .interaction_response
-            .hover_pos()
-            .is_some_and(|pos| rect.contains(pos))
-        {
-            return Interaction {
-                clicked: false,
-                double_clicked: false,
-                secondary_clicked: false,
-                hovered: false,
-                drag_started: false,
-            };
-        }
-        Interaction {
-            clicked: self.interaction_response.clicked(),
-            double_clicked: self.interaction_response.double_clicked(),
-            secondary_clicked: self.interaction_response.secondary_clicked(),
-            hovered: self.interaction_response.hovered(),
-            drag_started: self
-                .interaction_response
-                .drag_started_by(egui::PointerButton::Primary),
-        }
-    }
-}
-
-struct Interaction {
-    pub clicked: bool,
-    pub double_clicked: bool,
-    pub secondary_clicked: bool,
-    pub hovered: bool,
-    pub drag_started: bool,
 }
 
 /// Where a dragged item should be dropped to in a container.

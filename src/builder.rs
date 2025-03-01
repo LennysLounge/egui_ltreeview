@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use egui::{
     epaint::{self, RectShape},
     layers::ShapeIdx,
-    pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, WidgetText,
+    pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui, WidgetText,
 };
 
 use crate::{
     node::{DropQuarter, NodeBuilder},
-    DragState, DropPosition, IndentHintStyle, NodeState, TreeViewData, TreeViewId,
-    TreeViewSettings, TreeViewState,
+    DropPosition, IndentHintStyle, NodeState, TreeViewId, TreeViewSettings, TreeViewState,
 };
 
 #[derive(Clone)]
@@ -54,10 +53,10 @@ pub(crate) struct NodeStateWithRect<NodeIdType> {
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
-    data: &'ui mut TreeViewData,
-    state: &'ui mut TreeViewState<NodeIdType>,
-    stack: Vec<DirectoryState<NodeIdType>>,
+    state: &'ui TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
+    interaction: &'ui Response,
+    stack: Vec<DirectoryState<NodeIdType>>,
     tree_has_focus: bool,
     result: TreeViewBuilderResult<NodeIdType>,
 }
@@ -65,7 +64,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
 impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        data: &'ui mut TreeViewData,
+        interaction: &'ui Response,
         state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
         tree_has_focus: bool,
@@ -85,7 +84,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 drop_marker_idx: ui.painter().add(Shape::Noop),
             },
             ui,
-            data,
+            interaction,
             state,
             stack: Vec::new(),
             settings,
@@ -190,7 +189,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
 
     /// Add a node to the tree.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
-        let mut open = self
+        let open = self
             .state
             .node_state_of(&node.id)
             .map(|node_state| node_state.open)
@@ -249,20 +248,10 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
                 ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
 
-                node.show_node(ui, self.data, self.settings)
+                node.show_node(ui, self.interaction, self.settings)
             })
             .inner;
 
-        let row_interaction = self.data.interact(&row);
-
-        // React to primary clicking
-        if row_interaction.clicked {
-            if self.ui.ctx().input(|is| is.modifiers.ctrl) {
-                self.state.selected.push(node.id);
-            } else {
-                self.state.selected = vec![node.id];
-            }
-        }
         if self.state.is_selected(&node.id) {
             self.ui.painter().set(
                 *self
@@ -288,34 +277,13 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 ),
             );
         }
-        // React to a dragging
-        // An egui drag only starts after the pointer has moved but with that first movement
-        // the pointer may have moved to a different node. Instead we want to update
-        // the drag state right when the priamry button was pressed.
-        // We also want to have our own rules when a drag really becomes valid to avoid
-        // graphical artifacts. Sometimes the user is a little fast with the mouse and
-        // it creates the drag overlay when it really shouldn't have.
-        let primary_pressed = self.ui.input(|i| i.pointer.primary_pressed());
-        if row_interaction.hovered && primary_pressed {
-            let pointer_pos = self.ui.ctx().pointer_latest_pos().unwrap_or_default();
-            self.state.dragged = Some(DragState {
-                node_id: node.id,
-                drag_row_offset: row.min - pointer_pos,
-                drag_start_pos: pointer_pos,
-                drag_valid: false,
-            });
-        }
+
         if self.state.is_dragged(&node.id) {
-            node.show_node_dragged(self.ui, self.data, self.state, self.settings);
+            node.show_node_dragged(self.ui, self.interaction, self.state, self.settings);
         }
 
-        // React to secondary clicks
-        if row_interaction.secondary_clicked && !self.state.drag_valid() {
-            self.state.dragged = None;
-            self.state.secondary_selection = Some(node.id);
-        }
         if self.state.is_secondary_selected(&node.id) {
-            let context_menu_visible = node.show_context_menu(&self.data.interaction_response);
+            let context_menu_visible = node.show_context_menu(self.interaction);
 
             if !self.state.is_selected(&node.id) && context_menu_visible {
                 self.ui.painter().set(

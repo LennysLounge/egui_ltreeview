@@ -1,8 +1,9 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Order, Rangef, Rect, Response, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Order, Rangef, Rect,
+    Response, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
 
-use crate::{Interaction, RowLayout, TreeViewData, TreeViewId, TreeViewSettings, TreeViewState};
+use crate::{RowLayout, TreeViewId, TreeViewSettings, TreeViewState};
 
 pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
 pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
@@ -104,12 +105,9 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
         self
     }
 
-    pub fn label_text(
-        self,
-        text: impl Into<WidgetText> + 'add_ui,
-    ) -> Self{
+    pub fn label_text(self, text: impl Into<WidgetText> + 'add_ui) -> Self {
         let widget_text = text.into();
-        self.label(move |ui|{
+        self.label(move |ui| {
             ui.add(Label::new(widget_text.clone()).selectable(false));
         })
     }
@@ -134,7 +132,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn show_node(
         &mut self,
         ui: &mut Ui,
-        data: &TreeViewData,
+        interaction: &Response,
         settings: &TreeViewSettings,
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
@@ -175,8 +173,10 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                     .icon_rectangles(ui.available_rect_before_wrap());
 
                 let res = ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
-                    let closer_interaction = data.interact(&ui.max_rect());
-                    if closer_interaction.hovered {
+                    let is_hovered = interaction
+                        .hover_pos()
+                        .is_some_and(|pos| ui.max_rect().contains(pos));
+                    if is_hovered {
                         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
                     }
                     if let Some(add_closer) = self.closer.as_mut() {
@@ -184,14 +184,13 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                             ui,
                             CloserState {
                                 is_open: self.is_open,
-                                is_hovered: closer_interaction.hovered,
+                                is_hovered,
                             },
                         );
                     } else {
                         let icon_id = Id::new(self.id).with("tree view closer icon");
                         let openness = ui.ctx().animate_bool(icon_id, self.is_open);
-                        let closer_interaction = data.interact(&ui.max_rect());
-                        paint_default_icon(ui, openness, &small_rect, &closer_interaction);
+                        paint_default_icon(ui, openness, &small_rect, is_hovered);
                     }
                     ui.allocate_space(ui.available_size_before_wrap());
                 });
@@ -250,7 +249,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
-        data: &TreeViewData,
+        interaction: &Response,
         state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
     ) -> bool {
@@ -270,7 +269,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
             .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
-                let (row, _, _, _) = self.show_node(ui, data, settings);
+                let (row, _, _, _) = self.show_node(ui, interaction, settings);
 
                 ui.painter().set(
                     background_position,
@@ -316,13 +315,8 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
 }
 
 /// Paint the arrow icon that indicated if the region is open or not
-pub(crate) fn paint_default_icon(
-    ui: &mut Ui,
-    openness: f32,
-    rect: &Rect,
-    interaction: &Interaction,
-) {
-    let visuals = if interaction.hovered {
+pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, is_hovered: bool) {
+    let visuals = if is_hovered {
         ui.visuals().widgets.hovered
     } else {
         ui.visuals().widgets.inactive
