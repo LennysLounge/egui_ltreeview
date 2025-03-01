@@ -3,7 +3,7 @@ pub mod node;
 
 use std::hash::Hash;
 
-use builder::TreeViewBuilderResult;
+use builder::{RowRectangles, TreeViewBuilderResult};
 use egui::{
     self, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key, Layout, NumExt, Pos2,
     Rect, Response, Sense, Shape, Ui, Vec2,
@@ -340,20 +340,15 @@ impl TreeView {
         // todo: allocate background shapes
         // Run the build tree view closure
         let InnerResponse {
-            inner: mut tree_builder_result,
+            inner: tree_builder_result,
             response,
         } = self.draw_foreground(ui, size, state, &interaction_response, build_tree_view);
 
-        self.handle_input(ui, &interaction_response, &mut tree_builder_result, state);
+        state.node_states = tree_builder_result.new_node_states.clone();
+
+        self.handle_input(ui, &interaction_response, &tree_builder_result, state);
 
         // todo: Draw background
-
-        // use new node states
-        state.node_states = tree_builder_result
-            .new_node_states
-            .iter()
-            .map(|nswr| nswr.state.clone())
-            .collect();
 
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
@@ -434,26 +429,37 @@ impl TreeView {
         &mut self,
         ui: &mut Ui,
         interaction_response: &Response,
-        tree_view_result: &mut TreeViewBuilderResult<NodeIdType>,
+        tree_view_result: &TreeViewBuilderResult<NodeIdType>,
         state: &mut TreeViewState<NodeIdType>,
     ) {
         if interaction_response.clicked() || interaction_response.drag_started() {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
 
-        for node_state in &mut tree_view_result.new_node_states {
+        let node_ids = state.node_states.iter().map(|ns| ns.id).collect::<Vec<_>>();
+
+        for node_id in node_ids {
+            let RowRectangles {
+                row_rect,
+                closer_rect,
+            } = tree_view_result
+                .row_rectangles
+                .get(&node_id)
+                .expect("A node_state must have row rectangles");
+
             // Closer interactions
-            if let Some(closer_rect) = node_state.closer {
+            if let Some(closer_rect) = closer_rect {
                 if interaction_response
                     .hover_pos()
                     .is_some_and(|pos| closer_rect.contains(pos))
                 {
                     // was closed clicked
                     if interaction_response.clicked() {
-                        node_state.state.open = !node_state.state.open;
+                        let node_state = state.node_state_of_mut(&node_id).unwrap();
+                        node_state.open = !node_state.open;
                         println!(
                             "Closed clicked on {:?}, new state: {}",
-                            node_state.state.id, node_state.state.open
+                            node_state.id, node_state.open
                         );
                     }
                 }
@@ -461,23 +467,24 @@ impl TreeView {
             // Row interaction
             if interaction_response
                 .hover_pos()
-                .is_some_and(|pos| node_state.row.contains(pos))
+                .is_some_and(|pos| row_rect.contains(pos))
             {
                 // was clicked
                 if interaction_response.clicked() {
                     // React to primary clicking
                     if ui.ctx().input(|is| is.modifiers.ctrl) {
-                        state.selected.push(node_state.state.id);
+                        state.selected.push(node_id);
                     } else {
-                        state.selected = vec![node_state.state.id];
+                        state.selected = vec![node_id];
                     }
                 }
                 // was row double clicked
                 if interaction_response.double_clicked() {
-                    node_state.state.open = !node_state.state.open;
+                    let node_state = state.node_state_of_mut(&node_id).unwrap();
+                    node_state.open = !node_state.open;
                     println!(
                         "Double clicked on {:?}, new state: {}",
-                        node_state.state.id, node_state.state.open
+                        node_state.id, node_state.open
                     );
                 }
                 // React to a dragging
@@ -491,8 +498,8 @@ impl TreeView {
                 if primary_pressed {
                     let pointer_pos = ui.ctx().pointer_latest_pos().unwrap_or_default();
                     state.dragged = Some(DragState {
-                        node_id: node_state.state.id,
-                        drag_row_offset: node_state.row.min - pointer_pos,
+                        node_id: node_id,
+                        drag_row_offset: row_rect.min - pointer_pos,
                         drag_start_pos: pointer_pos,
                         drag_valid: false,
                     });
@@ -500,7 +507,7 @@ impl TreeView {
                 // React to secondary clicks
                 if interaction_response.secondary_clicked() && !state.drag_valid() {
                     state.dragged = None;
-                    state.secondary_selection = Some(node_state.state.id);
+                    state.secondary_selection = Some(node_id);
                 }
             }
         }

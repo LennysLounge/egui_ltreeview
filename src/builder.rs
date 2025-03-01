@@ -35,17 +35,17 @@ pub(crate) struct TreeViewBuilderResult<NodeIdType> {
     pub(crate) background_idx: HashMap<NodeIdType, ShapeIdx>,
     pub(crate) background_idx_backup: ShapeIdx,
     pub(crate) secondary_selection_idx: ShapeIdx,
-    pub(crate) new_node_states: Vec<NodeStateWithRect<NodeIdType>>,
+    pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
+    pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
     /// NodeId and Drop position of the drop target.
     pub(crate) drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     /// Shape index of the drop marker
     pub(crate) drop_marker_idx: ShapeIdx,
 }
 
-pub(crate) struct NodeStateWithRect<NodeIdType> {
-    pub(crate) state: NodeState<NodeIdType>,
-    pub(crate) row: Rect,
-    pub(crate) closer: Option<Rect>,
+pub(crate) struct RowRectangles {
+    pub(crate) row_rect: Rect,
+    pub(crate) closer_rect: Option<Rect>,
 }
 
 /// The builder used to construct the tree view.
@@ -82,6 +82,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 new_node_states: Vec::new(),
                 drop: None,
                 drop_marker_idx: ui.painter().add(Shape::Noop),
+                row_rectangles: HashMap::new(),
             },
             ui,
             interaction,
@@ -202,16 +203,19 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             (Rect::NOTHING, Some(Rect::NOTHING))
         };
 
-        self.result.new_node_states.push(NodeStateWithRect {
-            state: NodeState {
-                id: node.id,
-                parent_id: self.parent_id(),
-                open,
-                visible: self.parent_dir_is_open() && !node.flatten,
-            },
-            row,
-            closer,
+        self.result.new_node_states.push(NodeState {
+            id: node.id,
+            parent_id: self.parent_id(),
+            open,
+            visible: self.parent_dir_is_open() && !node.flatten,
         });
+        self.result.row_rectangles.insert(
+            node.id,
+            RowRectangles {
+                row_rect: row,
+                closer_rect: closer,
+            },
+        );
 
         if node.is_dir {
             self.stack.push(DirectoryState {
