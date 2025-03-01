@@ -320,7 +320,6 @@ impl TreeView {
             )
         });
 
-        let prev_selection = state.selected.clone();
         let background_shapes = BackgroundShapes::new(ui, state);
 
         let InnerResponse {
@@ -329,13 +328,14 @@ impl TreeView {
         } = self.draw_foreground(ui, state, build_tree_view);
 
         state.node_states = tree_builder_result.new_node_states.clone();
-        let drop_position = self.handle_input(ui, &tree_builder_result, state);
+        let input_result = self.handle_input(ui, &tree_builder_result, state);
+
         self.draw_background(
             ui,
             state,
             &tree_builder_result,
             &background_shapes,
-            drop_position,
+            input_result.drag_and_drop,
         );
 
         // Remember the size of the tree for next frame.
@@ -345,7 +345,7 @@ impl TreeView {
         // Create a drag or move action.
         if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(drop_position)
+                state.dragged.as_ref().zip(input_result.drag_and_drop)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     actions.push(Action::Move(DragAndDrop {
@@ -365,7 +365,7 @@ impl TreeView {
             }
         }
         // Create a selection action.
-        if state.selected != prev_selection {
+        if input_result.selection_changed {
             actions.push(Action::SetSelected(state.selected.clone()));
         }
 
@@ -440,7 +440,7 @@ impl TreeView {
         ui: &mut Ui,
         tree_view_result: &TreeViewBuilderResult<NodeIdType>,
         state: &mut TreeViewState<NodeIdType>,
-    ) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
+    ) -> InputResult<NodeIdType> {
         let TreeViewBuilderResult {
             row_rectangles,
             seconday_click,
@@ -459,6 +459,8 @@ impl TreeView {
         if !interaction.context_menu_opened() {
             state.secondary_selection = None;
         }
+
+        let mut selection_changed = false;
 
         let node_ids = state.node_states.iter().map(|ns| ns.id).collect::<Vec<_>>();
         for node_id in node_ids {
@@ -491,8 +493,10 @@ impl TreeView {
                 if interaction.clicked() {
                     // React to primary clicking
                     if ui.ctx().input(|is| is.modifiers.ctrl) {
+                        selection_changed = true;
                         state.selected.push(node_id);
                     } else {
+                        selection_changed = true;
                         state.selected = vec![node_id];
                     }
                 }
@@ -571,11 +575,14 @@ impl TreeView {
                     .map(|drag_state| vec![drag_state.node_id])
                     .or(state.node_states.first().map(|n| vec![n.id]))
                     .unwrap();
+                selection_changed = true;
             }
             ui.input(|i| {
                 for event in i.events.iter() {
                     match event {
-                        Event::Key { key, pressed, .. } if *pressed => handle_input(state, key),
+                        Event::Key { key, pressed, .. } if *pressed => {
+                            selection_changed |= handle_input(state, key);
+                        }
                         _ => (),
                     }
                 }
@@ -592,7 +599,10 @@ impl TreeView {
             }
         }
 
-        drop_position
+        InputResult {
+            drag_and_drop: drop_position,
+            selection_changed,
+        }
     }
 
     fn draw_background<NodeIdType: TreeViewId>(
@@ -755,10 +765,11 @@ fn get_drop_position_node<NodeIdType: TreeViewId>(
     }
 }
 
-fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, key: &Key) {
+fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, key: &Key) -> bool {
     if state.selected.is_empty() {
-        return;
+        return false;
     }
+    let mut selection_changed = false;
 
     let first_selected_node_index = state
         .selected
@@ -792,6 +803,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
                         .find(|node| node.visible)
                 {
                     state.selected = vec![node.id];
+                    selection_changed = true;
                 }
             }
         }
@@ -803,6 +815,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
                     .find(|node| node.visible)
                 {
                     state.selected = vec![node.id];
+                    selection_changed = true;
                 }
             }
         }
@@ -813,6 +826,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
                     node_state.open = false;
                 } else if let Some(parent_id) = node_state.parent_id {
                     state.selected = vec![parent_id];
+                    selection_changed = true;
                 }
             }
         }
@@ -827,6 +841,7 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
                             .find(|node| node.visible)
                         {
                             state.selected = vec![node.id];
+                            selection_changed = true;
                         }
                     }
                 } else {
@@ -835,7 +850,8 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
             }
         }
         _ => (),
-    }
+    };
+    selection_changed
 }
 
 /// Where a dragged item should be dropped to in a container.
@@ -977,4 +993,9 @@ impl<NodeIdType: TreeViewId> BackgroundShapes<NodeIdType> {
             drop_marker_idx: ui.painter().add(Shape::Noop),
         }
     }
+}
+
+struct InputResult<NodeIdType> {
+    drag_and_drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
+    selection_changed: bool,
 }

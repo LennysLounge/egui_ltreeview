@@ -4,8 +4,8 @@ use std::env;
 use data::*;
 use egui::{Color32, DragValue, Id, Label, Layout, Response, ThemePreference, Ui};
 use egui_ltreeview::{
-    node::NodeBuilder, Action, DropPosition, RowLayout, TreeView, TreeViewBuilder, TreeViewState,
-    IndentHintStyle,
+    node::NodeBuilder, Action, DropPosition, IndentHintStyle, RowLayout, TreeView, TreeViewBuilder,
+    TreeViewState,
 };
 use uuid::Uuid;
 
@@ -94,9 +94,9 @@ impl eframe::App for MyApp {
                 );
             });
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.tree_view_state.selected().len() > 1{
+            if self.tree_view_state.selected().len() > 1 {
                 ui.label("Multiple nodes selected");
-            }else{
+            } else {
                 if let Some(selected_node) = self.tree_view_state.selected().first() {
                     if *selected_node == self.settings_id {
                         show_settings(ui, &mut self.settings);
@@ -285,11 +285,17 @@ fn show_file(
             }
             ui.separator();
             if ui.button("new file").clicked() {
-                actions.push(ContextMenuActions::AddLeaf(parent_node, DropPosition::After(file.id)));
+                actions.push(ContextMenuActions::AddLeaf(
+                    parent_node,
+                    DropPosition::After(file.id),
+                ));
                 ui.close_menu();
             }
             if ui.button("new directory").clicked() {
-                actions.push(ContextMenuActions::AddDir(parent_node, DropPosition::After(file.id)));
+                actions.push(ContextMenuActions::AddDir(
+                    parent_node,
+                    DropPosition::After(file.id),
+                ));
                 ui.close_menu();
             }
         });
