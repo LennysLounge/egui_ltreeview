@@ -1,7 +1,10 @@
 pub mod builder;
 pub mod node;
 
-use std::{collections::HashSet, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use builder::{RowRectangles, TreeViewBuilderResult};
 use egui::{
@@ -317,6 +320,69 @@ impl TreeView {
             )
         });
 
+        let prev_selection = state.selected.clone();
+        let background_shapes = BackgroundShapes::new(ui, state);
+
+        let InnerResponse {
+            inner: tree_builder_result,
+            response,
+        } = self.draw_foreground(ui, state, build_tree_view);
+
+        state.node_states = tree_builder_result.new_node_states.clone();
+        let drop_position = self.handle_input(ui, &tree_builder_result, state);
+        self.draw_background(
+            ui,
+            state,
+            &tree_builder_result,
+            &background_shapes,
+            drop_position,
+        );
+
+        // Remember the size of the tree for next frame.
+        state.size = response.rect.size();
+
+        let mut actions = Vec::new();
+        // Create a drag or move action.
+        if state.drag_valid() {
+            if let Some((drag_state, (drop_id, position))) =
+                state.dragged.as_ref().zip(drop_position)
+            {
+                if ui.ctx().input(|i| i.pointer.primary_released()) {
+                    actions.push(Action::Move(DragAndDrop {
+                        source: drag_state.node_id,
+                        target: drop_id,
+                        position,
+                        drop_marker_idx: background_shapes.drop_marker_idx,
+                    }))
+                } else {
+                    actions.push(Action::Drag(DragAndDrop {
+                        source: drag_state.node_id,
+                        target: drop_id,
+                        position,
+                        drop_marker_idx: background_shapes.drop_marker_idx,
+                    }))
+                }
+            }
+        }
+        // Create a selection action.
+        if state.selected != prev_selection {
+            actions.push(Action::SetSelected(state.selected.clone()));
+        }
+
+        // Reset the drag state.
+        if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
+            state.dragged = None;
+        }
+
+        (tree_builder_result.interaction, actions)
+    }
+
+    fn draw_foreground<NodeIdType: TreeViewId>(
+        &mut self,
+        ui: &mut Ui,
+        state: &mut TreeViewState<NodeIdType>,
+        mut build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
+    ) -> InnerResponse<TreeViewBuilderResult<NodeIdType>> {
         // Calculate the desired size of the tree view widget.
         let size = vec2(
             if self.settings.fill_space_horizontal {
@@ -333,82 +399,21 @@ impl TreeView {
             .at_least(self.settings.min_height),
         );
 
-        let prev_selection = state.selected.clone();
         let interaction_response = interact_no_expansion(
             ui,
             Rect::from_min_size(ui.cursor().min, size),
             self.id,
             Sense::click_and_drag(),
         );
-        // todo: allocate background shapes
+
         // Run the build tree view closure
-        let InnerResponse {
-            inner: tree_builder_result,
-            response,
-        } = self.draw_foreground(ui, size, state, &interaction_response, build_tree_view);
-
-        state.node_states = tree_builder_result.new_node_states.clone();
-
-        let drop_position =
-            self.handle_input(ui, &interaction_response, &tree_builder_result, state);
-
-        self.draw_background(ui, state, &tree_builder_result, drop_position);
-
-        // Remember the size of the tree for next frame.
-        state.size = response.rect.size();
-
-        let mut actions = Vec::new();
-        // Create a drag or move action.
-        if state.drag_valid() {
-            if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(drop_position)
-            {
-                if ui.ctx().input(|i| i.pointer.primary_released()) {
-                    actions.push(Action::Move(DragAndDrop {
-                        source: drag_state.node_id,
-                        target: drop_id,
-                        position,
-                        drop_marker_idx: tree_builder_result.drop_marker_idx,
-                    }))
-                } else {
-                    actions.push(Action::Drag(DragAndDrop {
-                        source: drag_state.node_id,
-                        target: drop_id,
-                        position,
-                        drop_marker_idx: tree_builder_result.drop_marker_idx,
-                    }))
-                }
-            }
-        }
-        // Create a selection action.
-        if state.selected != prev_selection {
-            actions.push(Action::SetSelected(state.selected.clone()));
-        }
-
-        // Reset the drag state.
-        if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
-            state.dragged = None;
-        }
-
-        (interaction_response, actions)
-    }
-
-    fn draw_foreground<NodeIdType: TreeViewId>(
-        &mut self,
-        ui: &mut Ui,
-        size: Vec2,
-        state: &mut TreeViewState<NodeIdType>,
-        interaction: &Response,
-        mut build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
-    ) -> InnerResponse<TreeViewBuilderResult<NodeIdType>> {
-        // Run the build tree view closure
-        ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
+        let response = ui.allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
             ui.set_min_size(vec2(self.settings.min_width, self.settings.min_height));
             ui.add_space(ui.spacing().item_spacing.y * 0.5);
 
             let mut tree_builder = TreeViewBuilder::new(
                 ui,
-                interaction,
+                interaction_response,
                 state,
                 &self.settings,
                 ui.memory(|m| m.has_focus(self.id)),
@@ -426,18 +431,33 @@ impl TreeView {
                 ui.set_min_height(ui.available_height());
             }
             tree_builder_response
-        })
+        });
+        response
     }
 
     fn handle_input<NodeIdType: TreeViewId>(
         &mut self,
         ui: &mut Ui,
-        interaction_response: &Response,
         tree_view_result: &TreeViewBuilderResult<NodeIdType>,
         state: &mut TreeViewState<NodeIdType>,
     ) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
-        if interaction_response.clicked() || interaction_response.drag_started() {
+        let TreeViewBuilderResult {
+            row_rectangles,
+            seconday_click,
+            interaction,
+            ..
+        } = tree_view_result;
+
+        if interaction.clicked() || interaction.drag_started() {
             ui.memory_mut(|m| m.request_focus(self.id));
+        }
+
+        // Transfer the secondary click
+        if seconday_click.is_some() {
+            state.secondary_selection = *seconday_click;
+        }
+        if !interaction.context_menu_opened() {
+            state.secondary_selection = None;
         }
 
         let node_ids = state.node_states.iter().map(|ns| ns.id).collect::<Vec<_>>();
@@ -445,31 +465,30 @@ impl TreeView {
             let RowRectangles {
                 row_rect,
                 closer_rect,
-            } = tree_view_result
-                .row_rectangles
+            } = row_rectangles
                 .get(&node_id)
                 .expect("A node_state must have row rectangles");
 
             // Closer interactions
             if let Some(closer_rect) = closer_rect {
-                if interaction_response
+                if interaction
                     .hover_pos()
                     .is_some_and(|pos| closer_rect.contains(pos))
                 {
                     // was closed clicked
-                    if interaction_response.clicked() {
+                    if interaction.clicked() {
                         let node_state = state.node_state_of_mut(&node_id).unwrap();
                         node_state.open = !node_state.open;
                     }
                 }
             }
             // Row interaction
-            if interaction_response
+            if interaction
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos))
             {
                 // was clicked
-                if interaction_response.clicked() {
+                if interaction.clicked() {
                     // React to primary clicking
                     if ui.ctx().input(|is| is.modifiers.ctrl) {
                         state.selected.push(node_id);
@@ -478,7 +497,7 @@ impl TreeView {
                     }
                 }
                 // was row double clicked
-                if interaction_response.double_clicked() {
+                if interaction.double_clicked() {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
                     node_state.open = !node_state.open;
                 }
@@ -498,11 +517,6 @@ impl TreeView {
                         drag_start_pos: pointer_pos,
                         drag_valid: false,
                     });
-                }
-                // React to secondary clicks
-                if interaction_response.secondary_clicked() && !state.drag_valid() {
-                    state.dragged = None;
-                    state.secondary_selection = Some(node_id);
                 }
             }
         }
@@ -534,8 +548,8 @@ impl TreeView {
                 // At this point we have a potentially valid node to drop on.
                 // Now we only need to check if the mouse is over the node, get the correct
                 // drop quarter and then get the correct drop position.
-                let row_rectangles = tree_view_result.row_rectangles.get(&node_state.id).unwrap();
-                let drop_quarter = interaction_response
+                let row_rectangles = row_rectangles.get(&node_state.id).unwrap();
+                let drop_quarter = interaction
                     .hover_pos()
                     .and_then(|pos| DropQuarter::new(row_rectangles.row_rect.y_range(), pos.y));
                 if let Some(drop_quarter) = drop_quarter {
@@ -586,6 +600,7 @@ impl TreeView {
         ui: &mut Ui,
         state: &TreeViewState<NodeIdType>,
         result: &TreeViewBuilderResult<NodeIdType>,
+        background: &BackgroundShapes<NodeIdType>,
         drop_position: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     ) {
         pub const DROP_LINE_HEIGHT: f32 = 3.0;
@@ -650,7 +665,45 @@ impl TreeView {
                 Stroke::NONE,
                 egui::StrokeKind::Inside,
             );
-            ui.painter().set(result.drop_marker_idx, shape);
+            ui.painter().set(background.drop_marker_idx, shape);
+        }
+
+        for selected_node in state.selected() {
+            let row_rectangles = result.row_rectangles.get(selected_node).unwrap();
+            ui.painter().set(
+                *background
+                    .background_idx
+                    .get(selected_node)
+                    .unwrap_or(&background.background_idx_backup),
+                epaint::RectShape::new(
+                    row_rectangles.row_rect,
+                    ui.visuals().widgets.active.corner_radius,
+                    if ui.memory(|m| m.has_focus(self.id)) {
+                        ui.visuals().selection.bg_fill
+                    } else {
+                        ui.visuals()
+                            .widgets
+                            .inactive
+                            .weak_bg_fill
+                            .linear_multiply(0.3)
+                    },
+                    Stroke::NONE,
+                    egui::StrokeKind::Inside,
+                ),
+            );
+        }
+        if let Some(seconday_selected_id) = state.secondary_selection {
+            let row_rectangles = result.row_rectangles.get(&seconday_selected_id).unwrap();
+            ui.painter().set(
+                background.secondary_selection_idx,
+                epaint::RectShape::new(
+                    row_rectangles.row_rect,
+                    ui.visuals().widgets.active.corner_radius,
+                    egui::Color32::TRANSPARENT,
+                    ui.visuals().widgets.inactive.fg_stroke,
+                    egui::StrokeKind::Inside,
+                ),
+            );
         }
     }
 }
@@ -903,4 +956,25 @@ fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Respo
     let res = ui.interact(rect, id, sense);
     *ui.spacing_mut() = spacing_before;
     res
+}
+
+struct BackgroundShapes<NodeIdType> {
+    background_idx: HashMap<NodeIdType, ShapeIdx>,
+    background_idx_backup: ShapeIdx,
+    secondary_selection_idx: ShapeIdx,
+    drop_marker_idx: ShapeIdx,
+}
+impl<NodeIdType: TreeViewId> BackgroundShapes<NodeIdType> {
+    fn new(ui: &mut Ui, state: &TreeViewState<NodeIdType>) -> Self {
+        let mut background_indices = HashMap::new();
+        state.node_states.iter().for_each(|ns| {
+            background_indices.insert(ns.id, ui.painter().add(Shape::Noop));
+        });
+        Self {
+            background_idx: background_indices,
+            background_idx_backup: ui.painter().add(Shape::Noop),
+            secondary_selection_idx: ui.painter().add(Shape::Noop),
+            drop_marker_idx: ui.painter().add(Shape::Noop),
+        }
+    }
 }

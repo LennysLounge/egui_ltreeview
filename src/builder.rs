@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 
-use egui::{
-    epaint::{self},
-    layers::ShapeIdx,
-    pos2, vec2, Pos2, Rect, Response, Shape, Stroke, Ui, WidgetText,
-};
+use egui::{pos2, vec2, Pos2, Rect, Response, Ui, WidgetText};
 
 use crate::{
     node::NodeBuilder, IndentHintStyle, NodeState, TreeViewId, TreeViewSettings, TreeViewState,
@@ -27,12 +23,10 @@ struct DirectoryState<NodeIdType> {
 }
 
 pub(crate) struct TreeViewBuilderResult<NodeIdType> {
-    pub(crate) background_idx: HashMap<NodeIdType, ShapeIdx>,
-    pub(crate) background_idx_backup: ShapeIdx,
-    pub(crate) secondary_selection_idx: ShapeIdx,
     pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
     pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
-    pub(crate) drop_marker_idx: ShapeIdx,
+    pub(crate) seconday_click: Option<NodeIdType>,
+    pub(crate) interaction: Response,
 }
 
 pub(crate) struct RowRectangles {
@@ -47,7 +41,6 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
     state: &'ui TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
-    interaction: &'ui Response,
     stack: Vec<DirectoryState<NodeIdType>>,
     tree_has_focus: bool,
     result: TreeViewBuilderResult<NodeIdType>,
@@ -56,27 +49,19 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
 impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        interaction: &'ui Response,
+        interaction: Response,
         state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
         tree_has_focus: bool,
     ) -> Self {
-        let mut background_indices = HashMap::new();
-        state.node_states.iter().for_each(|ns| {
-            background_indices.insert(ns.id, ui.painter().add(Shape::Noop));
-        });
-
         Self {
             result: TreeViewBuilderResult {
-                background_idx: background_indices,
-                background_idx_backup: ui.painter().add(Shape::Noop),
-                secondary_selection_idx: ui.painter().add(Shape::Noop),
                 new_node_states: Vec::new(),
-                drop_marker_idx: ui.painter().add(Shape::Noop),
                 row_rectangles: HashMap::new(),
+                seconday_click: None,
+                interaction,
             },
             ui,
-            interaction,
             state,
             stack: Vec::new(),
             settings,
@@ -223,55 +208,36 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
                 ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
 
-                node.show_node(ui, self.interaction, self.settings)
+                node.show_node(ui, &self.result.interaction, self.settings)
             })
             .inner;
 
-        if self.state.is_selected(&node.id) {
-            self.ui.painter().set(
-                *self
-                    .result
-                    .background_idx
-                    .get(&node.id)
-                    .unwrap_or(&self.result.background_idx_backup),
-                epaint::RectShape::new(
-                    row,
-                    self.ui.visuals().widgets.active.corner_radius,
-                    if self.tree_has_focus {
-                        self.ui.visuals().selection.bg_fill
-                    } else {
-                        self.ui
-                            .visuals()
-                            .widgets
-                            .inactive
-                            .weak_bg_fill
-                            .linear_multiply(0.3)
-                    },
-                    Stroke::NONE,
-                    egui::StrokeKind::Inside,
-                ),
-            );
-        }
-
         if self.state.is_dragged(&node.id) {
-            node.show_node_dragged(self.ui, self.interaction, self.state, self.settings);
+            node.show_node_dragged(self.ui, &self.result.interaction, self.state, self.settings);
         }
 
-        if self.state.is_secondary_selected(&node.id) {
-            let context_menu_visible = node.show_context_menu(self.interaction);
-
-            if !self.state.is_selected(&node.id) && context_menu_visible {
-                self.ui.painter().set(
-                    self.result.secondary_selection_idx,
-                    epaint::RectShape::new(
-                        row,
-                        self.ui.visuals().widgets.active.corner_radius,
-                        egui::Color32::TRANSPARENT,
-                        self.ui.visuals().widgets.inactive.fg_stroke,
-                        egui::StrokeKind::Inside,
-                    ),
-                );
+        // React to secondary clicks
+        // Context menus in egui only show up when the secondary mouse button is pressed.
+        // Since we are handling inputs after the tree has already been build we only know
+        // that we should show a context menu one frame after the click has happened and the
+        // context menu would never show up.
+        // To fix this we handle the secondary click here and return the even in the result.
+        if self
+            .result
+            .interaction
+            .hover_pos()
+            .is_some_and(|pos| row.contains(pos))
+        {
+            if self.result.interaction.secondary_clicked() && !self.state.drag_valid() {
+                self.result.seconday_click = Some(node.id);
             }
+        }
+
+        // Show the context menu.
+        if self.result.seconday_click.is_some_and(|id| id == node.id)
+            || self.state.is_secondary_selected(&node.id)
+        {
+            node.show_context_menu(&self.result.interaction);
         }
 
         self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());
