@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 
 use egui::{
-    epaint::{self, RectShape},
+    epaint::{self},
     layers::ShapeIdx,
-    pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui, WidgetText,
+    pos2, vec2, Pos2, Rect, Response, Shape, Stroke, Ui, WidgetText,
 };
 
 use crate::{
-    node::{DropQuarter, NodeBuilder},
-    DropPosition, IndentHintStyle, NodeState, TreeViewId, TreeViewSettings, TreeViewState,
+    node::NodeBuilder, IndentHintStyle, NodeState, TreeViewId, TreeViewSettings, TreeViewState,
 };
 
 #[derive(Clone)]
@@ -17,10 +16,6 @@ struct DirectoryState<NodeIdType> {
     id: NodeIdType,
     /// If directory is expanded
     is_open: bool,
-    /// Wether dropping on this or any of its child nodes is allowed.
-    drop_forbidden: bool,
-    /// The rectangle of the row.
-    row_rect: Rect,
     /// The rectangle of the icon.
     icon_rect: Rect,
     /// Positions of each child node of this directory.
@@ -37,9 +32,6 @@ pub(crate) struct TreeViewBuilderResult<NodeIdType> {
     pub(crate) secondary_selection_idx: ShapeIdx,
     pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
     pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
-    /// NodeId and Drop position of the drop target.
-    pub(crate) drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
-    /// Shape index of the drop marker
     pub(crate) drop_marker_idx: ShapeIdx,
 }
 
@@ -80,7 +72,6 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 background_idx_backup: ui.painter().add(Shape::Noop),
                 secondary_selection_idx: ui.painter().add(Shape::Noop),
                 new_node_states: Vec::new(),
-                drop: None,
                 drop_marker_idx: ui.painter().add(Shape::Noop),
                 row_rectangles: HashMap::new(),
             },
@@ -124,25 +115,6 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         let Some(current_dir) = self.stack.pop() else {
             return;
         };
-
-        // Draw the drop marker over the entire dir if it is the target.
-        if let Some((drop_parent, DropPosition::Last)) = &self.result.drop {
-            if drop_parent == &current_dir.id {
-                let mut rect = current_dir.row_rect;
-                *rect.bottom_mut() =
-                    self.ui.cursor().top() - self.ui.spacing().item_spacing.y * 0.5;
-                self.ui.painter().set(
-                    self.result.drop_marker_idx,
-                    RectShape::new(
-                        rect,
-                        self.ui.visuals().widgets.active.corner_radius,
-                        self.ui.visuals().selection.bg_fill.linear_multiply(0.5),
-                        Stroke::NONE,
-                        egui::StrokeKind::Inside,
-                    ),
-                );
-            }
-        }
 
         // Draw indent hint
         if current_dir.is_open {
@@ -208,6 +180,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             parent_id: self.parent_id(),
             open,
             visible: self.parent_dir_is_open() && !node.flatten,
+            drop_allowed: node.drop_allowed,
         });
         self.result.row_rectangles.insert(
             node.id,
@@ -221,8 +194,6 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             self.stack.push(DirectoryState {
                 is_open: self.parent_dir_is_open() && open,
                 id: node.id,
-                drop_forbidden: self.parent_dir_drop_forbidden() || self.state.is_dragged(&node.id),
-                row_rect: row,
                 icon_rect: closer.expect("Closer response should be availabel for dirs"),
                 child_node_positions: Vec::new(),
                 indent_level: if node.flatten {
@@ -303,140 +274,9 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             }
         }
 
-        self.do_drop_node(node, &row);
-
         self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());
 
         (row, closer)
-    }
-
-    fn do_drop_node(&mut self, node: &NodeBuilder<NodeIdType>, row: &Rect) {
-        let Some(drop_quarter) = self
-            .ui
-            .ctx()
-            .pointer_latest_pos()
-            .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
-        else {
-            return;
-        };
-
-        if self.state.dragged.is_none() {
-            return;
-        }
-        if !self.state.drag_valid() {
-            return;
-        }
-        if self.parent_dir_drop_forbidden() {
-            return;
-        }
-        // For dirs and for nodes that allow dropping on them, it is not
-        // allowed to drop itself onto itself.
-        if self.state.is_dragged(&node.id) && node.drop_allowed {
-            return;
-        }
-
-        let drop_position = self.get_drop_position_node(node, &drop_quarter);
-        let shape = self.drop_marker_shape(row, drop_position.as_ref());
-
-        // It is allowed to drop itself `After´ or `Before` itself.
-        // This however doesn't make sense and makes executing the command more
-        // difficult for the caller.
-        // Instead we display the markers only.
-        if self.state.is_dragged(&node.id) {
-            self.ui.painter().set(self.result.drop_marker_idx, shape);
-            return;
-        }
-
-        self.result.drop = drop_position;
-        self.ui.painter().set(self.result.drop_marker_idx, shape);
-    }
-
-    fn get_drop_position_node(
-        &self,
-        node_config: &NodeBuilder<NodeIdType>,
-        drop_quater: &DropQuarter,
-    ) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
-        let NodeBuilder {
-            id,
-            is_open,
-            drop_allowed,
-            ..
-        } = node_config;
-
-        match drop_quater {
-            DropQuarter::Top => {
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::Before(*id)));
-                }
-                if *drop_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                None
-            }
-            DropQuarter::MiddleTop => {
-                if *drop_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::Before(*id)));
-                }
-                None
-            }
-            DropQuarter::MiddleBottom => {
-                if *drop_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::After(*id)));
-                }
-                None
-            }
-            DropQuarter::Bottom => {
-                if *drop_allowed && *is_open {
-                    return Some((*id, DropPosition::First));
-                }
-                if let Some(parent_dir) = self.parent_dir() {
-                    return Some((parent_dir.id, DropPosition::After(*id)));
-                }
-                if *drop_allowed {
-                    return Some((*id, DropPosition::Last));
-                }
-                None
-            }
-        }
-    }
-
-    fn drop_marker_shape(
-        &self,
-        interaction: &Rect,
-        drop_position: Option<&(NodeIdType, DropPosition<NodeIdType>)>,
-    ) -> Shape {
-        pub const DROP_LINE_HEIGHT: f32 = 3.0;
-
-        let drop_marker = match drop_position {
-            Some((_, DropPosition::Before(_))) => {
-                Rangef::point(interaction.min.y).expand(DROP_LINE_HEIGHT * 0.5)
-            }
-            Some((_, DropPosition::First)) | Some((_, DropPosition::After(_))) => {
-                Rangef::point(interaction.max.y).expand(DROP_LINE_HEIGHT * 0.5)
-            }
-            Some((_, DropPosition::Last)) => interaction.y_range(),
-            None => return Shape::Noop,
-        };
-
-        epaint::RectShape::new(
-            Rect::from_x_y_ranges(interaction.x_range(), drop_marker),
-            self.ui.visuals().widgets.active.corner_radius,
-            self.ui
-                .style()
-                .visuals
-                .selection
-                .bg_fill
-                .linear_multiply(0.6),
-            Stroke::NONE,
-            egui::StrokeKind::Inside,
-        )
-        .into()
     }
 
     fn parent_dir(&self) -> Option<&DirectoryState<NodeIdType>> {
@@ -448,10 +288,6 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     }
     fn parent_dir_is_open(&self) -> bool {
         self.parent_dir().is_none_or(|dir| dir.is_open)
-    }
-
-    fn parent_dir_drop_forbidden(&self) -> bool {
-        self.parent_dir().is_some_and(|dir| dir.drop_forbidden)
     }
 
     fn push_child_node_position(&mut self, pos: Pos2) {

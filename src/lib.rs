@@ -1,15 +1,16 @@
 pub mod builder;
 pub mod node;
 
-use std::hash::Hash;
+use std::{collections::HashSet, hash::Hash};
 
 use builder::{RowRectangles, TreeViewBuilderResult};
 use egui::{
-    self, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key, Layout, NumExt, Pos2,
-    Rect, Response, Sense, Shape, Ui, Vec2,
+    self, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key, Layout,
+    NumExt, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
+use node::DropQuarter;
 
 pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
 impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
@@ -172,6 +173,8 @@ struct NodeState<NodeIdType> {
     open: bool,
     /// Wether the node is visible or not.
     visible: bool,
+    /// Wether this node is a valid target for drag and drop.
+    drop_allowed: bool,
 }
 
 pub struct TreeView {
@@ -346,9 +349,10 @@ impl TreeView {
 
         state.node_states = tree_builder_result.new_node_states.clone();
 
-        self.handle_input(ui, &interaction_response, &tree_builder_result, state);
+        let drop_position =
+            self.handle_input(ui, &interaction_response, &tree_builder_result, state);
 
-        // todo: Draw background
+        self.draw_background(ui, state, &tree_builder_result, drop_position);
 
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
@@ -357,7 +361,7 @@ impl TreeView {
         // Create a drag or move action.
         if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(tree_builder_result.drop)
+                state.dragged.as_ref().zip(drop_position)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     actions.push(Action::Move(DragAndDrop {
@@ -431,13 +435,12 @@ impl TreeView {
         interaction_response: &Response,
         tree_view_result: &TreeViewBuilderResult<NodeIdType>,
         state: &mut TreeViewState<NodeIdType>,
-    ) {
+    ) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
         if interaction_response.clicked() || interaction_response.drag_started() {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
 
         let node_ids = state.node_states.iter().map(|ns| ns.id).collect::<Vec<_>>();
-
         for node_id in node_ids {
             let RowRectangles {
                 row_rect,
@@ -457,10 +460,6 @@ impl TreeView {
                     if interaction_response.clicked() {
                         let node_state = state.node_state_of_mut(&node_id).unwrap();
                         node_state.open = !node_state.open;
-                        println!(
-                            "Closed clicked on {:?}, new state: {}",
-                            node_state.id, node_state.open
-                        );
                     }
                 }
             }
@@ -482,10 +481,6 @@ impl TreeView {
                 if interaction_response.double_clicked() {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
                     node_state.open = !node_state.open;
-                    println!(
-                        "Double clicked on {:?}, new state: {}",
-                        node_state.id, node_state.open
-                    );
                 }
                 // React to a dragging
                 // An egui drag only starts after the pointer has moved but with that first movement
@@ -508,6 +503,44 @@ impl TreeView {
                 if interaction_response.secondary_clicked() && !state.drag_valid() {
                     state.dragged = None;
                     state.secondary_selection = Some(node_id);
+                }
+            }
+        }
+
+        let mut drop_position = None;
+        if state.drag_valid() {
+            // Search the node states for the correct drop target.
+            // If a node is dragged to a child node then that drop target is invalid.
+            let mut invalid_drop_targets = HashSet::new();
+            if let Some(drag_state) = &state.dragged {
+                invalid_drop_targets.insert(drag_state.node_id);
+            }
+            for node_state in &state.node_states {
+                // Dropping a node on itself is technically a fine thing to do
+                // but it causes all sorts of problems for the implementer of the drop action.
+                // They would have to remove a node and then somehow insert it after itself.
+                // For that reason it is easier to disallow dropping on itself altogether.
+                if invalid_drop_targets.contains(&node_state.id) {
+                    continue;
+                }
+                // If the parent of a node is in the list of invalid drop targets that means
+                // it is a distant child of the dragged node. This is not allowed
+                if let Some(parent_id) = node_state.parent_id {
+                    if invalid_drop_targets.contains(&parent_id) {
+                        invalid_drop_targets.insert(node_state.id);
+                        continue;
+                    }
+                }
+                // At this point we have a potentially valid node to drop on.
+                // Now we only need to check if the mouse is over the node, get the correct
+                // drop quarter and then get the correct drop position.
+                let row_rectangles = tree_view_result.row_rectangles.get(&node_state.id).unwrap();
+                let drop_quarter = interaction_response
+                    .hover_pos()
+                    .and_then(|pos| DropQuarter::new(row_rectangles.row_rect.y_range(), pos.y));
+                if let Some(drop_quarter) = drop_quarter {
+                    drop_position = get_drop_position_node(node_state, &drop_quarter);
+                    break;
                 }
             }
         }
@@ -543,6 +576,128 @@ impl TreeView {
                     .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
                     > 5.0;
             }
+        }
+
+        drop_position
+    }
+
+    fn draw_background<NodeIdType: TreeViewId>(
+        &self,
+        ui: &mut Ui,
+        state: &TreeViewState<NodeIdType>,
+        result: &TreeViewBuilderResult<NodeIdType>,
+        drop_position: Option<(NodeIdType, DropPosition<NodeIdType>)>,
+    ) {
+        pub const DROP_LINE_HEIGHT: f32 = 3.0;
+        if let Some((parent_id, drop_position)) = drop_position {
+            let drop_marker = match drop_position {
+                DropPosition::Before(target_id) => {
+                    let row_rectangles = result.row_rectangles.get(&target_id).unwrap();
+                    Rect::from_x_y_ranges(
+                        row_rectangles.row_rect.x_range(),
+                        Rangef::point(row_rectangles.row_rect.min.y).expand(DROP_LINE_HEIGHT * 0.5),
+                    )
+                }
+                DropPosition::After(target_id) => {
+                    let row_rectangles = result.row_rectangles.get(&target_id).unwrap();
+                    Rect::from_x_y_ranges(
+                        row_rectangles.row_rect.x_range(),
+                        Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
+                    )
+                }
+                DropPosition::First => {
+                    let row_rectangles = result.row_rectangles.get(&parent_id).unwrap();
+                    Rect::from_x_y_ranges(
+                        row_rectangles.row_rect.x_range(),
+                        Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
+                    )
+                }
+                DropPosition::Last => {
+                    let row_rectangles_start = result.row_rectangles.get(&parent_id).unwrap();
+                    // For directories the drop marker should expand its height to include all
+                    // its child nodes. To do this, first we have to find its last child node,
+                    // then we can get the correct y range.
+                    let mut last_child = None;
+                    let mut child_nodes = HashSet::<NodeIdType>::new();
+                    child_nodes.insert(parent_id);
+                    for node in &state.node_states {
+                        if let Some(parent_id) = node.parent_id {
+                            if child_nodes.contains(&parent_id) {
+                                child_nodes.insert(node.id);
+                                last_child = Some(node.id);
+                            }
+                        }
+                    }
+                    let y_range = match last_child {
+                        Some(last_child_id) => {
+                            let row_rectangles_end =
+                                result.row_rectangles.get(&last_child_id).unwrap();
+                            Rangef::new(
+                                row_rectangles_start.row_rect.min.y,
+                                row_rectangles_end.row_rect.max.y,
+                            )
+                        }
+                        None => row_rectangles_start.row_rect.y_range(),
+                    };
+                    Rect::from_x_y_ranges(row_rectangles_start.row_rect.x_range(), y_range)
+                }
+            };
+
+            let shape = epaint::RectShape::new(
+                drop_marker,
+                ui.visuals().widgets.active.corner_radius,
+                ui.style().visuals.selection.bg_fill.linear_multiply(0.6),
+                Stroke::NONE,
+                egui::StrokeKind::Inside,
+            );
+            ui.painter().set(result.drop_marker_idx, shape);
+        }
+    }
+}
+
+fn get_drop_position_node<NodeIdType: TreeViewId>(
+    node: &NodeState<NodeIdType>,
+    drop_quater: &DropQuarter,
+) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
+    match drop_quater {
+        DropQuarter::Top => {
+            if let Some(parent_id) = node.parent_id {
+                return Some((parent_id, DropPosition::Before(node.id)));
+            }
+            if node.drop_allowed {
+                return Some((node.id, DropPosition::Last));
+            }
+            None
+        }
+        DropQuarter::MiddleTop => {
+            if node.drop_allowed {
+                return Some((node.id, DropPosition::Last));
+            }
+            if let Some(parent_id) = node.parent_id {
+                return Some((parent_id, DropPosition::Before(node.id)));
+            }
+            None
+        }
+        DropQuarter::MiddleBottom => {
+            if node.drop_allowed {
+                return Some((node.id, DropPosition::Last));
+            }
+            if let Some(parent_id) = node.parent_id {
+                return Some((parent_id, DropPosition::After(node.id)));
+            }
+            None
+        }
+        DropQuarter::Bottom => {
+            if node.drop_allowed && node.open {
+                return Some((node.id, DropPosition::First));
+            }
+            if let Some(parent_id) = node.parent_id {
+                return Some((parent_id, DropPosition::After(node.id)));
+            }
+            if node.drop_allowed {
+                return Some((node.id, DropPosition::Last));
+            }
+            None
         }
     }
 }
@@ -599,10 +754,8 @@ fn handle_input<NodeIdType: TreeViewId>(state: &mut TreeViewState<NodeIdType>, k
             }
         }
         Key::ArrowLeft => {
-            println!("Selected len: {}", state.selected.len());
             if state.selected.len() == 1 {
                 let node_state = &mut state.node_states[first_selected_node_index];
-                println!("node state: {:?}", node_state);
                 if node_state.open {
                     node_state.open = false;
                 } else if let Some(parent_id) = node_state.parent_id {
