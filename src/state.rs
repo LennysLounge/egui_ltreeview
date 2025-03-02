@@ -163,12 +163,27 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
         self.secondary_selection.as_ref().is_some_and(|n| n == id)
     }
 
-    pub(crate) fn handle_click(&mut self, clicked_id: NodeIdType, modifiers: Modifiers) {
-        if modifiers.command_only() {
+    pub(crate) fn prepare(&mut self, multi_select_allowed: bool) {
+        if !multi_select_allowed && self.selected.len() > 1 {
+            let new_selection = self.selected[0];
+            self.selected.clear();
+            self.selected.push(new_selection);
+            self.selection_pivot = Some(new_selection);
+            self.selection_cursor = None;
+        }
+    }
+
+    pub(crate) fn handle_click(
+        &mut self,
+        clicked_id: NodeIdType,
+        modifiers: Modifiers,
+        allow_multi_select: bool,
+    ) {
+        if modifiers.command_only() && allow_multi_select {
             self.selected.push(clicked_id);
             self.selection_pivot = Some(clicked_id);
             self.selection_cursor = None;
-        } else if modifiers.shift_only() {
+        } else if modifiers.shift_only() && allow_multi_select {
             if let Some(selection_pivot) = self.selection_pivot {
                 self.selected.clear();
 
@@ -191,7 +206,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, modifier: &Modifiers) {
+    pub(crate) fn handle_key(&mut self, key: &Key, modifier: &Modifiers, allow_multi_select: bool) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
@@ -212,7 +227,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                     _ => unreachable!(),
                 };
                 if let Some(new_cursor) = new_cursor {
-                    if modifier.shift_only() {
+                    if modifier.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                         let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
                         let pivot_pos = self.position_of_id(pivot_id).unwrap();
@@ -221,9 +236,9 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                             [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
                             .iter()
                             .for_each(|node| self.selected.push(node.id));
-                    } else if modifier.command_only() {
+                    } else if modifier.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
-                    } else if modifier.shift && modifier.command {
+                    } else if modifier.shift && modifier.command && allow_multi_select {
                         self.selected.push(new_cursor.id);
                         self.selection_cursor = Some(new_cursor.id);
                     } else {

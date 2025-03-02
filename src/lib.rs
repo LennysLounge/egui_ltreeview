@@ -122,6 +122,12 @@ impl TreeView {
         self
     }
 
+    /// Set if the tree view is allowed to select multiple nodes at once.
+    pub fn allow_multi_selection(mut self, allow_multi_select: bool) -> Self {
+        self.settings.allow_multi_select = allow_multi_select;
+        self
+    }
+
     /// Start displaying the tree view.
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by adding
@@ -176,6 +182,8 @@ impl TreeView {
                 },
             )
         });
+
+        state.prepare(self.settings.allow_multi_select);
 
         let background_shapes = BackgroundShapes::new(ui, state);
 
@@ -350,7 +358,11 @@ impl TreeView {
                 if interaction.clicked_by(egui::PointerButton::Primary) {
                     // React to primary clicking
                     selection_changed = true;
-                    state.handle_click(node_id, ui.ctx().input(|i| i.modifiers));
+                    state.handle_click(
+                        node_id,
+                        ui.ctx().input(|i| i.modifiers),
+                        self.settings.allow_multi_select,
+                    );
                 }
                 // was row double clicked
                 if interaction.double_clicked() {
@@ -440,7 +452,7 @@ impl TreeView {
                             modifiers,
                             ..
                         } => {
-                            state.handle_key(key, modifiers);
+                            state.handle_key(key, modifiers, self.settings.allow_multi_select);
                             selection_changed = true;
                         }
                         _ => (),
@@ -657,6 +669,7 @@ struct TreeViewSettings {
     min_height: f32,
     fill_space_horizontal: bool,
     fill_space_vertical: bool,
+    allow_multi_select: bool,
 }
 
 impl Default for TreeViewSettings {
@@ -671,6 +684,7 @@ impl Default for TreeViewSettings {
             min_height: 0.0,
             fill_space_horizontal: true,
             fill_space_vertical: false,
+            allow_multi_select: true,
         }
     }
 }

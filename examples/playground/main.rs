@@ -51,6 +51,7 @@ struct Settings {
     min_height_enabled: bool,
     min_height: f32,
     show_size: bool,
+    allow_multi_select: bool,
 }
 
 enum ContextMenuActions {
@@ -71,6 +72,7 @@ impl Default for MyApp {
                 max_width: 100.0,
                 max_height: 100.0,
                 show_size: true,
+                allow_multi_select: true,
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
@@ -139,6 +141,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
         } else {
             0.0
         })
+        .allow_multi_selection(app.settings.allow_multi_select)
         .show_state(ui, &mut app.tree_view_state, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true));
             builder.node(
@@ -344,6 +347,10 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.end_row();
 
         ui.strong("Tree view settings");
+        ui.end_row();
+
+        ui.label("allow multi select");
+        ui.checkbox(&mut settings.allow_multi_select, "");
         ui.end_row();
 
         ui.label("Override indent");
