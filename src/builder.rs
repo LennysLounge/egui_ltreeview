@@ -166,6 +166,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             open,
             visible: self.parent_dir_is_open() && !node.flatten,
             drop_allowed: node.drop_allowed,
+            dir: node.is_dir,
         });
         self.result.row_rectangles.insert(
             node.id,
