@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
 
 use crate::{NodeId, TreeViewId};
@@ -162,16 +164,8 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
             if let Some(selection_pivot) = self.selection_pivot {
                 self.selected.clear();
 
-                let clicked_pos = self
-                    .node_states
-                    .iter()
-                    .position(|node| node.id == clicked_id)
-                    .unwrap();
-                let pivot_pos = self
-                    .node_states
-                    .iter()
-                    .position(|node| node.id == selection_pivot)
-                    .unwrap();
+                let clicked_pos = self.position_of_id(clicked_id).unwrap();
+                let pivot_pos = self.position_of_id(selection_pivot).unwrap();
                 self.node_states[clicked_pos.min(pivot_pos)..=clicked_pos.max(pivot_pos)]
                     .iter()
                     .for_each(|node| self.selected.push(node.id));
@@ -194,11 +188,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                     break 'arm;
                 };
 
-                let pivot_pos = self
-                    .node_states
-                    .iter()
-                    .position(|ns| ns.id == pivot_id)
-                    .unwrap();
+                let pivot_pos = self.position_of_id(pivot_id).unwrap();
                 if let Some(prev_node) = self.node_states[0..pivot_pos]
                     .iter()
                     .rev()
@@ -214,11 +204,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                     break 'arm;
                 };
 
-                let pivot_pos = self
-                    .node_states
-                    .iter()
-                    .position(|ns| ns.id == pivot_id)
-                    .unwrap();
+                let pivot_pos = self.position_of_id(pivot_id).unwrap();
                 if let Some(prev_node) = self.node_states[(pivot_pos + 1)..]
                     .iter()
                     .find(|node| node.visible)
@@ -232,18 +218,18 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                 if self.selected.len() != 1 {
                     break 'arm;
                 }
-                let node = self
-                    .node_states
-                    .iter_mut()
-                    .find(|n| n.id == self.selected[0])
-                    .unwrap();
-                if node.open && node.dir {
+                let selected_node = self.selected[0];
+                let node = self.node_state_of_mut(&selected_node).unwrap();
+                if node.open && node.dir && node.visible {
                     node.open = false;
                 } else {
-                    if let Some(parent_id) = node.parent_id {
+                    let node_id = node.id;
+                    if let Some(parent_node_id) =
+                        self.first_visible_parent_of(node_id).map(|n| n.id)
+                    {
                         self.selected.clear();
-                        self.selected.push(parent_id);
-                        self.selection_pivot = Some(parent_id);
+                        self.selected.push(parent_node_id);
+                        self.selection_pivot = Some(parent_node_id);
                     }
                 }
             }
@@ -251,27 +237,53 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                 if self.selected.len() != 1 {
                     break 'arm;
                 }
-                let node = self
-                    .node_states
-                    .iter_mut()
-                    .find(|n| n.id == self.selected[0])
-                    .unwrap();
+                let selected_node = self.selected[0];
+                let node = self.node_state_of_mut(&selected_node).unwrap();
                 if !node.open && node.dir {
                     node.open = true;
                 } else {
                     let node_id = node.id;
-                    let first_child_node = self
-                        .node_states
-                        .iter()
-                        .find(|n| n.parent_id == Some(node_id));
-                    if let Some(first_child_node) = first_child_node {
+                    if let Some(first_child_id) = self.first_visible_child_of(node_id).map(|n| n.id)
+                    {
                         self.selected.clear();
-                        self.selected.push(first_child_node.id);
-                        self.selection_pivot = Some(first_child_node.id);
+                        self.selected.push(first_child_id);
+                        self.selection_pivot = Some(first_child_id);
                     }
                 }
             }
             _ => (),
         }
+    }
+
+    fn first_visible_parent_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
+        let mut next_parent = self.node_state_of(&id).and_then(|n| n.parent_id);
+        while let Some(next_parent_id) = next_parent {
+            let node = self.node_state_of(&next_parent_id).unwrap();
+            if node.visible {
+                return Some(node);
+            }
+            next_parent = node.parent_id;
+        }
+        None
+    }
+    fn first_visible_child_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
+        let mut valid_nodes = HashSet::new();
+        valid_nodes.insert(id);
+        for node in &self.node_states {
+            let is_child_of_target = node
+                .parent_id
+                .is_some_and(|parent_id| valid_nodes.contains(&parent_id));
+            if is_child_of_target {
+                if node.visible {
+                    return Some(node);
+                }
+                valid_nodes.insert(node.id);
+            }
+        }
+        None
+    }
+
+    fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
+        self.node_states.iter().position(|n| n.id == id)
     }
 }
