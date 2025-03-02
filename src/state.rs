@@ -47,6 +47,8 @@ pub struct TreeViewState<NodeIdType> {
     selected: Vec<NodeIdType>,
     /// The pivot element used for selection.
     selection_pivot: Option<NodeIdType>,
+    /// The element where the selection curosr is at the moment.
+    selection_cursor: Option<NodeIdType>,
     /// Information about the dragged node.
     pub(crate) dragged: Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
@@ -61,6 +63,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
         Self {
             selected: Default::default(),
             selection_pivot: None,
+            selection_cursor: None,
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
@@ -122,6 +125,10 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
             .and_then(|node_state| node_state.parent_id)
     }
 
+    pub(crate) fn selection_cursor(&self) -> Option<NodeIdType> {
+        self.selection_cursor
+    }
+
     /// Get the node state for an id.
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
         self.node_states.iter().find(|ns| &ns.id == id)
@@ -160,6 +167,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
         if modifiers.command_only() {
             self.selected.push(clicked_id);
             self.selection_pivot = Some(clicked_id);
+            self.selection_cursor = None;
         } else if modifiers.shift_only() {
             if let Some(selection_pivot) = self.selection_pivot {
                 self.selected.clear();
@@ -174,44 +182,68 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                 self.selected.push(clicked_id);
                 self.selection_pivot = Some(clicked_id);
             }
+            self.selection_cursor = None;
         } else {
             self.selected.clear();
             self.selected.push(clicked_id);
             self.selection_pivot = Some(clicked_id);
+            self.selection_cursor = None;
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, _modifier: &Modifiers) {
+    pub(crate) fn handle_key(&mut self, key: &Key, modifier: &Modifiers) {
         match key {
-            Key::ArrowUp => 'arm: {
+            Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
                     break 'arm;
                 };
-
-                let pivot_pos = self.position_of_id(pivot_id).unwrap();
-                if let Some(prev_node) = self.node_states[0..pivot_pos]
-                    .iter()
-                    .rev()
-                    .find(|node| node.visible)
-                {
-                    self.selected.clear();
-                    self.selected.push(prev_node.id);
-                    self.selection_pivot = Some(prev_node.id);
+                let Some(current_curor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                    break 'arm;
+                };
+                let cursor_pos = self.position_of_id(current_curor_id).unwrap();
+                let new_cursor = match key {
+                    Key::ArrowUp => self.node_states[0..cursor_pos]
+                        .iter()
+                        .rev()
+                        .find(|node| node.visible),
+                    Key::ArrowDown => self.node_states[(cursor_pos + 1)..]
+                        .iter()
+                        .find(|node| node.visible),
+                    _ => unreachable!(),
+                };
+                if let Some(new_cursor) = new_cursor {
+                    if modifier.shift_only() {
+                        self.selection_cursor = Some(new_cursor.id);
+                        let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
+                        let pivot_pos = self.position_of_id(pivot_id).unwrap();
+                        self.selected.clear();
+                        self.node_states
+                            [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
+                            .iter()
+                            .for_each(|node| self.selected.push(node.id));
+                    } else if modifier.command_only() {
+                        self.selection_cursor = Some(new_cursor.id);
+                    } else if modifier.shift && modifier.command {
+                        self.selected.push(new_cursor.id);
+                        self.selection_cursor = Some(new_cursor.id);
+                    } else {
+                        self.selected.clear();
+                        self.selected.push(new_cursor.id);
+                        self.selection_pivot = Some(new_cursor.id);
+                        self.selection_cursor = None;
+                    }
                 }
             }
-            Key::ArrowDown => 'arm: {
-                let Some(pivot_id) = self.selection_pivot else {
+            Key::Space => 'arm: {
+                let Some(cursor_id) = self.selection_cursor else {
                     break 'arm;
                 };
-
-                let pivot_pos = self.position_of_id(pivot_id).unwrap();
-                if let Some(prev_node) = self.node_states[(pivot_pos + 1)..]
-                    .iter()
-                    .find(|node| node.visible)
-                {
-                    self.selected.clear();
-                    self.selected.push(prev_node.id);
-                    self.selection_pivot = Some(prev_node.id);
+                if self.selected.contains(&cursor_id) {
+                    self.selected.retain(|id| id != &cursor_id);
+                    self.selection_pivot = Some(cursor_id);
+                } else {
+                    self.selected.push(cursor_id);
+                    self.selection_pivot = Some(cursor_id);
                 }
             }
             Key::ArrowLeft => 'arm: {

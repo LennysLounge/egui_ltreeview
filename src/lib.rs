@@ -347,7 +347,7 @@ impl TreeView {
                 .is_some_and(|pos| row_rect.contains(pos))
             {
                 // was clicked
-                if interaction.clicked() {
+                if interaction.clicked_by(egui::PointerButton::Primary) {
                     // React to primary clicking
                     selection_changed = true;
                     state.handle_click(node_id, ui.ctx().input(|i| i.modifiers));
@@ -575,6 +575,19 @@ impl TreeView {
                 ),
             );
         }
+        if let Some(selection_cursor_id) = state.selection_cursor() {
+            let row_rectangles = result.row_rectangles.get(&selection_cursor_id).unwrap();
+            ui.painter().set(
+                background.selection_cursor_idx,
+                epaint::RectShape::new(
+                    row_rectangles.row_rect,
+                    ui.visuals().widgets.active.corner_radius,
+                    egui::Color32::TRANSPARENT,
+                    ui.visuals().widgets.inactive.fg_stroke,
+                    egui::StrokeKind::Inside,
+                ),
+            );
+        }
     }
 }
 
@@ -749,6 +762,7 @@ struct BackgroundShapes<NodeIdType> {
     background_idx: HashMap<NodeIdType, ShapeIdx>,
     background_idx_backup: ShapeIdx,
     secondary_selection_idx: ShapeIdx,
+    selection_cursor_idx: ShapeIdx,
     drop_marker_idx: ShapeIdx,
 }
 impl<NodeIdType: TreeViewId> BackgroundShapes<NodeIdType> {
@@ -761,6 +775,7 @@ impl<NodeIdType: TreeViewId> BackgroundShapes<NodeIdType> {
             background_idx: background_indices,
             background_idx_backup: ui.painter().add(Shape::Noop),
             secondary_selection_idx: ui.painter().add(Shape::Noop),
+            selection_cursor_idx: ui.painter().add(Shape::Noop),
             drop_marker_idx: ui.painter().add(Shape::Noop),
         }
     }
