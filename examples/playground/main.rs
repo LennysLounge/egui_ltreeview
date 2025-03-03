@@ -98,6 +98,9 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.tree_view_state.selected().len() > 1 {
                 ui.label("Multiple nodes selected");
+                for id in self.tree_view_state.selected() {
+                    ui.label(format!("{:?}", id));
+                }
             } else {
                 if let Some(selected_node) = self.tree_view_state.selected().first() {
                     if *selected_node == self.settings_id {

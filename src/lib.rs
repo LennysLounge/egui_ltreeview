@@ -2,10 +2,7 @@ pub mod builder;
 pub mod node;
 mod state;
 
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
 use builder::{RowRectangles, TreeViewBuilderResult};
 use egui::{
@@ -482,9 +479,11 @@ impl TreeView {
         ui: &mut Ui,
         state: &TreeViewState<NodeIdType>,
         result: &TreeViewBuilderResult<NodeIdType>,
-        background: &BackgroundShapes<NodeIdType>,
+        background: &BackgroundShapes,
         drop_position: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     ) {
+        let has_focus = ui.memory(|m| m.has_focus(self.id));
+
         pub const DROP_LINE_HEIGHT: f32 = 3.0;
         if let Some((parent_id, drop_position)) = drop_position {
             let drop_marker = match drop_position {
@@ -550,30 +549,54 @@ impl TreeView {
             ui.painter().set(background.drop_marker_idx, shape);
         }
 
-        for selected_node in state.selected() {
-            let row_rectangles = result.row_rectangles.get(selected_node).unwrap();
-            ui.painter().set(
-                *background
-                    .background_idx
-                    .get(selected_node)
-                    .unwrap_or(&background.background_idx_backup),
-                epaint::RectShape::new(
-                    row_rectangles.row_rect,
-                    ui.visuals().widgets.active.corner_radius,
-                    if ui.memory(|m| m.has_focus(self.id)) {
-                        ui.visuals().selection.bg_fill
-                    } else {
-                        ui.visuals()
-                            .widgets
-                            .inactive
-                            .weak_bg_fill
-                            .linear_multiply(0.3)
-                    },
-                    Stroke::NONE,
-                    egui::StrokeKind::Inside,
-                ),
-            );
+        if !state.selected().is_empty() {
+            let mut selected_rects = state
+                .selected()
+                .iter()
+                .map(|id| result.row_rectangles.get(id).unwrap().row_rect)
+                .collect::<Vec<_>>();
+            selected_rects.sort_by(|a, b| {
+                if a.min.y > b.min.y {
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                }
+            });
+
+            let mut combined_rects = Vec::new();
+            let mut current_rect = selected_rects[0];
+            for rect in selected_rects.iter().skip(1) {
+                if (rect.min.y - current_rect.max.y).abs() < 1.0 {
+                    current_rect = Rect::from_min_max(current_rect.min, rect.max)
+                } else {
+                    combined_rects.push(current_rect);
+                    current_rect = *rect;
+                }
+            }
+            combined_rects.push(current_rect);
+
+            for (rect, shape_idx) in combined_rects.iter().zip(&background.background_idx) {
+                ui.painter().set(
+                    *shape_idx,
+                    epaint::RectShape::new(
+                        *rect,
+                        ui.visuals().widgets.active.corner_radius,
+                        if has_focus {
+                            ui.visuals().selection.bg_fill
+                        } else {
+                            ui.visuals()
+                                .widgets
+                                .inactive
+                                .weak_bg_fill
+                                .linear_multiply(0.3)
+                        },
+                        Stroke::NONE,
+                        egui::StrokeKind::Inside,
+                    ),
+                );
+            }
         }
+
         if let Some(seconday_selected_id) = state.secondary_selection {
             let row_rectangles = result.row_rectangles.get(&seconday_selected_id).unwrap();
             ui.painter().set(
@@ -587,18 +610,20 @@ impl TreeView {
                 ),
             );
         }
-        if let Some(selection_cursor_id) = state.selection_cursor() {
-            let row_rectangles = result.row_rectangles.get(&selection_cursor_id).unwrap();
-            ui.painter().set(
-                background.selection_cursor_idx,
-                epaint::RectShape::new(
-                    row_rectangles.row_rect,
-                    ui.visuals().widgets.active.corner_radius,
-                    egui::Color32::TRANSPARENT,
-                    ui.visuals().widgets.inactive.fg_stroke,
-                    egui::StrokeKind::Inside,
-                ),
-            );
+        if has_focus {
+            if let Some(selection_cursor_id) = state.selection_cursor() {
+                let row_rectangles = result.row_rectangles.get(&selection_cursor_id).unwrap();
+                ui.painter().set(
+                    background.selection_cursor_idx,
+                    epaint::RectShape::new(
+                        row_rectangles.row_rect,
+                        ui.visuals().widgets.active.corner_radius,
+                        egui::Color32::TRANSPARENT,
+                        ui.visuals().widgets.inactive.fg_stroke,
+                        egui::StrokeKind::Inside,
+                    ),
+                );
+            }
         }
     }
 }
@@ -772,22 +797,18 @@ fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Respo
     res
 }
 
-struct BackgroundShapes<NodeIdType> {
-    background_idx: HashMap<NodeIdType, ShapeIdx>,
-    background_idx_backup: ShapeIdx,
+struct BackgroundShapes {
+    background_idx: Vec<ShapeIdx>,
     secondary_selection_idx: ShapeIdx,
     selection_cursor_idx: ShapeIdx,
     drop_marker_idx: ShapeIdx,
 }
-impl<NodeIdType: TreeViewId> BackgroundShapes<NodeIdType> {
-    fn new(ui: &mut Ui, state: &TreeViewState<NodeIdType>) -> Self {
-        let mut background_indices = HashMap::new();
-        state.node_states.iter().for_each(|ns| {
-            background_indices.insert(ns.id, ui.painter().add(Shape::Noop));
-        });
+impl BackgroundShapes {
+    fn new<NodeIdType: TreeViewId>(ui: &mut Ui, state: &TreeViewState<NodeIdType>) -> Self {
         Self {
-            background_idx: background_indices,
-            background_idx_backup: ui.painter().add(Shape::Noop),
+            background_idx: (0..(state.selected().len() + 1))
+                .map(|_| ui.painter().add(Shape::Noop))
+                .collect(),
             secondary_selection_idx: ui.painter().add(Shape::Noop),
             selection_cursor_idx: ui.painter().add(Shape::Noop),
             drop_marker_idx: ui.painter().add(Shape::Noop),

@@ -180,7 +180,11 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
         allow_multi_select: bool,
     ) {
         if modifiers.command_only() && allow_multi_select {
-            self.selected.push(clicked_id);
+            if self.selected.contains(&clicked_id) {
+                self.selected.retain(|id| id != &clicked_id);
+            } else {
+                self.selected.push(clicked_id);
+            }
             self.selection_pivot = Some(clicked_id);
             self.selection_cursor = None;
         } else if modifiers.shift_only() && allow_multi_select {
@@ -239,7 +243,9 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
                     } else if modifier.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                     } else if modifier.shift && modifier.command && allow_multi_select {
-                        self.selected.push(new_cursor.id);
+                        if !self.selected.contains(&new_cursor.id) {
+                            self.selected.push(new_cursor.id);
+                        }
                         self.selection_cursor = Some(new_cursor.id);
                     } else {
                         self.selected.clear();
