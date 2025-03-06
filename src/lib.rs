@@ -34,15 +34,17 @@ pub trait NodeId: TreeViewId + Send + Sync + 'static {}
 #[cfg(not(feature = "persistence"))]
 impl<T> NodeId for T where T: TreeViewId + Send + Sync + 'static {}
 
-pub struct TreeView {
+pub struct TreeView<'context_menu, NodeIdType> {
     id: Id,
     settings: TreeViewSettings,
+    fallback_context_menu: Option<Box<dyn FnMut(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
 }
-impl TreeView {
+impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> {
     pub fn new(id: Id) -> Self {
         Self {
             id,
             settings: TreeViewSettings::default(),
+            fallback_context_menu: None,
         }
     }
 
@@ -125,11 +127,23 @@ impl TreeView {
         self
     }
 
+    /// Add a fallback context menu to the tree.
+    /// If the node that was right clicked did not configure
+    /// a context menu or if multiple nodes were selected and right clicked, then
+    /// this fallback context menu will be opened.
+    pub fn fallback_context_menu(
+        mut self,
+        context_menu: impl FnMut(&mut Ui, &Vec<NodeIdType>) + 'context_menu,
+    ) -> Self {
+        self.fallback_context_menu = Some(Box::new(context_menu));
+        self
+    }
+
     /// Start displaying the tree view.
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by adding
     /// directories or leaves to the tree.
-    pub fn show<NodeIdType>(
+    pub fn show(
         self,
         ui: &mut Ui,
         build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
@@ -148,7 +162,7 @@ impl TreeView {
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by addind
     /// directories or leaves to the tree.
-    pub fn show_state<NodeIdType>(
+    pub fn show_state(
         mut self,
         ui: &mut Ui,
         state: &mut TreeViewState<NodeIdType>,
@@ -190,6 +204,7 @@ impl TreeView {
         } = self.draw_foreground(ui, state, build_tree_view);
 
         state.node_states = tree_builder_result.new_node_states.clone();
+        self.handle_fallback_context_menu(&tree_builder_result, state);
         let input_result = self.handle_input(ui, &tree_builder_result, state);
 
         self.draw_background(
@@ -239,7 +254,7 @@ impl TreeView {
         (tree_builder_result.interaction, actions)
     }
 
-    fn draw_foreground<NodeIdType: TreeViewId>(
+    fn draw_foreground(
         &mut self,
         ui: &mut Ui,
         state: &mut TreeViewState<NodeIdType>,
@@ -278,7 +293,7 @@ impl TreeView {
                 interaction_response,
                 state,
                 &self.settings,
-                ui.memory(|m| m.has_focus(self.id)),
+                ui.memory(|m| m.has_focus(self.id)) || state.context_menu_was_open,
             );
             build_tree_view(&mut tree_builder);
             let tree_builder_response = tree_builder.get_result();
@@ -297,7 +312,28 @@ impl TreeView {
         response
     }
 
-    fn handle_input<NodeIdType: TreeViewId>(
+    fn handle_fallback_context_menu(
+        &mut self,
+        tree_view_result: &TreeViewBuilderResult<NodeIdType>,
+        state: &mut TreeViewState<NodeIdType>,
+    ) {
+        // Transfer the secondary click
+        if tree_view_result.seconday_click.is_some() {
+            state.secondary_selection = tree_view_result.seconday_click.clone();
+        }
+
+        if !tree_view_result.context_menu_was_open {
+            if let Some(fallback_context_menu) = &mut self.fallback_context_menu {
+                tree_view_result.interaction.context_menu(|ui| {
+                    fallback_context_menu(ui, state.selected());
+                });
+            }
+        }
+
+        state.context_menu_was_open = tree_view_result.interaction.context_menu_opened();
+    }
+
+    fn handle_input(
         &mut self,
         ui: &mut Ui,
         tree_view_result: &TreeViewBuilderResult<NodeIdType>,
@@ -305,21 +341,12 @@ impl TreeView {
     ) -> InputResult<NodeIdType> {
         let TreeViewBuilderResult {
             row_rectangles,
-            seconday_click,
             interaction,
             ..
         } = tree_view_result;
 
         if interaction.clicked() || interaction.drag_started() {
             ui.memory_mut(|m| m.request_focus(self.id));
-        }
-
-        // Transfer the secondary click
-        if seconday_click.is_some() {
-            state.secondary_selection = *seconday_click;
-        }
-        if !interaction.context_menu_opened() {
-            state.secondary_selection = None;
         }
 
         let mut selection_changed = false;
@@ -474,7 +501,7 @@ impl TreeView {
         }
     }
 
-    fn draw_background<NodeIdType: TreeViewId>(
+    fn draw_background(
         &self,
         ui: &mut Ui,
         state: &TreeViewState<NodeIdType>,
@@ -482,7 +509,7 @@ impl TreeView {
         background: &BackgroundShapes,
         drop_position: Option<(NodeIdType, DropPosition<NodeIdType>)>,
     ) {
-        let has_focus = ui.memory(|m| m.has_focus(self.id));
+        let has_focus = ui.memory(|m| m.has_focus(self.id)) || state.context_menu_was_open;
 
         pub const DROP_LINE_HEIGHT: f32 = 3.0;
         if let Some((parent_id, drop_position)) = drop_position {
@@ -597,19 +624,22 @@ impl TreeView {
             }
         }
 
-        if let Some(seconday_selected_id) = state.secondary_selection {
-            let row_rectangles = result.row_rectangles.get(&seconday_selected_id).unwrap();
-            ui.painter().set(
-                background.secondary_selection_idx,
-                epaint::RectShape::new(
-                    row_rectangles.row_rect,
-                    ui.visuals().widgets.active.corner_radius,
-                    egui::Color32::TRANSPARENT,
-                    ui.visuals().widgets.inactive.fg_stroke,
-                    egui::StrokeKind::Inside,
-                ),
-            );
+        if state.context_menu_was_open {
+            if let Some(seconday_selected_id) = state.secondary_selection {
+                let row_rectangles = result.row_rectangles.get(&seconday_selected_id).unwrap();
+                ui.painter().set(
+                    background.secondary_selection_idx,
+                    epaint::RectShape::new(
+                        row_rectangles.row_rect,
+                        ui.visuals().widgets.active.corner_radius,
+                        egui::Color32::TRANSPARENT,
+                        ui.visuals().widgets.inactive.fg_stroke,
+                        egui::StrokeKind::Inside,
+                    ),
+                );
+            }
         }
+
         if has_focus {
             if let Some(selection_cursor_id) = state.selection_cursor() {
                 let row_rectangles = result.row_rectangles.get(&selection_cursor_id).unwrap();

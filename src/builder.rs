@@ -26,6 +26,7 @@ pub(crate) struct TreeViewBuilderResult<NodeIdType> {
     pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
     pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
     pub(crate) seconday_click: Option<NodeIdType>,
+    pub(crate) context_menu_was_open: bool,
     pub(crate) interaction: Response,
 }
 
@@ -60,6 +61,7 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 row_rectangles: HashMap::new(),
                 seconday_click: None,
                 interaction,
+                context_menu_was_open: false,
             },
             ui,
             state,
@@ -235,10 +237,12 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Show the context menu.
-        if self.result.seconday_click.is_some_and(|id| id == node.id)
-            || self.state.is_secondary_selected(&node.id)
-        {
-            node.show_context_menu(&self.result.interaction);
+        let was_right_clicked = self.result.seconday_click.is_some_and(|id| id == node.id)
+            || self.state.is_secondary_selected(&node.id);
+        let was_only_target = !self.state.is_selected(&node.id)
+            || self.state.is_selected(&node.id) && self.state.selected().len() == 1;
+        if was_right_clicked && was_only_target {
+            self.result.context_menu_was_open = node.show_context_menu(&self.result.interaction);
         }
 
         self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());

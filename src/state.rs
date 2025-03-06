@@ -57,6 +57,8 @@ pub struct TreeViewState<NodeIdType> {
     pub(crate) size: Vec2,
     /// Open states of the dirs in this tree.
     pub(crate) node_states: Vec<NodeState<NodeIdType>>,
+    /// Wether or not the context menu was open last frame.
+    pub(crate) context_menu_was_open: bool,
 }
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
@@ -68,6 +70,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             secondary_selection: Default::default(),
             size: Vec2::default(),
             node_states: Vec::new(),
+            context_menu_was_open: false,
         }
     }
 }

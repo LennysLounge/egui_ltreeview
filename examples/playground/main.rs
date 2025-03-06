@@ -145,6 +145,13 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             0.0
         })
         .allow_multi_selection(app.settings.allow_multi_select)
+        .fallback_context_menu(|ui, selected_nodes| {
+            ui.set_min_width(250.0);
+            ui.label("selected nodes:");
+            for node in selected_nodes {
+                ui.label(format!("{}", node));
+            }
+        })
         .show_state(ui, &mut app.tree_view_state, |mut builder| {
             builder.node(NodeBuilder::dir(Uuid::default()).flatten(true));
             builder.node(
@@ -224,6 +231,8 @@ fn show_dir(
     let mut node = NodeBuilder::dir(dir.id)
         .label_text(&dir.name)
         .context_menu(|ui| {
+            ui.set_width(100.0);
+
             ui.label("dir:");
             ui.label(&dir.name);
             ui.separator();
@@ -283,6 +292,8 @@ fn show_file(
     let mut node = NodeBuilder::leaf(file.id)
         .label_text(&file.name)
         .context_menu(|ui| {
+            ui.set_width(100.0);
+
             ui.label("file:");
             ui.label(&file.name);
             if ui.button("delete").clicked() {
