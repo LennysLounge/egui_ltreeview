@@ -6,8 +6,8 @@ use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
 use builder::{RowRectangles, TreeViewBuilderResult};
 use egui::{
-    self, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout, NumExt,
-    Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout,
+    NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 
 pub use builder::TreeViewBuilder;
@@ -226,14 +226,14 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     actions.push(Action::Move(DragAndDrop {
-                        source: drag_state.node_id,
+                        source: simplify_selection_for_dnd(state, &drag_state.node_ids),
                         target: drop_id,
                         position,
                         drop_marker_idx: background_shapes.drop_marker_idx,
                     }))
                 } else {
                     actions.push(Action::Drag(DragAndDrop {
-                        source: drag_state.node_id,
+                        source: simplify_selection_for_dnd(state, &drag_state.node_ids),
                         target: drop_id,
                         position,
                         drop_marker_idx: background_shapes.drop_marker_idx,
@@ -403,9 +403,13 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
                 let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
                 if primary_pressed {
                     let pointer_pos = ui.ctx().pointer_latest_pos().unwrap_or_default();
+                    let node_ids = if state.is_selected(&node_id) {
+                        state.selected().clone()
+                    } else {
+                        vec![node_id]
+                    };
                     state.dragged = Some(DragState {
-                        node_id: node_id,
-                        drag_row_offset: row_rect.min - pointer_pos,
+                        node_ids,
                         drag_start_pos: pointer_pos,
                         drag_valid: false,
                     });
@@ -419,7 +423,10 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
             // If a node is dragged to a child node then that drop target is invalid.
             let mut invalid_drop_targets = HashSet::new();
             if let Some(drag_state) = &state.dragged {
-                invalid_drop_targets.insert(drag_state.node_id);
+                drag_state
+                    .node_ids
+                    .iter()
+                    .for_each(|id| _ = invalid_drop_targets.insert(*id));
             }
             for node_state in &state.node_states {
                 // Dropping a node on itself is technically a fine thing to do
@@ -461,7 +468,7 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
                     state
                         .dragged
                         .as_ref()
-                        .map(|drag_state| vec![drag_state.node_id])
+                        .map(|drag_state| drag_state.node_ids.clone())
                         .or(state.node_states.first().map(|n| vec![n.id]))
                         .unwrap(),
                 );
@@ -655,7 +662,42 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
                 );
             }
         }
+
+        if state.drag_valid() {
+            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+                let drag_state = state.dragged.as_ref().unwrap();
+                let delta = pointer_pos.to_vec2() - drag_state.drag_start_pos.to_vec2();
+                let transform = emath::TSTransform::from_translation(delta);
+                ui.ctx()
+                    .transform_layer_shapes(result.drag_layer, transform);
+            }
+        }
     }
+}
+fn simplify_selection_for_dnd<NodeIdType: TreeViewId>(
+    state: &TreeViewState<NodeIdType>,
+    nodes: &Vec<NodeIdType>,
+) -> Vec<NodeIdType> {
+    // When multiple nodes are selected it is possible that a folder is selected aswell as a
+    // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.
+    let mut result = Vec::new();
+    let mut known_nodes = HashSet::new();
+    for node in &state.node_states {
+        if !nodes.contains(&node.id) {
+            continue;
+        }
+
+        let is_unknown_node = node
+            .parent_id
+            .as_ref()
+            .map_or(true, |parent_id| !known_nodes.contains(parent_id));
+        if is_unknown_node {
+            result.push(node.id);
+        }
+        known_nodes.insert(node.id);
+    }
+
+    result
 }
 
 fn get_drop_position_node<NodeIdType: TreeViewId>(
@@ -800,7 +842,7 @@ pub enum Action<NodeIdType> {
 #[derive(Clone)]
 pub struct DragAndDrop<NodeIdType> {
     /// The node that is beeing dragged
-    pub source: NodeIdType,
+    pub source: Vec<NodeIdType>,
     /// The node where the dragged node is dropped on.
     pub target: NodeIdType,
     /// The position where the dragged node is dropped inside the target node.

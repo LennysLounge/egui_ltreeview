@@ -8,10 +8,8 @@ use crate::{NodeId, TreeViewId};
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct DragState<NodeIdType> {
-    /// Id of the dragged node.
-    pub node_id: NodeIdType,
-    /// Offset of the drag overlay to the pointer.
-    pub drag_row_offset: Vec2,
+    /// Id of the dragged nodes.
+    pub node_ids: Vec<NodeIdType>,
     /// Position of the pointer when the drag started.
     pub drag_start_pos: Pos2,
     /// A drag only becomes valid after it has been dragged for
@@ -155,7 +153,7 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
         self.dragged
             .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid && &drag_state.node_id == id)
+            .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
     }
 
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {

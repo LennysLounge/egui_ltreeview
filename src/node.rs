@@ -1,9 +1,9 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Order, Rangef, Rect,
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Rangef, Rect,
     Response, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
 
-use crate::{RowLayout, TreeViewId, TreeViewSettings, TreeViewState};
+use crate::{RowLayout, TreeViewId, TreeViewSettings};
 
 pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
 pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
@@ -250,23 +250,12 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
         &mut self,
         ui: &mut Ui,
         interaction: &Response,
-        state: &TreeViewState<NodeIdType>,
         settings: &TreeViewSettings,
-    ) -> bool {
-        ui.ctx().set_cursor_icon(CursorIcon::Alias);
-
-        let drag_source_id = ui.make_persistent_id("Drag source");
-
-        // Paint the content to a new layer for the drag overlay.
-        let layer_id = LayerId::new(Order::Tooltip, drag_source_id);
-
-        let background_rect = ui
-            .new_child(
-                UiBuilder::new()
-                    .max_rect(ui.available_rect_before_wrap())
-                    .layout(*ui.layout()),
-            )
-            .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
+        drag_layer: LayerId,
+        target_rect: Rect,
+    ) {
+        ui.new_child(UiBuilder::new().max_rect(target_rect).layout(*ui.layout()))
+            .scope_builder(UiBuilder::new().layer_id(drag_layer), |ui| {
                 let background_position = ui.painter().add(Shape::Noop);
 
                 let (row, _, _, _) = self.show_node(ui, interaction, settings);
@@ -284,20 +273,6 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
                 row
             })
             .inner;
-
-        // Move layer to the drag position
-        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-            //let delta = -background_rect.min.to_vec2() + pointer_pos.to_vec2() + drag_offset;
-            let delta = -background_rect.min.to_vec2()
-                + pointer_pos.to_vec2()
-                + state.dragged.as_ref().unwrap().drag_row_offset;
-            if delta != Vec2::ZERO {
-                let transform = emath::TSTransform::from_translation(delta);
-                ui.ctx().transform_layer_shapes(layer_id, transform);
-            }
-        }
-
-        true
     }
 
     pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {

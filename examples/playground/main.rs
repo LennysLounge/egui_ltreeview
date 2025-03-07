@@ -172,8 +172,10 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
     for action in actions.iter() {
         match action {
             Action::Move(dnd) => {
-                if let Some(source) = app.tree.remove(&dnd.source) {
-                    _ = app.tree.insert(&dnd.target, dnd.position, source);
+                for source_node in &dnd.source {
+                    if let Some(source) = app.tree.remove(source_node) {
+                        _ = app.tree.insert(&dnd.target, dnd.position, source);
+                    }
                 }
             }
             Action::SetSelected(_) => {}

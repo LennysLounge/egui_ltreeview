@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use egui::{pos2, vec2, Pos2, Rect, Response, Ui, WidgetText};
+use egui::{pos2, vec2, LayerId, Order, Pos2, Rect, Response, Ui, WidgetText};
 
 use crate::{
     node::NodeBuilder, IndentHintStyle, NodeState, TreeViewId, TreeViewSettings, TreeViewState,
@@ -28,6 +28,7 @@ pub(crate) struct TreeViewBuilderResult<NodeIdType> {
     pub(crate) seconday_click: Option<NodeIdType>,
     pub(crate) context_menu_was_open: bool,
     pub(crate) interaction: Response,
+    pub(crate) drag_layer: LayerId,
 }
 
 pub(crate) struct RowRectangles {
@@ -62,12 +63,16 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 seconday_click: None,
                 interaction,
                 context_menu_was_open: false,
+                drag_layer: LayerId::new(
+                    Order::Tooltip,
+                    ui.make_persistent_id("ltreeviw drag layer"),
+                ),
             },
-            ui,
             state,
             stack: Vec::new(),
             settings,
             tree_has_focus,
+            ui,
         }
     }
 
@@ -195,6 +200,8 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> (Rect, Option<Rect>) {
+        let drag_overlay_rect = self.ui.available_rect_before_wrap();
+
         node.set_indent(self.get_indent_level());
         let (row, closer, icon, label) = self
             .ui
@@ -216,7 +223,13 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
             .inner;
 
         if self.state.is_dragged(&node.id) {
-            node.show_node_dragged(self.ui, &self.result.interaction, self.state, self.settings);
+            node.show_node_dragged(
+                self.ui,
+                &self.result.interaction,
+                self.settings,
+                self.result.drag_layer,
+                drag_overlay_rect,
+            );
         }
 
         // React to secondary clicks
