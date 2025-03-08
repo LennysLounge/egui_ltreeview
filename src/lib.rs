@@ -1,45 +1,42 @@
-pub mod builder;
-pub mod node;
+#![warn(missing_docs)]
+
+//! This is a tree view for egui
+
+mod builder;
+mod node;
 mod state;
 
-use std::{cmp::Ordering, collections::HashSet, hash::Hash};
-
-use builder::{RowRectangles, TreeViewBuilderResult};
 use egui::{
     self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout,
     NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
+use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
-pub use builder::TreeViewBuilder;
-use node::DropQuarter;
-pub use state::TreeViewState;
-use state::{DragState, NodeState};
+pub use builder::*;
+pub use node::*;
+pub use state::*;
 
-pub trait TreeViewId: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
-impl<T> TreeViewId for T where T: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
+/// A node in the tree is identified by an id that must implement this trait.
+///
+/// This is just a trait alias for the collection of necessary traits that a node id
+/// must implement.
+pub trait NodeId: Clone + Copy + PartialEq + Eq + Hash {}
+impl<T> NodeId for T where T: Clone + Copy + PartialEq + Eq + Hash {}
 
 #[cfg(feature = "persistence")]
 pub trait NodeId:
-    TreeViewId + Send + Sync + 'static + serde::de::DeserializeOwned + serde::Serialize
-{
-}
-#[cfg(feature = "persistence")]
-impl<T> NodeId for T where
-    T: TreeViewId + Send + Sync + 'static + serde::de::DeserializeOwned + serde::Serialize
+    NodeId + Send + Sync + 'static + serde::de::DeserializeOwned + serde::Serialize
 {
 }
 
-#[cfg(not(feature = "persistence"))]
-pub trait NodeId: TreeViewId + Send + Sync + 'static {}
-#[cfg(not(feature = "persistence"))]
-impl<T> NodeId for T where T: TreeViewId + Send + Sync + 'static {}
-
+/// A tree view widget.
 pub struct TreeView<'context_menu, NodeIdType> {
     id: Id,
     settings: TreeViewSettings,
     fallback_context_menu: Option<Box<dyn FnMut(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
 }
-impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> {
+impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
+    /// Create a tree view from an unique id.
     pub fn new(id: Id) -> Self {
         Self {
             id,
@@ -48,10 +45,17 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
         }
     }
 
-    /// Override the indent value from the current ui style with this value.
+    /// Set the settings for this tree view with the [`TreeViewSettings`] struct.
+    pub fn with_settings(mut self, settings: TreeViewSettings) -> Self {
+        self.settings = settings;
+        self
+    }
+
+    /// Override the indent value for this tree view.
     ///
-    /// If `None`, the value of the current ui style is used.
-    /// Defaults to `None`.
+    /// By default this value is 'None' which means that the indent value from the
+    /// current ui is used. If this value is set, this value will used as the indent
+    /// value without affecting the ui's indent value.
     pub fn override_indent(mut self, indent: Option<f32>) -> Self {
         self.settings.override_indent = indent;
         self
@@ -128,9 +132,15 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
     }
 
     /// Add a fallback context menu to the tree.
-    /// If the node that was right clicked did not configure
-    /// a context menu or if multiple nodes were selected and right clicked, then
+    ///
+    /// If the node did not configure a context menu directly or
+    /// if multiple nodes were selected and right clicked, then
     /// this fallback context menu will be opened.
+    ///
+    /// A context menu in egui gets its size the first time it becomes visible.
+    /// Since all nodes in the tree view share the same context menu you must set
+    /// the size of the context menu manually for each node if you want to have differently
+    /// sized context menus.
     pub fn fallback_context_menu(
         mut self,
         context_menu: impl FnMut(&mut Ui, &Vec<NodeIdType>) + 'context_menu,
@@ -149,7 +159,7 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
         build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> (Response, Vec<Action<NodeIdType>>)
     where
-        NodeIdType: NodeId,
+        NodeIdType: NodeId + Send + Sync + 'static,
     {
         let id = self.id;
         let mut state = TreeViewState::load(ui, id).unwrap_or_default();
@@ -169,7 +179,7 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
         build_tree_view: impl FnMut(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> (Response, Vec<Action<NodeIdType>>)
     where
-        NodeIdType: TreeViewId + Send + Sync + 'static,
+        NodeIdType: NodeId + Send + Sync + 'static,
     {
         // Justified layouts override these settings
         if ui.layout().horizontal_justify() {
@@ -514,35 +524,35 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
         state: &TreeViewState<NodeIdType>,
         result: &TreeViewBuilderResult<NodeIdType>,
         background: &BackgroundShapes,
-        drop_position: Option<(NodeIdType, DropPosition<NodeIdType>)>,
+        drop_position: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     ) {
         let has_focus = ui.memory(|m| m.has_focus(self.id)) || state.context_menu_was_open;
 
         pub const DROP_LINE_HEIGHT: f32 = 3.0;
         if let Some((parent_id, drop_position)) = drop_position {
             let drop_marker = match drop_position {
-                DropPosition::Before(target_id) => {
+                DirPosition::Before(target_id) => {
                     let row_rectangles = result.row_rectangles.get(&target_id).unwrap();
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.min.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
-                DropPosition::After(target_id) => {
+                DirPosition::After(target_id) => {
                     let row_rectangles = result.row_rectangles.get(&target_id).unwrap();
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
-                DropPosition::First => {
+                DirPosition::First => {
                     let row_rectangles = result.row_rectangles.get(&parent_id).unwrap();
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
-                DropPosition::Last => {
+                DirPosition::Last => {
                     let row_rectangles_start = result.row_rectangles.get(&parent_id).unwrap();
                     // For directories the drop marker should expand its height to include all
                     // its child nodes. To do this, first we have to find its last child node,
@@ -674,7 +684,7 @@ impl<'context_menu, NodeIdType: TreeViewId> TreeView<'context_menu, NodeIdType> 
         }
     }
 }
-fn simplify_selection_for_dnd<NodeIdType: TreeViewId>(
+fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     state: &TreeViewState<NodeIdType>,
     nodes: &Vec<NodeIdType>,
 ) -> Vec<NodeIdType> {
@@ -700,73 +710,106 @@ fn simplify_selection_for_dnd<NodeIdType: TreeViewId>(
     result
 }
 
-fn get_drop_position_node<NodeIdType: TreeViewId>(
+fn get_drop_position_node<NodeIdType: NodeId>(
     node: &NodeState<NodeIdType>,
     drop_quater: &DropQuarter,
-) -> Option<(NodeIdType, DropPosition<NodeIdType>)> {
+) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
     match drop_quater {
         DropQuarter::Top => {
             if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DropPosition::Before(node.id)));
+                return Some((parent_id, DirPosition::Before(node.id)));
             }
             if node.drop_allowed {
-                return Some((node.id, DropPosition::Last));
+                return Some((node.id, DirPosition::Last));
             }
             None
         }
         DropQuarter::MiddleTop => {
             if node.drop_allowed {
-                return Some((node.id, DropPosition::Last));
+                return Some((node.id, DirPosition::Last));
             }
             if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DropPosition::Before(node.id)));
+                return Some((parent_id, DirPosition::Before(node.id)));
             }
             None
         }
         DropQuarter::MiddleBottom => {
             if node.drop_allowed {
-                return Some((node.id, DropPosition::Last));
+                return Some((node.id, DirPosition::Last));
             }
             if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DropPosition::After(node.id)));
+                return Some((parent_id, DirPosition::After(node.id)));
             }
             None
         }
         DropQuarter::Bottom => {
             if node.drop_allowed && node.open {
-                return Some((node.id, DropPosition::First));
+                return Some((node.id, DirPosition::First));
             }
             if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DropPosition::After(node.id)));
+                return Some((parent_id, DirPosition::After(node.id)));
             }
             if node.drop_allowed {
-                return Some((node.id, DropPosition::Last));
+                return Some((node.id, DirPosition::Last));
             }
             None
         }
     }
 }
 
-/// Where a dragged item should be dropped to in a container.
+/// A position inside a directory node.
+///
+/// When a source node is dragged this enum describes the position
+/// where the node should be dropped inside a directory node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DropPosition<NodeIdType> {
+pub enum DirPosition<NodeIdType> {
+    /// The source node should be inserted in the first position of the directory
     First,
+    /// The source node should be inserted in the last position of the directory.
     Last,
+    /// The source node should be inserted after the node with this node id.
     After(NodeIdType),
+    /// The source node should be inserted before the node with this node id.
     Before(NodeIdType),
 }
 
-struct TreeViewSettings {
-    override_indent: Option<f32>,
-    indent_hint_style: IndentHintStyle,
-    row_layout: RowLayout,
-    max_width: f32,
-    max_height: f32,
-    min_width: f32,
-    min_height: f32,
-    fill_space_horizontal: bool,
-    fill_space_vertical: bool,
-    allow_multi_select: bool,
+/// The global settings the tree view will use.
+pub struct TreeViewSettings {
+    /// Override the indent value for the tree view.
+    ///
+    /// By default this value is 'None' which means that the indent value from the
+    /// current ui is used. If this value is set, this value will used as the indent
+    /// value without affecting the ui's indent value.
+    pub override_indent: Option<f32>,
+    /// The style of the indent hint to show the indentation level.
+    pub indent_hint_style: IndentHintStyle,
+    /// The row layout for this tree.
+    pub row_layout: RowLayout,
+    /// The maximum width the tree can have.
+    ///
+    /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill the available horizontal space.
+    pub max_width: f32,
+    /// The maximum hight the tree can have.
+    ///
+    /// If the tree is part of a vertical justified layout, this property has no effect and the tree will always fill the available vertical space.
+    pub max_height: f32,
+    /// The minimum width the tree can have.
+    pub min_width: f32,
+    /// The minimum hight the tree can have.
+    pub min_height: f32,
+    /// Whether or not the tree should fill all available horizontal space.
+    ///
+    /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill horizontal space.
+    /// Default is true.
+    pub fill_space_horizontal: bool,
+    /// Whether or not the tree should fill all available vertical space.
+    ///
+    /// If the tree is part of a vertically justified layout, this property has no effect and the tree will always fill vertical space.
+    /// Default is false.
+    pub fill_space_vertical: bool,
+    /// If the tree view is allowed to select multiple nodes at once.
+    /// Default is true.
+    pub allow_multi_select: bool,
 }
 
 impl Default for TreeViewSettings {
@@ -841,12 +884,12 @@ pub enum Action<NodeIdType> {
 /// happening on the tree.
 #[derive(Clone)]
 pub struct DragAndDrop<NodeIdType> {
-    /// The node that is beeing dragged
+    /// The nodes that are beeing dragged
     pub source: Vec<NodeIdType>,
-    /// The node where the dragged node is dropped on.
+    /// The node where the dragged nodes are dropped.
     pub target: NodeIdType,
-    /// The position where the dragged node is dropped inside the target node.
-    pub position: DropPosition<NodeIdType>,
+    /// The position where the dragged nodes are dropped inside the target node.
+    pub position: DirPosition<NodeIdType>,
     /// The shape index of the drop marker.
     drop_marker_idx: ShapeIdx,
 }
@@ -876,7 +919,7 @@ struct BackgroundShapes {
     drop_marker_idx: ShapeIdx,
 }
 impl BackgroundShapes {
-    fn new<NodeIdType: TreeViewId>(ui: &mut Ui, state: &TreeViewState<NodeIdType>) -> Self {
+    fn new<NodeIdType: NodeId>(ui: &mut Ui, state: &TreeViewState<NodeIdType>) -> Self {
         Self {
             background_idx: (0..(state.selected().len() + 1))
                 .map(|_| ui.painter().add(Shape::Noop))
@@ -889,6 +932,33 @@ impl BackgroundShapes {
 }
 
 struct InputResult<NodeIdType> {
-    drag_and_drop: Option<(NodeIdType, DropPosition<NodeIdType>)>,
+    drag_and_drop: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     selection_changed: bool,
+}
+
+enum DropQuarter {
+    Top,
+    MiddleTop,
+    MiddleBottom,
+    Bottom,
+}
+
+impl DropQuarter {
+    fn new(range: Rangef, cursor_pos: f32) -> Option<DropQuarter> {
+        pub const DROP_LINE_HOVER_HEIGHT: f32 = 5.0;
+
+        let h0 = range.min;
+        let h1 = range.min + DROP_LINE_HOVER_HEIGHT;
+        let h2 = (range.min + range.max) / 2.0;
+        let h3 = range.max - DROP_LINE_HOVER_HEIGHT;
+        let h4 = range.max;
+
+        match cursor_pos {
+            y if y >= h0 && y < h1 => Some(Self::Top),
+            y if y >= h1 && y < h2 => Some(Self::MiddleTop),
+            y if y >= h2 && y < h3 => Some(Self::MiddleBottom),
+            y if y >= h3 && y < h4 => Some(Self::Bottom),
+            _ => None,
+        }
+    }
 }

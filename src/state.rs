@@ -2,12 +2,12 @@ use std::collections::HashSet;
 
 use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
 
-use crate::{NodeId, TreeViewId};
+use crate::NodeId;
 
 /// State of the dragged node.
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub struct DragState<NodeIdType> {
+pub(crate) struct DragState<NodeIdType> {
     /// Id of the dragged nodes.
     pub node_ids: Vec<NodeIdType>,
     /// Position of the pointer when the drag started.
@@ -19,7 +19,7 @@ pub struct DragState<NodeIdType> {
 /// State of each node in the tree.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub struct NodeState<NodeIdType> {
+pub(crate) struct NodeState<NodeIdType> {
     /// Id of this node.
     pub id: NodeIdType,
     /// The parent node of this node.
@@ -74,18 +74,19 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
 }
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
-    NodeIdType: NodeId,
+    NodeIdType: NodeId + Send + Sync + 'static,
 {
+    /// Load a [`TreeViewState`] from memory.
     pub fn load(ui: &mut Ui, id: Id) -> Option<Self> {
         ui.data_mut(|d| d.get_persisted(id))
     }
-
+    /// Store this [`TreeViewState`] to memory.
     pub fn store(self, ui: &mut Ui, id: Id) {
         ui.data_mut(|d| d.insert_persisted(id, self));
     }
 }
 
-impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
+impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Return the list of selected nodes
     pub fn selected(&self) -> &Vec<NodeIdType> {
         &self.selected
@@ -95,6 +96,13 @@ impl<NodeIdType: TreeViewId> TreeViewState<NodeIdType> {
     pub fn set_selected(&mut self, selected: Vec<NodeIdType>) {
         self.selection_pivot = selected.first().map(|o| *o);
         self.selected = selected;
+    }
+
+    /// Set a single node to be selected.
+    pub fn set_one_selected(&mut self, selected: NodeIdType) {
+        self.selection_pivot = Some(selected);
+        self.selected.clear();
+        self.selected.push(selected);
     }
 
     /// Expand all parent nodes of the node with the given id.

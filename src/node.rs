@@ -1,13 +1,11 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Rangef, Rect,
-    Response, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
+    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Rect, Response,
+    Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
 
-use crate::{RowLayout, TreeViewId, TreeViewSettings};
+use crate::{NodeId, RowLayout, TreeViewSettings};
 
-pub type AddUi<'add_ui> = dyn FnMut(&mut Ui) + 'add_ui;
-pub type AddCloser<'add_ui> = dyn FnMut(&mut Ui, CloserState) + 'add_ui;
-
+/// A builder to build a node.
 pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) id: NodeIdType,
     pub(crate) is_dir: bool,
@@ -16,12 +14,12 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) default_open: bool,
     pub(crate) drop_allowed: bool,
     indent: usize,
-    icon: Option<Box<AddUi<'add_ui>>>,
-    closer: Option<Box<AddCloser<'add_ui>>>,
-    label: Option<Box<AddUi<'add_ui>>>,
-    context_menu: Option<Box<AddUi<'add_ui>>>,
+    icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
+    closer: Option<Box<dyn FnMut(&mut Ui, CloserState) + 'add_ui>>,
+    label: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
+    context_menu: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
 }
-impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
+impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     /// Create a new node builder from a leaf prototype.
     pub fn leaf(id: NodeIdType) -> Self {
         Self {
@@ -56,10 +54,14 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
         }
     }
 
-    /// Whether or not the directory should be flattened into the
-    /// parent directiron. A directory that is flattened does not
-    /// show a label and cannot be navigated to. Its children appear
-    /// like the children of the grand parent directory.
+    /// Whether or not the directory should be flattened into the parent directiron.
+    ///
+    /// A directory that is flattened is not visible in the tree and cannot be navigated to.
+    /// Its children appear like the children of the grand parent directory.
+    ///
+    /// This node will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
+    /// multi selection process.
+    /// This node will still be the target of any [`drag and drop action`](crate::Action) as if it was visible.
     pub fn flatten(mut self, flatten: bool) -> Self {
         self.flatten = flatten;
         self
@@ -87,7 +89,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Add a custom closer to the directory node.
-    /// Leaves do not show a closer.
+    /// Leaf nodes do not show a closer.
     pub fn closer(
         mut self,
         add_closer: impl FnMut(&mut Ui, CloserState) + 'add_ui,
@@ -97,7 +99,7 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Add a label to this node.
-    pub fn label(
+    pub fn label_ui(
         mut self,
         add_label: impl FnMut(&mut Ui) + 'add_ui,
     ) -> NodeBuilder<'add_ui, NodeIdType> {
@@ -105,14 +107,20 @@ impl<'add_ui, NodeIdType: TreeViewId> NodeBuilder<'add_ui, NodeIdType> {
         self
     }
 
-    pub fn label_text(self, text: impl Into<WidgetText> + 'add_ui) -> Self {
+    /// Add a label to this node from a `WidgetText`.
+    pub fn label(self, text: impl Into<WidgetText> + 'add_ui) -> Self {
         let widget_text = text.into();
-        self.label(move |ui| {
+        self.label_ui(move |ui| {
             ui.add(Label::new(widget_text.clone()).selectable(false));
         })
     }
 
     /// Add a context menu to this node.
+    ///
+    /// A context menu in egui gets its size the first time it becomes visible.
+    /// Since all nodes in the tree view share the same context menu you must set
+    /// the size of the context menu manually for each node if you want to have differently
+    /// sized context menus.
     pub fn context_menu(
         mut self,
         add_context_menu: impl FnMut(&mut Ui) + 'add_ui,
@@ -312,33 +320,6 @@ pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, is_hov
         visuals.fg_stroke.color,
         Stroke::NONE,
     ));
-}
-
-pub enum DropQuarter {
-    Top,
-    MiddleTop,
-    MiddleBottom,
-    Bottom,
-}
-
-impl DropQuarter {
-    pub fn new(range: Rangef, cursor_pos: f32) -> Option<DropQuarter> {
-        pub const DROP_LINE_HOVER_HEIGHT: f32 = 5.0;
-
-        let h0 = range.min;
-        let h1 = range.min + DROP_LINE_HOVER_HEIGHT;
-        let h2 = (range.min + range.max) / 2.0;
-        let h3 = range.max - DROP_LINE_HOVER_HEIGHT;
-        let h4 = range.max;
-
-        match cursor_pos {
-            y if y >= h0 && y < h1 => Some(Self::Top),
-            y if y >= h1 && y < h2 => Some(Self::MiddleTop),
-            y if y >= h2 && y < h3 => Some(Self::MiddleBottom),
-            y if y >= h3 && y < h4 => Some(Self::Bottom),
-            _ => None,
-        }
-    }
 }
 
 /// State of the closer when it is drawn.

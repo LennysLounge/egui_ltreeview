@@ -2,7 +2,7 @@
 
 use std::any::Any;
 
-use egui_ltreeview::DropPosition;
+use egui_ltreeview::DirPosition;
 use uuid::Uuid;
 
 fn main() {}
@@ -87,23 +87,23 @@ impl Node {
     pub fn insert(
         &mut self,
         id: &Uuid,
-        position: DropPosition<Uuid>,
+        position: DirPosition<Uuid>,
         value: Node,
     ) -> Result<(), Node> {
         match self {
             Node::Directory(dir) => {
                 if dir.id == *id {
                     match position {
-                        DropPosition::First => dir.children.insert(0, value),
-                        DropPosition::Last => dir.children.push(value),
-                        DropPosition::After(after_id) => {
+                        DirPosition::First => dir.children.insert(0, value),
+                        DirPosition::Last => dir.children.push(value),
+                        DirPosition::After(after_id) => {
                             if let Some(index) =
                                 dir.children.iter().position(|n| *n.id() == after_id)
                             {
                                 dir.children.insert(index + 1, value);
                             }
                         }
-                        DropPosition::Before(before_id) => {
+                        DirPosition::Before(before_id) => {
                             if let Some(index) =
                                 dir.children.iter().position(|n| *n.id() == before_id)
                             {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use egui::{pos2, vec2, LayerId, Order, Pos2, Rect, Response, Ui, WidgetText};
 
 use crate::{
-    node::NodeBuilder, IndentHintStyle, NodeState, TreeViewId, TreeViewSettings, TreeViewState,
+    node::NodeBuilder, IndentHintStyle, NodeId, NodeState, TreeViewSettings, TreeViewState,
 };
 
 #[derive(Clone)]
@@ -36,7 +36,7 @@ pub(crate) struct RowRectangles {
     pub(crate) closer_rect: Option<Rect>,
 }
 
-/// The builder used to construct the tree view.
+/// The builder used to construct the tree.
 ///
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, NodeIdType> {
@@ -48,7 +48,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     result: TreeViewBuilderResult<NodeIdType>,
 }
 
-impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
+impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
         interaction: Response,
@@ -81,25 +81,26 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
         self.parent_dir().map(|state| state.id)
     }
 
-    /// Add a leaf to the tree.
+    /// Add a leaf directly to the tree with an id and the label text.
+    ///
+    /// To customize the node that is added to the tree consider using [`TreeViewBuilder::node`]
     pub fn leaf(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
-        self.node(NodeBuilder::leaf(id).label(|ui| {
+        self.node(NodeBuilder::leaf(id).label_ui(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
         }));
     }
 
     /// Add a directory to the tree.
-    /// Must call [Self::close_dir] to close the directory.
+    ///
+    /// Must call [`TreeViewBuilder::close_dir`] to close the directory.
+    ///
+    /// To customize the node that is added to the tree consider using [`TreeViewBuilder::node`]
     pub fn dir(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
-        self.node(NodeBuilder::dir(id).label(|ui| {
+        self.node(NodeBuilder::dir(id).label_ui(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
         }));
-    }
-
-    pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType> {
-        self.result
     }
 
     /// Close the current directory.
@@ -153,6 +154,8 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     /// Add a node to the tree.
+    ///
+    /// If the node is a directory, you must call [`TreeViewBuilder::close_dir`] to close the directory.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
         let open = self
             .state
@@ -197,6 +200,10 @@ impl<'ui, NodeIdType: TreeViewId> TreeViewBuilder<'ui, NodeIdType> {
                 flattened: node.flatten,
             });
         }
+    }
+
+    pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType> {
+        self.result
     }
 
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> (Rect, Option<Rect>) {

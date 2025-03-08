@@ -4,7 +4,7 @@ use std::env;
 use data::*;
 use egui::{Color32, DragValue, Id, Label, Layout, Response, ThemePreference, Ui};
 use egui_ltreeview::{
-    node::NodeBuilder, Action, DropPosition, IndentHintStyle, RowLayout, TreeView, TreeViewBuilder,
+    Action, DirPosition, IndentHintStyle, NodeBuilder, RowLayout, TreeView, TreeViewBuilder,
     TreeViewState,
 };
 use uuid::Uuid;
@@ -56,8 +56,8 @@ struct Settings {
 
 enum ContextMenuActions {
     Delete(Uuid),
-    AddLeaf(Uuid, DropPosition<Uuid>),
-    AddDir(Uuid, DropPosition<Uuid>),
+    AddLeaf(Uuid, DirPosition<Uuid>),
+    AddDir(Uuid, DirPosition<Uuid>),
 }
 
 impl Default for MyApp {
@@ -161,7 +161,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                             .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
                             .paint_at(ui, ui.max_rect());
                     })
-                    .label(|ui| {
+                    .label_ui(|ui| {
                         ui.add(Label::new("Settings").selectable(false));
                     }),
             );
@@ -231,7 +231,7 @@ fn show_dir(
     actions: &mut Vec<ContextMenuActions>,
 ) {
     let mut node = NodeBuilder::dir(dir.id)
-        .label_text(&dir.name)
+        .label(&dir.name)
         .context_menu(|ui| {
             ui.set_width(100.0);
 
@@ -244,11 +244,11 @@ fn show_dir(
             }
             ui.separator();
             if ui.button("new file").clicked() {
-                actions.push(ContextMenuActions::AddLeaf(dir.id, DropPosition::Last));
+                actions.push(ContextMenuActions::AddLeaf(dir.id, DirPosition::Last));
                 ui.close_menu();
             }
             if ui.button("new directory").clicked() {
-                actions.push(ContextMenuActions::AddDir(dir.id, DropPosition::Last));
+                actions.push(ContextMenuActions::AddDir(dir.id, DirPosition::Last));
                 ui.close_menu();
             }
         });
@@ -292,7 +292,7 @@ fn show_file(
 ) {
     let parent_node = builder.parent_id().expect("All nodes should have a parent");
     let mut node = NodeBuilder::leaf(file.id)
-        .label_text(&file.name)
+        .label(&file.name)
         .context_menu(|ui| {
             ui.set_width(100.0);
 
@@ -306,14 +306,14 @@ fn show_file(
             if ui.button("new file").clicked() {
                 actions.push(ContextMenuActions::AddLeaf(
                     parent_node,
-                    DropPosition::After(file.id),
+                    DirPosition::After(file.id),
                 ));
                 ui.close_menu();
             }
             if ui.button("new directory").clicked() {
                 actions.push(ContextMenuActions::AddDir(
                     parent_node,
-                    DropPosition::After(file.id),
+                    DirPosition::After(file.id),
                 ));
                 ui.close_menu();
             }
