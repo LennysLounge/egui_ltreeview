@@ -2,6 +2,10 @@
 name = "egui_ltreeview"
 version = "0.1.7"
 edition = "2021"
+authors = ["Leonard Schüngel <schuengel.leonard@gmail.com>"]
+license = "MIT"
+description = "A tree view widget for egui"
+repository = "https://github.com/LennysLounge/egui_ltreeview"
 
 [dependencies]
 egui = { version = "0.31" }
