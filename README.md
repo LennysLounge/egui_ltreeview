@@ -1,4 +1,4 @@
-# `egui_treeview` is a tree view widget for [egui](https://github.com/emilk/egui)
+# `egui_ltreeview` is a tree view widget for [egui](https://github.com/emilk/egui)
 
 [![github](https://img.shields.io/badge/github-LennysLounge/egui_ltreeview-8da0cb?logo=github)](https://github.com/LennysLounge/egui_ltreeview)
 [![crates.io](https://img.shields.io/crates/v/egui_ltreeview)](https://crates.io/crates/egui_ltreeview)

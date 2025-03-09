@@ -1,5 +1,5 @@
 #![warn(missing_docs)]
-//! # `egui_treeview` is a tree view widget for [egui](https://github.com/emilk/egui)
+//! # `egui_ltreeview` is a tree view widget for [egui](https://github.com/emilk/egui)
 //! 
 //! This tree view widget implements all the common features of a tree view to get you
 //! up and running as fast as possible.
