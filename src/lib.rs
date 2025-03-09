@@ -4,7 +4,7 @@
 //! This tree view widget implements all the common features of a tree view to get you
 //! up and running as fast as possible.
 //! 
-//! **Features**:
+//! ### Features:
 //! * Directory and leaf nodes
 //! * Node selection
 //! * Select multiple nodes
