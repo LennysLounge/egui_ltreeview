@@ -6,6 +6,13 @@ authors = ["Leonard Schüngel <schuengel.leonard@gmail.com>"]
 license = "MIT"
 description = "A tree view widget for egui"
 repository = "https://github.com/LennysLounge/egui_ltreeview"
+categories = ["gui"]
+keywords = ["egui", "gui", "widget", "tree"]
+include = [
+    "src/**/*.rs",
+    "Cargo.toml",
+    "LICENSE"
+]
 
 [dependencies]
 egui = { version = "0.31" }
