@@ -626,16 +626,15 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             // to allow navigating throught the tree.
             // In case we gain focus from a drag action we select the dragged node directly.
             if state.selected().is_empty() {
-                // todo: fix this
-                state.set_selected(
-                    state
-                        .dragged
-                        .as_ref()
-                        .map(|drag_state| drag_state.node_ids.clone())
-                        .or(state.node_states().first().map(|n| vec![n.id]))
-                        .unwrap(),
-                );
-                selection_changed = true;
+                let fallback_selection = state
+                    .dragged
+                    .as_ref()
+                    .map(|drag_state| drag_state.node_ids.clone())
+                    .or(state.node_states().first().map(|n| vec![n.id]));
+                if let Some(fallback_selection) = fallback_selection {
+                    state.set_selected(fallback_selection);
+                    selection_changed = true;
+                }
             }
             ui.input(|i| {
                 for event in i.events.iter() {
@@ -685,28 +684,40 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         if let Some((parent_id, drop_position)) = drop_position {
             let drop_marker = match drop_position {
                 DirPosition::Before(target_id) => {
-                    let row_rectangles = result.row_rectangles.get(&target_id).unwrap();
+                    let row_rectangles = result
+                        .row_rectangles
+                        .get(&target_id)
+                        .expect("Drop target must exists in the tree");
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.min.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
                 DirPosition::After(target_id) => {
-                    let row_rectangles = result.row_rectangles.get(&target_id).unwrap();
+                    let row_rectangles = result
+                        .row_rectangles
+                        .get(&target_id)
+                        .expect("Drop target must exists in the tree");
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
                 DirPosition::First => {
-                    let row_rectangles = result.row_rectangles.get(&parent_id).unwrap();
+                    let row_rectangles = result
+                        .row_rectangles
+                        .get(&parent_id)
+                        .expect("Drop target must exists in the tree");
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
                 DirPosition::Last => {
-                    let row_rectangles_start = result.row_rectangles.get(&parent_id).unwrap();
+                    let row_rectangles_start = result
+                        .row_rectangles
+                        .get(&parent_id)
+                        .expect("Drop target must exists in the tree");
                     // For directories the drop marker should expand its height to include all
                     // its child nodes. To do this, first we have to find its last child node,
                     // then we can get the correct y range.
@@ -724,7 +735,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     let y_range = match last_child {
                         Some(last_child_id) => {
                             let row_rectangles_end =
-                                result.row_rectangles.get(&last_child_id).unwrap();
+                                result.row_rectangles.get(&last_child_id).expect(
+                                    "last_child_id comes from the node states so it must exists",
+                                );
                             Rangef::new(
                                 row_rectangles_start.row_rect.min.y,
                                 row_rectangles_end.row_rect.max.y,
@@ -801,8 +814,10 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         if state.context_menu_was_open {
-            if let Some(seconday_selected_id) = state.secondary_selection {
-                let row_rectangles = result.row_rectangles.get(&seconday_selected_id).unwrap();
+            if let Some(row_rectangles) = state
+                .secondary_selection
+                .and_then(|id| result.row_rectangles.get(&id))
+            {
                 ui.painter().set(
                     background.secondary_selection_idx,
                     epaint::RectShape::new(
@@ -817,8 +832,10 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         if has_focus {
-            if let Some(selection_cursor_id) = state.selection_cursor() {
-                let row_rectangles = result.row_rectangles.get(&selection_cursor_id).unwrap();
+            if let Some(row_rectangles) = state
+                .selection_cursor()
+                .and_then(|id| result.row_rectangles.get(&id))
+            {
                 ui.painter().set(
                     background.selection_cursor_idx,
                     epaint::RectShape::new(
@@ -832,13 +849,14 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             }
         }
 
-        if state.drag_valid() {
-            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-                let drag_state = state.dragged.as_ref().unwrap();
-                let delta = pointer_pos.to_vec2() - drag_state.drag_start_pos.to_vec2();
-                let transform = emath::TSTransform::from_translation(delta);
-                ui.ctx()
-                    .transform_layer_shapes(result.drag_layer, transform);
+        if let Some(drag_state) = &state.dragged {
+            if drag_state.drag_valid {
+                if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+                    let delta = pointer_pos.to_vec2() - drag_state.drag_start_pos.to_vec2();
+                    let transform = emath::TSTransform::from_translation(delta);
+                    ui.ctx()
+                        .transform_layer_shapes(result.drag_layer, transform);
+                }
             }
         }
     }
