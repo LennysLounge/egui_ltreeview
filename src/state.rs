@@ -54,7 +54,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     pub(crate) size: Vec2,
     /// Open states of the dirs in this tree.
-    pub(crate) node_states: Vec<NodeState<NodeIdType>>,
+    node_states: Vec<NodeState<NodeIdType>>,
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
 }
@@ -132,6 +132,16 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     pub fn parent_id_of(&self, id: NodeIdType) -> Option<NodeIdType> {
         self.node_state_of(&id)
             .and_then(|node_state| node_state.parent_id)
+    }
+
+    pub(crate) fn set_node_states(&mut self, states: Vec<NodeState<NodeIdType>>) {
+        self.node_states = states;
+        self.selected
+            .retain(|node_id| self.node_states.iter().any(|ns| &ns.id == node_id));
+    }
+
+    pub(crate) fn node_states(&self) -> &Vec<NodeState<NodeIdType>> {
+        &self.node_states
     }
 
     pub(crate) fn selection_cursor(&self) -> Option<NodeIdType> {
