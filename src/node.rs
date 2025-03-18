@@ -145,7 +145,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
             RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
-            RowLayout::CompactAlignedLables => (
+            RowLayout::CompactAlignedLabels => (
                 self.is_dir,
                 self.is_dir,
                 !self.is_dir,
