@@ -524,23 +524,20 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 .expect("A node_state must have row rectangles");
 
             // Closer interactions
-            if let Some(closer_rect) = closer_rect {
-                if interaction
-                    .hover_pos()
-                    .is_some_and(|pos| closer_rect.contains(pos))
-                {
-                    // was closed clicked
-                    if interaction.clicked() {
-                        let node_state = state.node_state_of_mut(&node_id).unwrap();
-                        node_state.open = !node_state.open;
-                    }
-                }
+            let closer_clicked = closer_rect
+                .zip(interaction.hover_pos())
+                .is_some_and(|(closer_rect, hover_pos)| closer_rect.contains(hover_pos))
+                && interaction.clicked();
+            if closer_clicked {
+                let node_state = state.node_state_of_mut(&node_id).unwrap();
+                node_state.open = !node_state.open;
             }
+
             // Row interaction
-            if interaction
+            let cursor_above_row = interaction
                 .hover_pos()
-                .is_some_and(|pos| row_rect.contains(pos))
-            {
+                .is_some_and(|pos| row_rect.contains(pos));
+            if cursor_above_row && !closer_clicked {
                 // was clicked
                 if interaction.clicked_by(egui::PointerButton::Primary) {
                     // React to primary clicking
