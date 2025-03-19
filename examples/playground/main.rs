@@ -153,7 +153,6 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             }
         })
         .show_state(ui, &mut app.tree_view_state, |mut builder| {
-            builder.node(NodeBuilder::dir(Uuid::default()).flatten(true));
             builder.node(
                 NodeBuilder::leaf(app.settings_id)
                     .icon(|ui| {
