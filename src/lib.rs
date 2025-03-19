@@ -504,6 +504,8 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             ..
         } = tree_view_result;
 
+        state.clear_opened();
+
         if interaction.clicked() || interaction.drag_started() {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
@@ -538,8 +540,18 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos));
             if cursor_above_row && !closer_clicked {
-                // was clicked
-                if interaction.clicked_by(egui::PointerButton::Primary) {
+                // was row double-clicked
+                if interaction.double_clicked() {
+                    let node_state = state.node_state_of_mut(&node_id).unwrap();
+                    node_state.open = !node_state.open;
+
+                    state.handle_double_click(
+                        ui.ctx().input(|i| i.modifiers)
+                    )
+                } else if interaction.clicked_by(egui::PointerButton::Primary) {
+                    // must be handled after double-clicking to prevent the second click of the double-click
+                    // performing 'click' actions.
+
                     // React to primary clicking
                     selection_changed = true;
                     state.handle_click(
@@ -548,11 +560,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                         self.settings.allow_multi_select,
                     );
                 }
-                // was row double clicked
-                if interaction.double_clicked() {
-                    let node_state = state.node_state_of_mut(&node_id).unwrap();
-                    node_state.open = !node_state.open;
-                }
+
                 // React to a dragging
                 // An egui drag only starts after the pointer has moved but with that first movement
                 // the pointer may have moved to a different node. Instead we want to update

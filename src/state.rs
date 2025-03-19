@@ -47,6 +47,8 @@ pub struct TreeViewState<NodeIdType> {
     selection_pivot: Option<NodeIdType>,
     /// The element where the selection curosr is at the moment.
     selection_cursor: Option<NodeIdType>,
+    /// The state of the modifiers when the selection was opened.
+    opened: Option<Modifiers>,
     /// Information about the dragged node.
     pub(crate) dragged: Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
@@ -58,12 +60,14 @@ pub struct TreeViewState<NodeIdType> {
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
 }
+
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
         Self {
             selected: Default::default(),
             selection_pivot: None,
             selection_cursor: None,
+            opened: None,
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
@@ -111,6 +115,21 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             self.expand_node(parent_id);
         }
     }
+
+    /// Get the 'opened' state.
+    /// 
+    /// returns Some with the modifiers that were used when the selection was opened,
+    /// or None if no open action occured this frame.
+    /// 
+    /// You can call [`Self::selection`] to get the selection that was opened.
+    pub fn opened(&self) -> Option<Modifiers> {
+        self.opened
+    }
+
+    pub(crate) fn clear_opened(&mut self) {
+        self.opened = None
+    }
+
 
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
@@ -192,6 +211,14 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
+
+    pub(crate) fn handle_double_click(
+        &mut self,
+        modifiers: Modifiers,
+    ) {
+        self.opened = Some(modifiers);
+    }
+    
     pub(crate) fn handle_click(
         &mut self,
         clicked_id: NodeIdType,
@@ -229,16 +256,16 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, modifier: &Modifiers, allow_multi_select: bool) {
+    pub(crate) fn handle_key(&mut self, key: &Key, modifiers: &Modifiers, allow_multi_select: bool) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
                     break 'arm;
                 };
-                let Some(current_curor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                let Some(current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
                     break 'arm;
                 };
-                let cursor_pos = self.position_of_id(current_curor_id).unwrap();
+                let cursor_pos = self.position_of_id(current_cursor_id).unwrap();
                 let new_cursor = match key {
                     Key::ArrowUp => self.node_states[0..cursor_pos]
                         .iter()
@@ -250,7 +277,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                     _ => unreachable!(),
                 };
                 if let Some(new_cursor) = new_cursor {
-                    if modifier.shift_only() && allow_multi_select {
+                    if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                         let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
                         let pivot_pos = self.position_of_id(pivot_id).unwrap();
@@ -259,9 +286,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                             [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
                             .iter()
                             .for_each(|node| self.selected.push(node.id));
-                    } else if modifier.command_only() && allow_multi_select {
+                    } else if modifiers.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
-                    } else if modifier.shift && modifier.command && allow_multi_select {
+                    } else if modifiers.shift && modifiers.command && allow_multi_select {
                         if !self.selected.contains(&new_cursor.id) {
                             self.selected.push(new_cursor.id);
                         }
@@ -285,6 +312,12 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                     self.selected.push(cursor_id);
                     self.selection_pivot = Some(cursor_id);
                 }
+            }
+            Key::Enter => 'arm: {
+                let Some(_current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                    break 'arm;
+                };
+                self.opened = Some(modifiers.clone()); 
             }
             Key::ArrowLeft => 'arm: {
                 if self.selected.len() != 1 {
