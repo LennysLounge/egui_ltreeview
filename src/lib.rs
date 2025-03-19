@@ -28,11 +28,11 @@
 //! ```
 //! Create a new [`TreeView`] with its unique id and show it for the current ui.
 //! Use the [`builder`](TreeViewBuilder) in the callback to add directories and leaves
-//! to the tree. The nodes of the tree must have a unqiue id which implements the [`NodeId`] trait.
+//! to the tree. The nodes of the tree must have a unique id which implements the [`NodeId`] trait.
 //!
 //! # Customizing the tree view
 //! To change the basic settings of the tree view you can use the [`TreeViewSettings`] to customize the tree view
-//! or use the convienience methods on [`TreeView`] directly.
+//! or use the convenience methods on [`TreeView`] directly.
 //!
 //! Check out [`TreeViewSettings`] for all settings possible on the tree view.
 //!
@@ -53,7 +53,7 @@
 //! # Customizing nodes, directories and leaves
 //! To customize nodes, directories, and leaves you can use the [`NodeBuilder`] before adding the node
 //! to the [`builder`](TreeViewBuilder).
-//! Here you can add an icon to the node that is shown infront of the label. For directories you can also
+//! Here you can add an icon to the node that is shown in-front of the label, for directories you can also
 //! show a custom closer. It is also possible to configure the context menu for this node specifically. More
 //! about context menus in the context menu section.
 //!
@@ -74,13 +74,13 @@
 //! ```
 //! # Multi select
 //! The tree view supports selecting multiple nodes at once. This behavior was modeled after the
-//! windows file exploror and supports all the common keyboard navigation behaviors.
+//! Windows file explorer and supports all the common keyboard navigation behaviors.
 //!
 //! Clicking on a node selects this node. Shift clicking will select all nodes between the previously selected
-//! node (the pivot node) and the newly clicked node. Control clicking (command click on mac) will add the
+//! node (the pivot node) and the newly clicked node. Control clicking (command click on Mac) will add the
 //! clicked node to the selection or remove it from the selection if it was already selected.
 //!
-//! You can use the arrow keys to move the selection through the tree. If you hold either shift or control(command on mac)
+//! You can use the arrow keys to move the selection through the tree. If you hold either shift or control(command on Mac)
 //! while navigating with the arrow keys you will move a cursor through the tree instead. How nodes are selected in this
 //! mode depends on the configuration of shift and control being held down.
 //! * **shift only** this will select all nodes between the pivot node and the cursor.
@@ -98,11 +98,11 @@
 //!         ui.label("i am the context menu for this node")
 //!     }));
 //! ```
-//! If a node was right clicked but did not configure a context menu then the [`fallback context menu`](TreeView::fallback_context_menu)
+//! If a node was right-clicked but did not configure a context menu then the [`fallback context menu`](TreeView::fallback_context_menu)
 //! will be used.
 //!
 //! The [`fallback context menu`](TreeView::fallback_context_menu) in the [`TreeView`] also serves as the context menu
-//! for right clicking on multiple nodes in a multi selection. Here the list of all nodes that belong to this context menu is passed in
+//! for right-clicking on multiple nodes in a multi selection. Here the list of all nodes that belong to this context menu is passed in
 //!
 //! ```
 //! TreeView::new(id)
@@ -125,7 +125,7 @@
 //! All nodes and the fallback share the same context menu. In egui, the size of a context menu
 //! is determined the first time the context menu becomes visible. For this reason, you might have
 //! to set the size of the context menu manually with `ui.set_width` if you plan on having multiple
-//! differently sized contxt menues in your tree.
+//! differently sized context menus in your tree.
 //!
 //! # Drag and drop
 //! The tree supports the frontend for creating drag and drop actions in your tree.
@@ -134,7 +134,7 @@
 //! correctly for the drag and drop to work.
 //!
 //! An [`Action`] can contain:
-//! * A `Drag` action shows that a node has been dragged but not yet dropped.  
+//! * A `Drag` action shows that a node has been dragged but not yet dropped.
 //! * A `Move` action shows that the node has been dropped
 //!
 //! A node can control if it wants to be a valid target of a `Drag` or `Move` action by setting
@@ -202,8 +202,8 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 
     /// Override the indent value for this tree view.
     ///
-    /// By default this value is 'None' which means that the indent value from the
-    /// current ui is used. If this value is set, this value will used as the indent
+    /// By default, this value is 'None' which means that the indent value from the
+    /// current ui is used. If this value is set, this value will be used as the indent
     /// value without affecting the ui's indent value.
     pub fn override_indent(mut self, indent: Option<f32>) -> Self {
         self.settings.override_indent = indent;
@@ -222,7 +222,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
-    /// Set whether or not the tree should fill all available horizontal space.
+    /// Controls whether the tree should fill all available horizontal space.
     ///
     /// If the tree is part of a horizontally justified layout, this property has no
     /// effect and the tree will always fill horizontal space.
@@ -233,7 +233,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
-    /// Set whether or not the tree should fill all available vertical space.
+    /// Controls whether the tree should fill all available vertical space.
     ///
     /// If the tree is part of a vertically justified layout, this property has no
     /// effect and the tree will always fill vertical space.
@@ -253,7 +253,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
-    /// Set the maximum hight the tree can have.
+    /// Set the maximum height the tree can have.
     ///
     /// If the tree is part of a vertical justified layout, this property has no
     /// effect and the tree will always fill the available vertical space.
@@ -268,7 +268,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
-    /// Set the minimum hight the tree can have.
+    /// Set the minimum height the tree can have.
     pub fn min_height(mut self, height: f32) -> Self {
         self.settings.min_height = height;
         self
@@ -283,7 +283,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     /// Add a fallback context menu to the tree.
     ///
     /// If the node did not configure a context menu directly or
-    /// if multiple nodes were selected and right clicked, then
+    /// if multiple nodes were selected and right-clicked, then
     /// this fallback context menu will be opened.
     ///
     /// A context menu in egui gets its size the first time it becomes visible.
@@ -319,7 +319,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 
     /// Start displaying the tree view with a [`TreeViewState`].
     ///
-    /// Construct the tree view using the [`TreeViewBuilder`] by addind
+    /// Construct the tree view using the [`TreeViewBuilder`] by adding
     /// directories or leaves to the tree.
     pub fn show_state(
         mut self,
@@ -954,8 +954,8 @@ pub enum DirPosition<NodeIdType> {
 pub struct TreeViewSettings {
     /// Override the indent value for the tree view.
     ///
-    /// By default this value is 'None' which means that the indent value from the
-    /// current ui is used. If this value is set, this value will used as the indent
+    /// By default, this value is 'None' which means that the indent value from the
+    /// current UI is used. If this value is set, this value will be used as the indent
     /// value without affecting the ui's indent value.
     pub override_indent: Option<f32>,
     /// The style of the indent hint to show the indentation level.
@@ -966,20 +966,20 @@ pub struct TreeViewSettings {
     ///
     /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill the available horizontal space.
     pub max_width: f32,
-    /// The maximum hight the tree can have.
+    /// The maximum height the tree can have.
     ///
     /// If the tree is part of a vertical justified layout, this property has no effect and the tree will always fill the available vertical space.
     pub max_height: f32,
     /// The minimum width the tree can have.
     pub min_width: f32,
-    /// The minimum hight the tree can have.
+    /// The minimum height the tree can have.
     pub min_height: f32,
-    /// Whether or not the tree should fill all available horizontal space.
+    /// Whether the tree should fill all available horizontal space.
     ///
     /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill horizontal space.
     /// Default is true.
     pub fill_space_horizontal: bool,
-    /// Whether or not the tree should fill all available vertical space.
+    /// Whether the tree should fill all available vertical space.
     ///
     /// If the tree is part of a vertically justified layout, this property has no effect and the tree will always fill vertical space.
     /// Default is false.
@@ -1011,14 +1011,14 @@ impl Default for TreeViewSettings {
 pub enum IndentHintStyle {
     /// No indent hint is shown.
     None,
-    /// A single vertical line is show for the full hight of the directory.
+    /// A single vertical line is show for the full height of the directory.
     Line,
     /// A vertical line is show with horizontal hooks to the child nodes of the directory.
     #[default]
     Hook,
 }
 
-/// How rows in the tree are layed out.
+/// How rows in the tree are laid out.
 ///
 /// Each row in the tree is made up of three elements. A closer,
 /// an icon and a label. The layout of these elements is controlled
@@ -1032,13 +1032,13 @@ pub enum RowLayout {
     Compact,
     /// The labels of leaves and directories are aligned.
     /// Icons are displayed for leaves only.
-    CompactAlignedLables,
+    CompactAlignedLabels,
     /// The icons of leaves and directories are aligned.
     /// If a leaf or directory does not show an icon, the label will fill the
-    /// space. Lables between leaves and directories can be misaligned.
+    /// space. Labels between leaves and directories can be misaligned.
     #[default]
     AlignedIcons,
-    /// The labels of leaves and directories are alignd.
+    /// The labels of leaves and directories are aligned.
     /// If a leaf or directory does not show an icon, the label will not fill
     /// the space.
     AlignedIconsAndLabels,
@@ -1052,7 +1052,7 @@ pub enum Action<NodeIdType> {
     SetSelected(Vec<NodeIdType>),
     /// Move a node from one place to another.
     Move(DragAndDrop<NodeIdType>),
-    /// An inprocess drag and drop action where the node
+    /// An in-process drag and drop action where the node
     /// is currently dragged but not yet dropped.
     Drag(DragAndDrop<NodeIdType>),
 }
@@ -1061,7 +1061,7 @@ pub enum Action<NodeIdType> {
 /// happening on the tree.
 #[derive(Clone)]
 pub struct DragAndDrop<NodeIdType> {
-    /// The nodes that are beeing dragged
+    /// The nodes that are being dragged
     pub source: Vec<NodeIdType>,
     /// The node where the dragged nodes are dropped.
     pub target: NodeIdType,

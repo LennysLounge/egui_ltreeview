@@ -66,7 +66,7 @@ impl Default for MyApp {
             tree: make_tree(),
             settings_id: Uuid::new_v4(),
             settings: Settings {
-                row_layout: RowLayout::CompactAlignedLables,
+                row_layout: RowLayout::CompactAlignedLabels,
                 fill_space_horizontal: true,
                 fill_space_vertical: false,
                 max_width: 100.0,
@@ -410,7 +410,7 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         egui::ComboBox::from_id_salt("row layout combo box")
             .selected_text(match settings.row_layout {
                 RowLayout::Compact => "Compact",
-                RowLayout::CompactAlignedLables => "CompactAlignedLables",
+                RowLayout::CompactAlignedLabels => "CompactAlignedLabels",
                 RowLayout::AlignedIcons => "AlignedIcons",
                 RowLayout::AlignedIconsAndLabels => "AlignedLabels",
             })
@@ -418,8 +418,8 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
                 ui.selectable_value(&mut settings.row_layout, RowLayout::Compact, "Compact");
                 ui.selectable_value(
                     &mut settings.row_layout,
-                    RowLayout::CompactAlignedLables,
-                    "Compact aligned lables",
+                    RowLayout::CompactAlignedLabels,
+                    "Compact aligned labels",
                 );
                 ui.selectable_value(
                     &mut settings.row_layout,
