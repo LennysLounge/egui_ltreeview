@@ -1068,7 +1068,7 @@ pub enum RowLayout {
 pub enum Action<NodeIdType> {
     /// Set the selected node to be this.
     SetSelected(Vec<NodeIdType>),
-    /// Move a node from one place to another.
+    /// Move set of nodes from one place to another.
     Move(DragAndDrop<NodeIdType>),
     /// An in-process drag and drop action where the node
     /// is currently dragged but not yet dropped.
@@ -1100,6 +1100,7 @@ impl<NodeIdType> DragAndDrop<NodeIdType> {
     }
 }
 
+/// Information about the opened action in the tree.
 #[derive(Clone)]
 pub struct Opened<NodeIdType> {
     /// The nodes that are being opened.

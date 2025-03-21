@@ -5,7 +5,7 @@
 #[path = "data.rs"]
 mod data;
 
-use egui::{Color32, Id, Modifiers, Stroke, ThemePreference};
+use egui::{Id, Modifiers, ThemePreference};
 use egui_ltreeview::{Action, Opened, TreeView, TreeViewState};
 
 fn main() -> Result<(), eframe::Error> {
