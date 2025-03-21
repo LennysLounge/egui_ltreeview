@@ -42,10 +42,8 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::left(Id::new("left")).show(ctx, |ui| {
-            let (_response, actions) = TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
-                ui,
-                &mut self.tree,
-                |builder| {
+            let (_response, actions) = TreeView::new(ui.make_persistent_id("Names tree view"))
+                .show_state(ui, &mut self.tree, |builder| {
                     builder.dir(0, "Root");
                     builder.dir(1, "Foo");
                     builder.leaf(2, "Ava");
@@ -61,12 +59,14 @@ impl eframe::App for MyApp {
                     builder.leaf(10, "Grayson");
                     builder.close_dir();
                     builder.close_dir();
-                },
-            );
+                });
 
             for action in actions {
                 match action {
-                    Action::Opened(Opened { selected, modifiers }) => {
+                    Action::Opened(Opened {
+                        selected,
+                        modifiers,
+                    }) => {
                         self.opened_history.push((selected, modifiers));
                     }
                     _ => {}
@@ -88,7 +88,10 @@ impl eframe::App for MyApp {
                         ui.label("Empty");
                     } else {
                         for (selection, modifiers) in &self.opened_history {
-                            ui.label(format!("selection: {:?}, modifiers: {:?}", selection, modifiers));
+                            ui.label(format!(
+                                "selection: {:?}, modifiers: {:?}",
+                                selection, modifiers
+                            ));
                         }
                     }
                 });

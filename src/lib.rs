@@ -144,7 +144,10 @@ mod builder;
 mod node;
 mod state;
 
-use egui::{self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout, Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2};
+use egui::{
+    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout,
+    Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+};
 use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
 pub use builder::*;
@@ -405,7 +408,10 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         if let Some(modifiers) = input_result.opened {
-            actions.push(Action::Opened(Opened { selected: state.selected().clone(), modifiers }));
+            actions.push(Action::Opened(Opened {
+                selected: state.selected().clone(),
+                modifiers,
+            }));
         }
 
         // Reset the drag state.
@@ -651,7 +657,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                             modifiers,
                             ..
                         } => {
-                            state.handle_key(key, modifiers, self.settings.allow_multi_select, &mut opened);
+                            state.handle_key(
+                                key,
+                                modifiers,
+                                self.settings.allow_multi_select,
+                                &mut opened,
+                            );
                             selection_changed = true;
                         }
                         _ => (),

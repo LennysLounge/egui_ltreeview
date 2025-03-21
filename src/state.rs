@@ -192,7 +192,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             self.selection_cursor = None;
         }
     }
-    
+
     pub(crate) fn handle_click(
         &mut self,
         clicked_id: NodeIdType,
@@ -230,7 +230,13 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, modifiers: &Modifiers, allow_multi_select: bool, opened: &mut Option<Modifiers>) {
+    pub(crate) fn handle_key(
+        &mut self,
+        key: &Key,
+        modifiers: &Modifiers,
+        allow_multi_select: bool,
+        opened: &mut Option<Modifiers>,
+    ) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
@@ -288,10 +294,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 }
             }
             Key::Enter => 'arm: {
-                let Some(_current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                let Some(_current_cursor_id) = self.selection_cursor.or(self.selection_pivot)
+                else {
                     break 'arm;
                 };
-                opened.replace(modifiers.clone()); 
+                opened.replace(modifiers.clone());
             }
             Key::ArrowLeft => 'arm: {
                 if self.selected.len() != 1 {
