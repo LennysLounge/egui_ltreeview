@@ -235,7 +235,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         key: &Key,
         modifiers: &Modifiers,
         allow_multi_select: bool,
-        opened: &mut Option<Modifiers>,
     ) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
@@ -292,13 +291,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                     self.selected.push(cursor_id);
                     self.selection_pivot = Some(cursor_id);
                 }
-            }
-            Key::Enter => 'arm: {
-                let Some(_current_cursor_id) = self.selection_cursor.or(self.selection_pivot)
-                else {
-                    break 'arm;
-                };
-                opened.replace(modifiers.clone());
             }
             Key::ArrowLeft => 'arm: {
                 if self.selected.len() != 1 {

@@ -145,8 +145,8 @@ mod node;
 mod state;
 
 use egui::{
-    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout,
-    Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key,
+    Layout, Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
@@ -407,10 +407,10 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             actions.push(Action::SetSelected(state.selected().clone()));
         }
 
-        if let Some(modifiers) = input_result.opened {
+        if input_result.should_activate {
             actions.push(Action::Activate(Activate {
                 selected: state.selected().clone(),
-                modifiers,
+                modifiers: ui.ctx().input(|i| i.modifiers),
             }));
         }
 
@@ -518,7 +518,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         let mut selection_changed = false;
-        let mut opened = None;
+        let mut should_activate = false;
 
         let node_ids = state
             .node_states()
@@ -553,8 +553,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
                     node_state.open = !node_state.open;
 
-                    let modifiers = ui.ctx().input(|i| i.modifiers);
-                    opened = Some(modifiers)
+                    should_activate = true;
                 } else if interaction.clicked_by(egui::PointerButton::Primary) {
                     // must be handled after double-clicking to prevent the second click of the double-click
                     // performing 'click' actions.
@@ -652,17 +651,19 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 for event in i.events.iter() {
                     match event {
                         Event::Key {
+                            key: Key::Enter,
+                            pressed: true,
+                            ..
+                        } => {
+                            should_activate = true;
+                        }
+                        Event::Key {
                             key,
                             pressed: true,
                             modifiers,
                             ..
                         } => {
-                            state.handle_key(
-                                key,
-                                modifiers,
-                                self.settings.allow_multi_select,
-                                &mut opened,
-                            );
+                            state.handle_key(key, modifiers, self.settings.allow_multi_select);
                             selection_changed = true;
                         }
                         _ => (),
@@ -684,7 +685,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         InputResult {
             drag_and_drop: drop_position,
             selection_changed,
-            opened,
+            should_activate,
         }
     }
 
@@ -1144,7 +1145,7 @@ impl BackgroundShapes {
 struct InputResult<NodeIdType> {
     drag_and_drop: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     selection_changed: bool,
-    opened: Option<Modifiers>,
+    should_activate: bool,
 }
 
 enum DropQuarter {
