@@ -179,7 +179,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             }
             Action::SetSelected(_) => {}
             Action::Drag(_dnd) => {}
-            Action::Opened(_) => {}
+            Action::Activate(_) => {}
         }
     }
     if app.settings.show_size {

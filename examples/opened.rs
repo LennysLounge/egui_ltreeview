@@ -6,7 +6,7 @@
 mod data;
 
 use egui::{Id, Modifiers, ThemePreference};
-use egui_ltreeview::{Action, Opened, TreeView, TreeViewState};
+use egui_ltreeview::{Action, Activate, TreeView, TreeViewState};
 
 fn main() -> Result<(), eframe::Error> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -63,7 +63,7 @@ impl eframe::App for MyApp {
 
             for action in actions {
                 match action {
-                    Action::Opened(Opened {
+                    Action::Activate(Activate {
                         selected,
                         modifiers,
                     }) => {

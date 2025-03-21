@@ -408,7 +408,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         if let Some(modifiers) = input_result.opened {
-            actions.push(Action::Opened(Opened {
+            actions.push(Action::Activate(Activate {
                 selected: state.selected().clone(),
                 modifiers,
             }));
@@ -1073,8 +1073,12 @@ pub enum Action<NodeIdType> {
     /// An in-process drag and drop action where the node
     /// is currently dragged but not yet dropped.
     Drag(DragAndDrop<NodeIdType>),
-    /// Opened (by pressing enter on a selection or double clicking)
-    Opened(Opened<NodeIdType>),
+    /// Activate a set of nodes.
+    ///
+    /// When pressing enter or double clicking on a selection, the tree
+    /// view will create this action.
+    /// Can be used to open a file for example.
+    Activate(Activate<NodeIdType>),
 }
 
 /// Information about drag and drop action that is currently
@@ -1100,12 +1104,12 @@ impl<NodeIdType> DragAndDrop<NodeIdType> {
     }
 }
 
-/// Information about the opened action in the tree.
+/// Information about the `Activate` action in the tree.
 #[derive(Clone)]
-pub struct Opened<NodeIdType> {
-    /// The nodes that are being opened.
+pub struct Activate<NodeIdType> {
+    /// The nodes that are being activated.
     pub selected: Vec<NodeIdType>,
-    /// The modifiers that were active when the selection was opened.
+    /// The modifiers that were active when this action was generated.
     pub modifiers: Modifiers,
 }
 
