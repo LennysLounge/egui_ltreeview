@@ -144,10 +144,7 @@ mod builder;
 mod node;
 mod state;
 
-use egui::{
-    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout,
-    NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
-};
+use egui::{self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout, Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2};
 use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
 pub use builder::*;
@@ -364,6 +361,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 
         state.set_node_states(tree_builder_result.new_node_states.clone());
         self.handle_fallback_context_menu(&tree_builder_result, state);
+
+        let mut actions = Vec::new();
+
         let input_result = self.handle_input(ui, &tree_builder_result, state);
 
         self.draw_background(
@@ -377,7 +377,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
 
-        let mut actions = Vec::new();
         // Create a drag or move action.
         if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
@@ -403,6 +402,10 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         // Create a selection action.
         if input_result.selection_changed {
             actions.push(Action::SetSelected(state.selected().clone()));
+        }
+
+        if let Some(modifiers) = input_result.opened {
+            actions.push(Action::Opened(Opened { selected: state.selected().clone(), modifiers }));
         }
 
         // Reset the drag state.
@@ -504,13 +507,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             ..
         } = tree_view_result;
 
-        state.clear_opened();
-
         if interaction.clicked() || interaction.drag_started() {
             ui.memory_mut(|m| m.request_focus(self.id));
         }
 
         let mut selection_changed = false;
+        let mut opened = None;
 
         let node_ids = state
             .node_states()
@@ -545,9 +547,8 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
                     node_state.open = !node_state.open;
 
-                    state.handle_double_click(
-                        ui.ctx().input(|i| i.modifiers)
-                    )
+                    let modifiers = ui.ctx().input(|i| i.modifiers);
+                    opened = Some(modifiers)
                 } else if interaction.clicked_by(egui::PointerButton::Primary) {
                     // must be handled after double-clicking to prevent the second click of the double-click
                     // performing 'click' actions.
@@ -650,7 +651,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                             modifiers,
                             ..
                         } => {
-                            state.handle_key(key, modifiers, self.settings.allow_multi_select);
+                            state.handle_key(key, modifiers, self.settings.allow_multi_select, &mut opened);
                             selection_changed = true;
                         }
                         _ => (),
@@ -672,6 +673,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         InputResult {
             drag_and_drop: drop_position,
             selection_changed,
+            opened,
         }
     }
 
@@ -1060,6 +1062,8 @@ pub enum Action<NodeIdType> {
     /// An in-process drag and drop action where the node
     /// is currently dragged but not yet dropped.
     Drag(DragAndDrop<NodeIdType>),
+    /// Opened (by pressing enter on a selection or double clicking)
+    Opened(Opened<NodeIdType>),
 }
 
 /// Information about drag and drop action that is currently
@@ -1083,6 +1087,14 @@ impl<NodeIdType> DragAndDrop<NodeIdType> {
     pub fn remove_drop_marker(&self, ui: &mut Ui) {
         ui.painter().set(self.drop_marker_idx, Shape::Noop);
     }
+}
+
+#[derive(Clone)]
+pub struct Opened<NodeIdType> {
+    /// The nodes that are being opened.
+    pub selected: Vec<NodeIdType>,
+    /// The modifiers that were active when the selection was opened.
+    pub modifiers: Modifiers,
 }
 
 /// Interact with the ui without egui adding any extra space.
@@ -1116,6 +1128,7 @@ impl BackgroundShapes {
 struct InputResult<NodeIdType> {
     drag_and_drop: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     selection_changed: bool,
+    opened: Option<Modifiers>,
 }
 
 enum DropQuarter {

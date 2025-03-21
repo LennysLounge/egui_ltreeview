@@ -6,7 +6,7 @@
 mod data;
 
 use egui::{Color32, Id, Modifiers, Stroke, ThemePreference};
-use egui_ltreeview::{TreeView, TreeViewState};
+use egui_ltreeview::{Action, Opened, TreeView, TreeViewState};
 
 fn main() -> Result<(), eframe::Error> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -42,7 +42,7 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::left(Id::new("left")).show(ctx, |ui| {
-            TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
+            let (_response, actions) = TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                 ui,
                 &mut self.tree,
                 |builder| {
@@ -63,6 +63,15 @@ impl eframe::App for MyApp {
                     builder.close_dir();
                 },
             );
+
+            for action in actions {
+                match action {
+                    Action::Opened(Opened { selected, modifiers }) => {
+                        self.opened_history.push((selected, modifiers));
+                    }
+                    _ => {}
+                }
+            }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label("Open selections by double-clicking or pressing enter.");
@@ -89,9 +98,5 @@ impl eframe::App for MyApp {
                 self.opened_history.clear();
             }
         });
-
-        if let Some(node_id) = self.tree.opened() {
-            self.opened_history.push((self.tree.selected().clone(), node_id));
-        }
     }
 }

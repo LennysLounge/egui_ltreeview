@@ -47,8 +47,6 @@ pub struct TreeViewState<NodeIdType> {
     selection_pivot: Option<NodeIdType>,
     /// The element where the selection curosr is at the moment.
     selection_cursor: Option<NodeIdType>,
-    /// The state of the modifiers when the selection was opened.
-    opened: Option<Modifiers>,
     /// Information about the dragged node.
     pub(crate) dragged: Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
@@ -67,7 +65,6 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             selected: Default::default(),
             selection_pivot: None,
             selection_cursor: None,
-            opened: None,
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
@@ -115,21 +112,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             self.expand_node(parent_id);
         }
     }
-
-    /// Get the 'opened' state.
-    /// 
-    /// returns Some with the modifiers that were used when the selection was opened,
-    /// or None if no open action occured this frame.
-    /// 
-    /// You can call [`Self::selection`] to get the selection that was opened.
-    pub fn opened(&self) -> Option<Modifiers> {
-        self.opened
-    }
-
-    pub(crate) fn clear_opened(&mut self) {
-        self.opened = None
-    }
-
 
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
@@ -210,14 +192,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             self.selection_cursor = None;
         }
     }
-
-
-    pub(crate) fn handle_double_click(
-        &mut self,
-        modifiers: Modifiers,
-    ) {
-        self.opened = Some(modifiers);
-    }
     
     pub(crate) fn handle_click(
         &mut self,
@@ -256,7 +230,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, modifiers: &Modifiers, allow_multi_select: bool) {
+    pub(crate) fn handle_key(&mut self, key: &Key, modifiers: &Modifiers, allow_multi_select: bool, opened: &mut Option<Modifiers>) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
@@ -317,7 +291,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 let Some(_current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
                     break 'arm;
                 };
-                self.opened = Some(modifiers.clone()); 
+                opened.replace(modifiers.clone()); 
             }
             Key::ArrowLeft => 'arm: {
                 if self.selected.len() != 1 {
