@@ -58,6 +58,7 @@ pub struct TreeViewState<NodeIdType> {
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
 }
+
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
         Self {
@@ -229,16 +230,21 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, modifier: &Modifiers, allow_multi_select: bool) {
+    pub(crate) fn handle_key(
+        &mut self,
+        key: &Key,
+        modifiers: &Modifiers,
+        allow_multi_select: bool,
+    ) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
                     break 'arm;
                 };
-                let Some(current_curor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                let Some(current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
                     break 'arm;
                 };
-                let cursor_pos = self.position_of_id(current_curor_id).unwrap();
+                let cursor_pos = self.position_of_id(current_cursor_id).unwrap();
                 let new_cursor = match key {
                     Key::ArrowUp => self.node_states[0..cursor_pos]
                         .iter()
@@ -250,7 +256,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                     _ => unreachable!(),
                 };
                 if let Some(new_cursor) = new_cursor {
-                    if modifier.shift_only() && allow_multi_select {
+                    if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                         let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
                         let pivot_pos = self.position_of_id(pivot_id).unwrap();
@@ -259,9 +265,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                             [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
                             .iter()
                             .for_each(|node| self.selected.push(node.id));
-                    } else if modifier.command_only() && allow_multi_select {
+                    } else if modifiers.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
-                    } else if modifier.shift && modifier.command && allow_multi_select {
+                    } else if modifiers.shift && modifiers.command && allow_multi_select {
                         if !self.selected.contains(&new_cursor.id) {
                             self.selected.push(new_cursor.id);
                         }
