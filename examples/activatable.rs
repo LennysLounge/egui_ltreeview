@@ -1,11 +1,14 @@
-//! Demonstrates how to track nodes that were 'opened'.
-//! You can 'open' a node by either double-clicking or pressing enter on a node.
+//! Demonstrates how to 'activate' nodes by pressing enter on them
+//! or double clicking them. By default leaf nodes are activatable and
+//! directory nodes are not.
+//! You can configure if a node should be activatable by using the
+//! node builder.
 //! Works with multiple-selection too.
 //!
 #[path = "data.rs"]
 mod data;
 
-use egui::{Id, Modifiers, ThemePreference};
+use egui::{Id, ThemePreference};
 use egui_ltreeview::{Action, Activate, TreeView, TreeViewState};
 
 fn main() -> Result<(), eframe::Error> {
@@ -15,7 +18,7 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
     eframe::run_native(
-        "Egui_ltreeview 'opened' node example",
+        "Egui_ltreeview 'activatable' example",
         options,
         Box::new(|cc| {
             cc.egui_ctx
@@ -27,14 +30,14 @@ fn main() -> Result<(), eframe::Error> {
 
 struct MyApp {
     tree: TreeViewState<i32>,
-    opened_history: Vec<(Vec<i32>, Modifiers)>,
+    activated_history: Vec<Vec<i32>>,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             tree: TreeViewState::default(),
-            opened_history: Default::default(),
+            activated_history: Default::default(),
         }
     }
 }
@@ -65,16 +68,16 @@ impl eframe::App for MyApp {
                 match action {
                     Action::Activate(Activate {
                         selected,
-                        modifiers,
+                        modifiers: _,
                     }) => {
-                        self.opened_history.push((selected, modifiers));
+                        self.activated_history.push(selected);
                     }
                     _ => {}
                 }
             }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("Open selections by double-clicking or pressing enter.");
+            ui.label("Activate a selections by pressing enter or double-clicking.");
             ui.separator();
             ui.label("History");
 
@@ -84,21 +87,18 @@ impl eframe::App for MyApp {
                     ui.set_width(ui.available_width());
                     ui.set_min_height(200.0);
 
-                    if self.opened_history.is_empty() {
+                    if self.activated_history.is_empty() {
                         ui.label("Empty");
                     } else {
-                        for (selection, modifiers) in &self.opened_history {
-                            ui.label(format!(
-                                "selection: {:?}, modifiers: {:?}",
-                                selection, modifiers
-                            ));
+                        for selection in &self.activated_history {
+                            ui.label(format!("selection: {:?}", selection));
                         }
                     }
                 });
             });
 
             if ui.button("Clear history").clicked() {
-                self.opened_history.clear();
+                self.activated_history.clear();
             }
         });
     }
