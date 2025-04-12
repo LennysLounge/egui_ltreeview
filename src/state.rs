@@ -97,7 +97,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Set which nodes are selected in the tree
     pub fn set_selected(&mut self, selected: Vec<NodeIdType>) {
-        self.selection_pivot = selected.first().map(|o| *o);
+        self.selection_pivot = selected.first().copied();
         self.selected = selected;
     }
 
@@ -118,15 +118,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
     pub fn expand_node(&mut self, mut id: NodeIdType) {
-        loop {
-            if let Some(node_state) = self.node_state_of_mut(&id) {
-                node_state.open = true;
-                id = match node_state.parent_id {
-                    Some(id) => id,
-                    None => break,
-                }
-            } else {
-                break;
+        while let Some(node_state) = self.node_state_of_mut(&id) {
+            node_state.open = true;
+            id = match node_state.parent_id {
+                Some(id) => id,
+                None => break,
             }
         }
     }

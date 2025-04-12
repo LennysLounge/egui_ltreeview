@@ -182,6 +182,7 @@ impl<T> NodeId for T where
 pub struct TreeView<'context_menu, NodeIdType> {
     id: Id,
     settings: TreeViewSettings,
+    #[allow(clippy::type_complexity)]
     fallback_context_menu: Option<Box<dyn FnMut(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
 }
 impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
@@ -417,7 +418,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                             .node_state_of(node_id)
                             .is_some_and(|ns| ns.activatable)
                     })
-                    .map(|node_id| *node_id)
+                    .copied()
                     .collect::<Vec<_>>(),
                 modifiers: ui.ctx().input(|i| i.modifiers),
             }));
@@ -496,7 +497,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     ) {
         // Transfer the secondary click
         if tree_view_result.seconday_click.is_some() {
-            state.secondary_selection = tree_view_result.seconday_click.clone();
+            state.secondary_selection = tree_view_result.seconday_click;
         }
 
         if !tree_view_result.context_menu_was_open {
@@ -905,7 +906,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 }
 fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     state: &TreeViewState<NodeIdType>,
-    nodes: &Vec<NodeIdType>,
+    nodes: &[NodeIdType],
 ) -> Vec<NodeIdType> {
     // When multiple nodes are selected it is possible that a folder is selected aswell as a
     // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.

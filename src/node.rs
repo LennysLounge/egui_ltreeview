@@ -15,9 +15,13 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) drop_allowed: bool,
     pub(crate) activatable: bool,
     indent: usize,
+    #[allow(clippy::type_complexity)]
     icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
+    #[allow(clippy::type_complexity)]
     closer: Option<Box<dyn FnMut(&mut Ui, CloserState) + 'add_ui>>,
+    #[allow(clippy::type_complexity)]
     label: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
+    #[allow(clippy::type_complexity)]
     context_menu: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
 }
 impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
@@ -288,8 +292,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
                     ),
                 );
                 row
-            })
-            .inner;
+            });
     }
 
     pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
