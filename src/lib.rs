@@ -145,8 +145,8 @@ mod node;
 mod state;
 
 use egui::{
-    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Layout,
-    NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key,
+    Layout, Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 use std::{cmp::Ordering, collections::HashSet, hash::Hash};
 
@@ -182,6 +182,7 @@ impl<T> NodeId for T where
 pub struct TreeView<'context_menu, NodeIdType> {
     id: Id,
     settings: TreeViewSettings,
+    #[allow(clippy::type_complexity)]
     fallback_context_menu: Option<Box<dyn FnMut(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
 }
 impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
@@ -364,6 +365,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 
         state.set_node_states(tree_builder_result.new_node_states.clone());
         self.handle_fallback_context_menu(&tree_builder_result, state);
+
+        let mut actions = Vec::new();
+
         let input_result = self.handle_input(ui, &tree_builder_result, state);
 
         self.draw_background(
@@ -377,7 +381,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
 
-        let mut actions = Vec::new();
         // Create a drag or move action.
         if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
@@ -403,6 +406,22 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         // Create a selection action.
         if input_result.selection_changed {
             actions.push(Action::SetSelected(state.selected().clone()));
+        }
+
+        if input_result.should_activate {
+            actions.push(Action::Activate(Activate {
+                selected: state
+                    .selected()
+                    .iter()
+                    .filter(|node_id| {
+                        state
+                            .node_state_of(node_id)
+                            .is_some_and(|ns| ns.activatable)
+                    })
+                    .copied()
+                    .collect::<Vec<_>>(),
+                modifiers: ui.ctx().input(|i| i.modifiers),
+            }));
         }
 
         // Reset the drag state.
@@ -478,7 +497,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     ) {
         // Transfer the secondary click
         if tree_view_result.seconday_click.is_some() {
-            state.secondary_selection = tree_view_result.seconday_click.clone();
+            state.secondary_selection = tree_view_result.seconday_click;
         }
 
         if !tree_view_result.context_menu_was_open {
@@ -509,6 +528,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         let mut selection_changed = false;
+        let mut should_activate = false;
 
         let node_ids = state
             .node_states()
@@ -538,8 +558,30 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos));
             if cursor_above_row && !closer_clicked {
-                // was clicked
-                if interaction.clicked_by(egui::PointerButton::Primary) {
+                // was row double-clicked
+                if interaction.double_clicked() {
+                    let node_state = state.node_state_of_mut(&node_id).unwrap();
+                    // directories should only switch their opened state by double clicking if no modifiers
+                    // are pressed. If any modifier is pressed then the closer should be used.
+                    if node_state.dir && ui.ctx().input(|i| i.modifiers).is_none() {
+                        node_state.open = !node_state.open;
+                    }
+
+                    if node_state.activatable {
+                        // This has the potential to clash with the previous action.
+                        // If a directory is activatable then double clicking it will toggle its
+                        // open state and activate the directory. Usually we would want one input
+                        // to have one effect but in this case it is impossible for us to know if the
+                        // user wants to activate the directory or toggle it.
+                        // We could add a configuration option to choose either toggle or activate
+                        // but in this case i think that doing both has the biggest chance to achieve
+                        // what the user wanted.
+                        should_activate = true;
+                    }
+                } else if interaction.clicked_by(egui::PointerButton::Primary) {
+                    // must be handled after double-clicking to prevent the second click of the double-click
+                    // performing 'click' actions.
+
                     // React to primary clicking
                     selection_changed = true;
                     state.handle_click(
@@ -548,11 +590,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                         self.settings.allow_multi_select,
                     );
                 }
-                // was row double clicked
-                if interaction.double_clicked() {
-                    let node_state = state.node_state_of_mut(&node_id).unwrap();
-                    node_state.open = !node_state.open;
-                }
+
                 // React to a dragging
                 // An egui drag only starts after the pointer has moved but with that first movement
                 // the pointer may have moved to a different node. Instead we want to update
@@ -637,6 +675,13 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 for event in i.events.iter() {
                     match event {
                         Event::Key {
+                            key: Key::Enter,
+                            pressed: true,
+                            ..
+                        } => {
+                            should_activate = true;
+                        }
+                        Event::Key {
                             key,
                             pressed: true,
                             modifiers,
@@ -664,6 +709,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         InputResult {
             drag_and_drop: drop_position,
             selection_changed,
+            should_activate,
         }
     }
 
@@ -860,7 +906,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 }
 fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     state: &TreeViewState<NodeIdType>,
-    nodes: &Vec<NodeIdType>,
+    nodes: &[NodeIdType],
 ) -> Vec<NodeIdType> {
     // When multiple nodes are selected it is possible that a folder is selected aswell as a
     // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.
@@ -1047,11 +1093,17 @@ pub enum RowLayout {
 pub enum Action<NodeIdType> {
     /// Set the selected node to be this.
     SetSelected(Vec<NodeIdType>),
-    /// Move a node from one place to another.
+    /// Move set of nodes from one place to another.
     Move(DragAndDrop<NodeIdType>),
     /// An in-process drag and drop action where the node
     /// is currently dragged but not yet dropped.
     Drag(DragAndDrop<NodeIdType>),
+    /// Activate a set of nodes.
+    ///
+    /// When pressing enter or double clicking on a selection, the tree
+    /// view will create this action.
+    /// Can be used to open a file for example.
+    Activate(Activate<NodeIdType>),
 }
 
 /// Information about drag and drop action that is currently
@@ -1075,6 +1127,15 @@ impl<NodeIdType> DragAndDrop<NodeIdType> {
     pub fn remove_drop_marker(&self, ui: &mut Ui) {
         ui.painter().set(self.drop_marker_idx, Shape::Noop);
     }
+}
+
+/// Information about the `Activate` action in the tree.
+#[derive(Clone)]
+pub struct Activate<NodeIdType> {
+    /// The nodes that are being activated.
+    pub selected: Vec<NodeIdType>,
+    /// The modifiers that were active when this action was generated.
+    pub modifiers: Modifiers,
 }
 
 /// Interact with the ui without egui adding any extra space.
@@ -1108,6 +1169,7 @@ impl BackgroundShapes {
 struct InputResult<NodeIdType> {
     drag_and_drop: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     selection_changed: bool,
+    should_activate: bool,
 }
 
 enum DropQuarter {

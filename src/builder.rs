@@ -177,6 +177,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             visible: self.parent_dir_is_open() && !node.flatten,
             drop_allowed: node.drop_allowed,
             dir: node.is_dir,
+            activatable: node.activatable,
         });
         self.result.row_rectangles.insert(
             node.id,
@@ -245,15 +246,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // that we should show a context menu one frame after the click has happened and the
         // context menu would never show up.
         // To fix this we handle the secondary click here and return the even in the result.
-        if self
+        let is_mouse_above_row = self
             .result
             .interaction
             .hover_pos()
-            .is_some_and(|pos| row.contains(pos))
+            .is_some_and(|pos| row.contains(pos));
+        if is_mouse_above_row
+            && self.result.interaction.secondary_clicked()
+            && !self.state.drag_valid()
         {
-            if self.result.interaction.secondary_clicked() && !self.state.drag_valid() {
-                self.result.seconday_click = Some(node.id);
-            }
+            self.result.seconday_click = Some(node.id);
         }
 
         // Show the context menu.

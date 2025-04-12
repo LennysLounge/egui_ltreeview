@@ -32,6 +32,8 @@ pub(crate) struct NodeState<NodeIdType> {
     pub drop_allowed: bool,
     /// Wether this node is a directory.
     pub dir: bool,
+    /// Wether this node can be activated.
+    pub activatable: bool,
 }
 
 /// Represents the state of the tree view.
@@ -58,6 +60,7 @@ pub struct TreeViewState<NodeIdType> {
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
 }
+
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
         Self {
@@ -94,7 +97,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Set which nodes are selected in the tree
     pub fn set_selected(&mut self, selected: Vec<NodeIdType>) {
-        self.selection_pivot = selected.first().map(|o| *o);
+        self.selection_pivot = selected.first().copied();
         self.selected = selected;
     }
 
@@ -115,15 +118,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
     pub fn expand_node(&mut self, mut id: NodeIdType) {
-        loop {
-            if let Some(node_state) = self.node_state_of_mut(&id) {
-                node_state.open = true;
-                id = match node_state.parent_id {
-                    Some(id) => id,
-                    None => break,
-                }
-            } else {
-                break;
+        while let Some(node_state) = self.node_state_of_mut(&id) {
+            node_state.open = true;
+            id = match node_state.parent_id {
+                Some(id) => id,
+                None => break,
             }
         }
     }
@@ -229,16 +228,21 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
-    pub(crate) fn handle_key(&mut self, key: &Key, modifier: &Modifiers, allow_multi_select: bool) {
+    pub(crate) fn handle_key(
+        &mut self,
+        key: &Key,
+        modifiers: &Modifiers,
+        allow_multi_select: bool,
+    ) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
                 let Some(pivot_id) = self.selection_pivot else {
                     break 'arm;
                 };
-                let Some(current_curor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                let Some(current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
                     break 'arm;
                 };
-                let cursor_pos = self.position_of_id(current_curor_id).unwrap();
+                let cursor_pos = self.position_of_id(current_cursor_id).unwrap();
                 let new_cursor = match key {
                     Key::ArrowUp => self.node_states[0..cursor_pos]
                         .iter()
@@ -250,7 +254,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                     _ => unreachable!(),
                 };
                 if let Some(new_cursor) = new_cursor {
-                    if modifier.shift_only() && allow_multi_select {
+                    if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                         let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
                         let pivot_pos = self.position_of_id(pivot_id).unwrap();
@@ -259,9 +263,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                             [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
                             .iter()
                             .for_each(|node| self.selected.push(node.id));
-                    } else if modifier.command_only() && allow_multi_select {
+                    } else if modifiers.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
-                    } else if modifier.shift && modifier.command && allow_multi_select {
+                    } else if modifiers.shift && modifiers.command && allow_multi_select {
                         if !self.selected.contains(&new_cursor.id) {
                             self.selected.push(new_cursor.id);
                         }
