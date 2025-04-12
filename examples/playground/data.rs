@@ -17,11 +17,13 @@ pub struct Directory {
     pub children: Vec<Node>,
     pub custom_closer: bool,
     pub icon: bool,
+    pub activatable: bool,
 }
 pub struct File {
     pub id: Uuid,
     pub name: String,
     pub icon: bool,
+    pub activatable: bool,
 }
 
 impl Node {
@@ -32,6 +34,7 @@ impl Node {
             children,
             custom_closer: true,
             icon: false,
+            activatable: false,
         })
     }
 
@@ -40,6 +43,7 @@ impl Node {
             id: Uuid::new_v4(),
             name: String::from(name),
             icon: true,
+            activatable: true,
         })
     }
 
@@ -47,6 +51,13 @@ impl Node {
         match self {
             Node::Directory(dir) => &dir.id,
             Node::File(file) => &file.id,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Node::Directory(directory) => &directory.name,
+            Node::File(file) => &file.name,
         }
     }
 

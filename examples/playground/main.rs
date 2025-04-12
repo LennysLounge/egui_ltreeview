@@ -1,5 +1,5 @@
 mod data;
-use std::env;
+use std::{collections::HashSet, env};
 
 use data::*;
 use egui::{Color32, DragValue, Id, Label, Layout, Response, ThemePreference, Ui};
@@ -31,6 +31,7 @@ struct MyApp {
     settings_id: Uuid,
     settings: Settings,
     tree_view_state: TreeViewState<Uuid>,
+    show_windows_for: HashSet<Uuid>,
 }
 
 #[derive(Default)]
@@ -76,6 +77,7 @@ impl Default for MyApp {
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
+            show_windows_for: HashSet::new(),
         }
     }
 }
@@ -98,9 +100,15 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.tree_view_state.selected().len() > 1 {
                 ui.label("Multiple nodes selected");
-                for id in self.tree_view_state.selected() {
-                    ui.label(format!("{:?}", id));
-                }
+                egui::Grid::new("settings grid").show(ui, |ui| {
+                    for id in self.tree_view_state.selected() {
+                        self.tree.find_mut(id, &mut |node| {
+                            ui.label(node.name());
+                            ui.label(format!("{:?}", node.id()));
+                            ui.end_row();
+                        });
+                    }
+                });
             } else {
                 if let Some(selected_node) = self.tree_view_state.selected().first() {
                     if *selected_node == self.settings_id {
@@ -113,6 +121,27 @@ impl eframe::App for MyApp {
                 }
             }
         });
+
+        let opened_nodes = self
+            .show_windows_for
+            .iter()
+            .map(|node_id| *node_id)
+            .collect::<Vec<_>>();
+        for node_id in opened_nodes {
+            let mut open = true;
+            self.tree.find_mut(&node_id, &mut |node| {
+                egui::Window::new(node.name())
+                    .id(Id::new(node_id))
+                    .open(&mut open)
+                    .show(ctx, |ui| {
+                        show_node_content(ui, node);
+                    });
+            });
+
+            if open == false {
+                self.show_windows_for.remove(&node_id);
+            }
+        }
     }
 }
 
@@ -179,7 +208,11 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             }
             Action::SetSelected(_) => {}
             Action::Drag(_dnd) => {}
-            Action::Activate(_) => {}
+            Action::Activate(activate) => {
+                activate.selected.iter().for_each(|node_id| {
+                    app.show_windows_for.insert(*node_id);
+                });
+            }
         }
     }
     if app.settings.show_size {
@@ -232,6 +265,7 @@ fn show_dir(
 ) {
     let mut node = NodeBuilder::dir(dir.id)
         .label(&dir.name)
+        .activatable(dir.activatable)
         .context_menu(|ui| {
             ui.set_width(100.0);
 
@@ -293,6 +327,7 @@ fn show_file(
     let parent_node = builder.parent_id().expect("All nodes should have a parent");
     let mut node = NodeBuilder::leaf(file.id)
         .label(&file.name)
+        .activatable(file.activatable)
         .context_menu(|ui| {
             ui.set_width(100.0);
 
@@ -503,6 +538,10 @@ fn show_node_content(ui: &mut Ui, node: &mut Node) {
                 ui.label("Show icon");
                 ui.checkbox(&mut dir.icon, "");
                 ui.end_row();
+
+                ui.label("activatable");
+                ui.checkbox(&mut dir.activatable, "");
+                ui.end_row();
             }
             Node::File(file) => {
                 ui.label("Name");
@@ -511,6 +550,10 @@ fn show_node_content(ui: &mut Ui, node: &mut Node) {
 
                 ui.label("Show icon");
                 ui.checkbox(&mut file.icon, "");
+                ui.end_row();
+
+                ui.label("activatable");
+                ui.checkbox(&mut file.activatable, "");
                 ui.end_row();
             }
         }
