@@ -560,7 +560,11 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 // was row double-clicked
                 if interaction.double_clicked() {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
-                    node_state.open = !node_state.open;
+                    // directories should only switch their opened state by double clicking if no modifiers
+                    // are pressed. If any modifier is pressed then the closer should be used.
+                    if node_state.dir && ui.ctx().input(|i| i.modifiers).is_none() {
+                        node_state.open = !node_state.open;
+                    }
 
                     //should_activate = true;
                 } else if interaction.clicked_by(egui::PointerButton::Primary) {
