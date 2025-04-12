@@ -566,7 +566,17 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                         node_state.open = !node_state.open;
                     }
 
-                    //should_activate = true;
+                    if node_state.activatable {
+                        // This has the potential to clash with the previous action.
+                        // If a directory is activatable then double clicking it will toggle its
+                        // open state and activate the directory. Usually we would want one input
+                        // to have one effect but in this case it is impossible for us to know if the
+                        // user wants to activate the directory or toggle it.
+                        // We could add a configuration option to choose either toggle or activate
+                        // but in this case i think that doing both has the biggest chance to achieve
+                        // what the user wanted.
+                        should_activate = true;
+                    }
                 } else if interaction.clicked_by(egui::PointerButton::Primary) {
                     // must be handled after double-clicking to prevent the second click of the double-click
                     // performing 'click' actions.
