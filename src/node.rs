@@ -13,6 +13,7 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) is_open: bool,
     pub(crate) default_open: bool,
     pub(crate) drop_allowed: bool,
+    pub(crate) activatable: bool,
     indent: usize,
     icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
     closer: Option<Box<dyn FnMut(&mut Ui, CloserState) + 'add_ui>>,
@@ -27,6 +28,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             is_dir: false,
             flatten: false,
             drop_allowed: false,
+            activatable: true,
             icon: None,
             closer: None,
             label: None,
@@ -44,6 +46,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             is_dir: true,
             flatten: false,
             drop_allowed: true,
+            activatable: false,
             icon: None,
             closer: None,
             label: None,
@@ -76,6 +79,12 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     /// Whether or not dropping onto this node is allowed.
     pub fn drop_allowed(mut self, drop_allowed: bool) -> Self {
         self.drop_allowed = drop_allowed;
+        self
+    }
+
+    /// Whether or not this node can be activated.
+    pub fn activatable(mut self, activatable: bool) -> Self {
+        self.activatable = activatable;
         self
     }
 

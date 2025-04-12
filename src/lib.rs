@@ -409,7 +409,16 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
 
         if input_result.should_activate {
             actions.push(Action::Activate(Activate {
-                selected: state.selected().clone(),
+                selected: state
+                    .selected()
+                    .iter()
+                    .filter(|node_id| {
+                        state
+                            .node_state_of(node_id)
+                            .is_some_and(|ns| ns.activatable)
+                    })
+                    .map(|node_id| *node_id)
+                    .collect::<Vec<_>>(),
                 modifiers: ui.ctx().input(|i| i.modifiers),
             }));
         }
@@ -553,7 +562,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
                     node_state.open = !node_state.open;
 
-                    should_activate = true;
+                    //should_activate = true;
                 } else if interaction.clicked_by(egui::PointerButton::Primary) {
                     // must be handled after double-clicking to prevent the second click of the double-click
                     // performing 'click' actions.

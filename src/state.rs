@@ -32,6 +32,8 @@ pub(crate) struct NodeState<NodeIdType> {
     pub drop_allowed: bool,
     /// Wether this node is a directory.
     pub dir: bool,
+    /// Wether this node can be activated.
+    pub activatable: bool,
 }
 
 /// Represents the state of the tree view.
