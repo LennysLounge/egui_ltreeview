@@ -59,6 +59,8 @@ pub struct TreeViewState<NodeIdType> {
     node_states: Vec<NodeState<NodeIdType>>,
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
+    /// The last node that was clicked. Used for double click detection.
+    pub(crate) last_clicked_node: Option<NodeIdType>,
 }
 
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
@@ -72,6 +74,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             size: Vec2::default(),
             node_states: Vec::new(),
             context_menu_was_open: false,
+            last_clicked_node: None,
         }
     }
 }

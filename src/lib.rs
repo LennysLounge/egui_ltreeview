@@ -155,10 +155,10 @@
 //! ### Activating nodes
 //! The tree view will generate the [`Activate`](`Action::Activate`) action either when the enter key is pressed
 //! or when a node is double clicked and will contain all activatable nodes from the currently selected nodes.
-//! 
+//!
 //! What exactly "activate" means is up to the implementation of the action. If for example your tree view
 //! contains files you can use the activate action to open these files in a new window or tab.
-//! 
+//!
 //! By default only leaf nodes are activatable. You can override this by setting the [`activatable`](`NodeBuilder::activatable`)
 //! property of a node.
 
@@ -580,8 +580,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos));
             if cursor_above_row && !closer_clicked {
-                // was row double-clicked
-                if interaction.double_clicked() {
+                let was_last_clicked = state.last_clicked_node.is_some_and(|last| last == node_id);
+
+                if interaction.double_clicked() && was_last_clicked {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
                     // directories should only switch their opened state by double clicking if no modifiers
                     // are pressed. If any modifier is pressed then the closer should be used.
@@ -611,6 +612,10 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                         ui.ctx().input(|i| i.modifiers),
                         self.settings.allow_multi_select,
                     );
+                }
+
+                if interaction.clicked() {
+                    state.last_clicked_node = Some(node_id);
                 }
 
                 // React to a dragging
