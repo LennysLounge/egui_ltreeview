@@ -1,6 +1,6 @@
 [package]
 name = "egui_ltreeview"
-version = "0.1.10"
+version = "0.2.0"
 edition = "2021"
 authors = ["Leonard Schüngel <schuengel.leonard@gmail.com>"]
 license = "MIT"
