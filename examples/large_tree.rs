@@ -1,0 +1,210 @@
+#![allow(unused)]
+
+use egui::{ThemePreference, Ui};
+use egui_ltreeview::{NodeBuilder, TreeView, TreeViewBuilder, TreeViewState};
+use performance_measure::performance_measure::Measurer;
+use tracing::{info, instrument};
+use tracing_subscriber::{layer::SubscriberExt, FmtSubscriber};
+use tracing_tracy::client::span;
+use tracy_client::{Client, FrameName};
+use uuid::Uuid;
+
+fn main() -> Result<(), eframe::Error> {
+    //tracing::subscriber::set_global_default(FmtSubscriber::new());
+
+    // tracing::subscriber::set_global_default(
+    //     tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+    // )
+    // .expect("setup tracy layer");
+
+    //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([500.0, 500.0]),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Egui_ltreeview simple example",
+        options,
+        Box::new(|cc| {
+            cc.egui_ctx
+                .options_mut(|options| options.theme_preference = ThemePreference::Dark);
+            Ok(Box::<MyApp>::new(MyApp::new()))
+        }),
+    )
+}
+
+struct MyApp {
+    tree: Node,
+    state: TreeViewState<Uuid>,
+    measurer: Measurer,
+    //client: Client,
+}
+impl MyApp {
+    fn new() -> Self {
+        MyApp {
+            tree: build_tree(100, 10),
+            state: TreeViewState::default(),
+            measurer: Measurer::new(None),
+            //client: Client::start(),
+        }
+    }
+}
+
+impl eframe::App for MyApp {
+    #[instrument(skip_all)]
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::both().show(ui, |ui| {
+                let _span = span!("build tree");
+                self.measurer.start_measure();
+                TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
+                    ui,
+                    &mut self.state,
+                    |builder| {
+                        build_node(&self.tree, builder);
+                    },
+                );
+                //build_node_label(&self.tree, ui);
+
+                self.measurer.stop_measure();
+                // println!(
+                //     "avg: {:?}\tlow: {:?}\thigh: {:?}",
+                //     self.measurer.get_average(),
+                //     self.measurer.get_min(),
+                //     self.measurer.get_max()
+                // );
+            })
+        });
+        egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
+            let dt = ui.input(|i| i.stable_dt);
+            ui.label(format!(
+                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:?}ms, min: {:?}ms, max: {:?}ms",
+                dt * 1000.0,
+                (1.0 / dt).floor() as i32,
+                self.measurer.get_average().as_millis(),
+                self.measurer.get_min().as_millis(),
+                self.measurer.get_max().as_millis()
+            ));
+        });
+        //self.client.frame_mark();
+    }
+}
+
+fn build_node(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
+    match node {
+        Node::Directory { id, children, name } => {
+            builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+            for n in children.iter() {
+                build_node(n, builder);
+            }
+            builder.close_dir();
+        }
+        Node::Leaf { id, name } => {
+            builder.leaf(*id, name);
+        }
+    }
+}
+
+fn build_node_label(node: &Node, ui: &mut Ui) {
+    match node {
+        Node::Directory { id, children, name } => {
+            ui.label(name);
+            for n in children.iter() {
+                build_node_label(n, ui);
+            }
+        }
+        Node::Leaf { id, name } => {
+            ui.label(name);
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Node {
+    Directory {
+        id: Uuid,
+        children: Vec<Node>,
+        name: String,
+    },
+    Leaf {
+        id: Uuid,
+        name: String,
+    },
+}
+
+fn build_tree(node_count: u32, max_depth: u32) -> Node {
+    let (width, max_nodes) = get_tree_width(node_count, max_depth);
+    println!(
+        "max depth of {} and a width of {} gives {} total possible nodes",
+        max_depth, width, max_nodes
+    );
+    let (node, _) = build_sub_tree(node_count, max_depth, width);
+    let counts = count_nodes(&node);
+    println!("{} total nodes produced", counts.0 + counts.1);
+    println!("dirs: {}, leafs: {}", counts.0, counts.1);
+    node
+}
+fn build_sub_tree(node_count: u32, max_depth: u32, max_width: u32) -> (Node, u32) {
+    if max_depth == 0 {
+        let id = Uuid::new_v4();
+        return (
+            Node::Leaf {
+                id,
+                name: format!("{:?}", id),
+            },
+            1,
+        );
+    }
+
+    let mut child_nodes = Vec::new();
+    let mut nodes_made = 1;
+    for _ in 0..max_width {
+        if node_count - nodes_made > 0 {
+            let (node, new_nodes_made) =
+                build_sub_tree(node_count - nodes_made, max_depth - 1, max_width);
+            nodes_made += new_nodes_made;
+            child_nodes.push(node);
+        }
+    }
+
+    let id = Uuid::new_v4();
+    (
+        Node::Directory {
+            id,
+            children: child_nodes,
+            name: format!("{:?}", id),
+        },
+        nodes_made,
+    )
+}
+
+fn get_tree_width(node_count: u32, max_depth: u32) -> (u32, u32) {
+    for width in 2..100 {
+        let mut total_count = width;
+        let mut prev_width = width;
+        for _ in 0..max_depth {
+            prev_width = prev_width * prev_width;
+            total_count += prev_width;
+            if total_count > node_count {
+                return (width, total_count);
+            }
+        }
+    }
+    panic!("dude what the hell")
+}
+
+fn count_nodes(node: &Node) -> (i32, i32) {
+    match node {
+        Node::Directory { id, children, name } => {
+            let mut dirs = 1;
+            let mut leafs = 0;
+            for child in children {
+                let counts = count_nodes(child);
+                dirs += counts.0;
+                leafs += counts.1;
+            }
+            (dirs, leafs)
+        }
+        Node::Leaf { id, name } => (0, 1),
+    }
+}
