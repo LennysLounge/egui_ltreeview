@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
+use tracing::instrument;
 
 use crate::NodeId;
 
@@ -83,10 +84,12 @@ where
     NodeIdType: NodeId + Send + Sync + 'static,
 {
     /// Load a [`TreeViewState`] from memory.
+    #[instrument(skip_all)]
     pub fn load(ui: &mut Ui, id: Id) -> Option<Self> {
         ui.data_mut(|d| d.get_persisted(id))
     }
     /// Store this [`TreeViewState`] to memory.
+    #[instrument(skip_all)]
     pub fn store(self, ui: &mut Ui, id: Id) {
         ui.data_mut(|d| d.insert_persisted(id, self));
     }
@@ -94,17 +97,20 @@ where
 
 impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Return the list of selected nodes
+    #[instrument(skip_all)]
     pub fn selected(&self) -> &Vec<NodeIdType> {
         &self.selected
     }
 
     /// Set which nodes are selected in the tree
+    #[instrument(skip_all)]
     pub fn set_selected(&mut self, selected: Vec<NodeIdType>) {
         self.selection_pivot = selected.first().copied();
         self.selected = selected;
     }
 
     /// Set a single node to be selected.
+    #[instrument(skip_all)]
     pub fn set_one_selected(&mut self, selected: NodeIdType) {
         self.selection_pivot = Some(selected);
         self.selected.clear();
@@ -112,6 +118,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Expand all parent nodes of the node with the given id.
+    #[instrument(skip_all)]
     pub fn expand_parents_of(&mut self, id: NodeIdType) {
         if let Some(parent_id) = self.parent_id_of(id) {
             self.expand_node(parent_id);
@@ -120,6 +127,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
+    #[instrument(skip_all)]
     pub fn expand_node(&mut self, mut id: NodeIdType) {
         while let Some(node_state) = self.node_state_of_mut(&id) {
             node_state.open = true;
@@ -131,30 +139,36 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Get the parent id of a node.
+    #[instrument(skip_all)]
     pub fn parent_id_of(&self, id: NodeIdType) -> Option<NodeIdType> {
         self.node_state_of(&id)
             .and_then(|node_state| node_state.parent_id)
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn set_node_states(&mut self, states: Vec<NodeState<NodeIdType>>) {
         self.node_states = states;
         self.selected
             .retain(|node_id| self.node_states.iter().any(|ns| &ns.id == node_id));
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn node_states(&self) -> &Vec<NodeState<NodeIdType>> {
         &self.node_states
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn selection_cursor(&self) -> Option<NodeIdType> {
         self.selection_cursor
     }
 
     /// Get the node state for an id.
+    #[instrument(skip_all)]
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
         self.node_states.iter().find(|ns| &ns.id == id)
     }
     /// Get the node state for an id.
+    #[instrument(skip_all)]
     pub(crate) fn node_state_of_mut(
         &mut self,
         id: &NodeIdType,
@@ -164,26 +178,31 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Is the current drag valid.
     /// `false` if no drag is currently registered.
+    #[instrument(skip_all)]
     pub(crate) fn drag_valid(&self) -> bool {
         self.dragged
             .as_ref()
             .is_some_and(|drag_state| drag_state.drag_valid)
     }
     /// Is the given id part of a valid drag.
+    #[instrument(skip_all)]
     pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
         self.dragged
             .as_ref()
             .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
         self.selected.contains(id)
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
         self.secondary_selection.as_ref().is_some_and(|n| n == id)
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn prepare(&mut self, multi_select_allowed: bool) {
         if !multi_select_allowed && self.selected.len() > 1 {
             let new_selection = self.selected[0];
@@ -194,6 +213,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn handle_click(
         &mut self,
         clicked_id: NodeIdType,
@@ -231,6 +251,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn handle_key(
         &mut self,
         key: &Key,
@@ -334,6 +355,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
+    #[instrument(skip_all)]
     fn first_visible_parent_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
         let mut next_parent = self.node_state_of(&id).and_then(|n| n.parent_id);
         while let Some(next_parent_id) = next_parent {
@@ -345,6 +367,8 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
         None
     }
+
+    #[instrument(skip_all)]
     fn first_visible_child_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
         let mut valid_nodes = HashSet::new();
         valid_nodes.insert(id);
@@ -362,6 +386,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         None
     }
 
+    #[instrument(skip_all)]
     fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
         self.node_states.iter().position(|n| n.id == id)
     }

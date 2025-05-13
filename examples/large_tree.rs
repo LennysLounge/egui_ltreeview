@@ -12,10 +12,10 @@ use uuid::Uuid;
 fn main() -> Result<(), eframe::Error> {
     //tracing::subscriber::set_global_default(FmtSubscriber::new());
 
-    // tracing::subscriber::set_global_default(
-    //     tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
-    // )
-    // .expect("setup tracy layer");
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+    )
+    .expect("setup tracy layer");
 
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
@@ -37,7 +37,7 @@ struct MyApp {
     tree: Node,
     state: TreeViewState<Uuid>,
     measurer: Measurer,
-    //client: Client,
+    client: Client,
 }
 impl MyApp {
     fn new() -> Self {
@@ -45,7 +45,7 @@ impl MyApp {
             tree: build_tree(100, 10),
             state: TreeViewState::default(),
             measurer: Measurer::new(None),
-            //client: Client::start(),
+            client: Client::start(),
         }
     }
 }
@@ -61,7 +61,7 @@ impl eframe::App for MyApp {
                     ui,
                     &mut self.state,
                     |builder| {
-                        build_node(&self.tree, builder);
+                        build_node_once(&self.tree, builder);
                     },
                 );
                 //build_node_label(&self.tree, ui);
@@ -86,14 +86,19 @@ impl eframe::App for MyApp {
                 self.measurer.get_max().as_millis()
             ));
         });
-        //self.client.frame_mark();
+        self.client.frame_mark();
     }
+}
+
+#[instrument(skip_all)]
+fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
+    build_node(node, builder);
 }
 
 fn build_node(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     match node {
         Node::Directory { id, children, name } => {
-            builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+            build_dir(id, name, builder);
             for n in children.iter() {
                 build_node(n, builder);
             }
@@ -105,18 +110,9 @@ fn build_node(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     }
 }
 
-fn build_node_label(node: &Node, ui: &mut Ui) {
-    match node {
-        Node::Directory { id, children, name } => {
-            ui.label(name);
-            for n in children.iter() {
-                build_node_label(n, ui);
-            }
-        }
-        Node::Leaf { id, name } => {
-            ui.label(name);
-        }
-    }
+#[instrument(skip_all)]
+fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) {
+    builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
 }
 
 #[derive(Debug)]
