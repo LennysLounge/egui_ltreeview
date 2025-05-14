@@ -1,8 +1,8 @@
 #[path = "data.rs"]
 mod data;
 
-use egui::{vec2, Color32, Rect, ThemePreference, UiBuilder};
-use egui_ltreeview::TreeView;
+use egui::{vec2, Color32, Rect, Sense, ThemePreference, UiBuilder};
+use egui_ltreeview::{NodeBuilder, TreeView};
 
 fn main() -> Result<(), eframe::Error> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -19,35 +19,17 @@ fn main() -> Result<(), eframe::Error> {
             Ok(Box::<MyApp>::default())
         }),
     )
-} 
+}
 
 #[derive(Default)]
 struct MyApp {}
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.set_zoom_factor(3.0);
+        ctx.set_zoom_factor(2.0);
+        //ctx.style_mut(|s| s.spacing.item_spacing.y = 10.0);
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add_space(25.0);
-            // ui.horizontal(|ui| {
-            //     let r = ui.label("xxjH");
-            //     ui.painter().rect_stroke(
-            //         r.rect,
-            //         0.0,
-            //         (1.0, Color32::WHITE),
-            //         egui::StrokeKind::Inside,
-            //     );
-            //     let size = vec2(
-            //         10.0,
-            //         ui.fonts(|f| f.row_height(&FontSelection::Default.resolve(ui.style()))),
-            //     );
-            //     ui.painter().rect_stroke(
-            //         Rect::from_min_size(pos2(r.rect.max.x + 2.0, r.rect.min.y), size),
-            //         0.0,
-            //         (1.0, Color32::WHITE),
-            //         StrokeKind::Inside,
-            //     );
-            // });
 
             let rect = Rect::from_min_size(ui.cursor().min, vec2(200.0, 200.0));
 
@@ -55,8 +37,10 @@ impl eframe::App for MyApp {
                 .rect_stroke(rect, 0, (1.0, Color32::WHITE), egui::StrokeKind::Middle);
 
             let mut new_ui = ui.new_child(UiBuilder::new().max_rect(rect));
+            new_ui.set_clip_rect(rect);
             new_ui.add_space(-25.0);
             TreeView::new(ui.make_persistent_id("Names tree view")).show(&mut new_ui, |builder| {
+                //builder.node(NodeBuilder::dir(0).label("Root").height(10.0));
                 builder.dir(0, "Root");
                 builder.dir(1, "Foo");
                 builder.leaf(2, "Ava");
@@ -75,6 +59,14 @@ impl eframe::App for MyApp {
                 builder.close_dir();
                 builder.close_dir();
             });
+            ui.allocate_rect(new_ui.max_rect(), Sense::hover());
+
+            // ui.painter().rect_stroke(
+            //     new_ui.max_rect(),
+            //     0.0,
+            //     (1.0, Color32::BLUE),
+            //     egui::StrokeKind::Outside,
+            // );
         });
     }
 }

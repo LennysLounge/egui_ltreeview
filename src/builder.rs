@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use egui::{pos2, vec2, LayerId, Order, Pos2, Rect, Response, Ui, WidgetText};
+use egui::{pos2, vec2, LayerId, Order, Pos2, Rangef, Rect, Response, Ui, WidgetText};
 use tracing::instrument;
 
 use crate::{
@@ -170,8 +170,25 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .unwrap_or(node.default_open);
 
         let (row, closer) = if self.parent_dir_is_open() && !node.flatten {
-            node.set_is_open(open);
-            self.node_internal(&mut node)
+            let node_height = *node.node_height.get_or_insert(
+                self.settings
+                    .default_node_height
+                    .expect("Should have been filled with a default value"),
+            );
+
+            let row_range =
+                Rangef::new(self.ui.cursor().min.y, self.ui.cursor().min.y + node_height)
+                    .expand(self.ui.spacing().item_spacing.y);
+            let is_visible = self.ui.clip_rect().y_range().intersects(row_range);
+
+            if is_visible {
+                node.set_is_open(open);
+                self.node_internal(&mut node)
+            } else {
+                self.ui
+                    .add_space(node_height + self.ui.spacing().item_spacing.y);
+                (Rect::NOTHING, Some(Rect::NOTHING))
+            }
         } else {
             (Rect::NOTHING, Some(Rect::NOTHING))
         };

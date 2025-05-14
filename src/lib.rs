@@ -304,6 +304,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
+    /// Set the default node height for this tree.
+    pub fn default_node_height(mut self, default_node_height: Option<f32>) -> Self {
+        self.settings.default_node_height = default_node_height;
+        self
+    }
+
     /// Add a fallback context menu to the tree.
     ///
     /// If the node did not configure a context menu directly or
@@ -364,6 +370,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             self.settings.fill_space_vertical = true;
             self.settings.max_height = f32::INFINITY;
         }
+        self.settings
+            .default_node_height
+            .get_or_insert(ui.spacing().interact_size.y);
 
         // Set the focus filter to get correct keyboard navigation while focused.
         ui.memory_mut(|m| {
@@ -1065,6 +1074,9 @@ pub struct TreeViewSettings {
     /// If the tree view is allowed to select multiple nodes at once.
     /// Default is true.
     pub allow_multi_select: bool,
+    /// The default height of a node.
+    /// If none is set the default height will be `interact_size.y` from `egui::style::Spacing`.
+    pub default_node_height: Option<f32>,
 }
 
 impl Default for TreeViewSettings {
@@ -1080,6 +1092,7 @@ impl Default for TreeViewSettings {
             fill_space_horizontal: true,
             fill_space_vertical: false,
             allow_multi_select: true,
+            default_node_height: None,
         }
     }
 }
