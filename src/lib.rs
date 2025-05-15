@@ -572,12 +572,13 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             .map(|ns| ns.id)
             .collect::<Vec<_>>();
         for node_id in node_ids {
-            let RowRectangles {
+            let Some(RowRectangles {
                 row_rect,
                 closer_rect,
-            } = row_rectangles
-                .get(&node_id)
-                .expect("A node_state must have row rectangles");
+            }) = row_rectangles.get(&node_id)
+            else {
+                continue;
+            };
 
             // Closer interactions
             let closer_clicked = closer_rect
@@ -686,7 +687,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 // At this point we have a potentially valid node to drop on.
                 // Now we only need to check if the mouse is over the node, get the correct
                 // drop quarter and then get the correct drop position.
-                let row_rectangles = row_rectangles.get(&node_state.id).unwrap();
+                let Some(row_rectangles) = row_rectangles.get(&node_state.id) else {
+                    continue;
+                };
                 let drop_quarter = interaction
                     .hover_pos()
                     .and_then(|pos| DropQuarter::new(row_rectangles.row_rect.y_range(), pos.y));
@@ -769,40 +772,36 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         if let Some((parent_id, drop_position)) = drop_position {
             let drop_marker = match drop_position {
                 DirPosition::Before(target_id) => {
-                    let row_rectangles = result
-                        .row_rectangles
-                        .get(&target_id)
-                        .expect("Drop target must exists in the tree");
+                    let row_rectangles = result.row_rectangles.get(&target_id).expect(
+                        "Drop target must have a rectangle or it could not be a drop target",
+                    );
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.min.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
                 DirPosition::After(target_id) => {
-                    let row_rectangles = result
-                        .row_rectangles
-                        .get(&target_id)
-                        .expect("Drop target must exists in the tree");
+                    let row_rectangles = result.row_rectangles.get(&target_id).expect(
+                        "Drop target must have a rectangle or it could not be a drop target",
+                    );
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
                 DirPosition::First => {
-                    let row_rectangles = result
-                        .row_rectangles
-                        .get(&parent_id)
-                        .expect("Drop target must exists in the tree");
+                    let row_rectangles = result.row_rectangles.get(&parent_id).expect(
+                        "Drop target must have a rectangle or it could not be a drop target",
+                    );
                     Rect::from_x_y_ranges(
                         row_rectangles.row_rect.x_range(),
                         Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
                     )
                 }
                 DirPosition::Last => {
-                    let row_rectangles_start = result
-                        .row_rectangles
-                        .get(&parent_id)
-                        .expect("Drop target must exists in the tree");
+                    let row_rectangles_start = result.row_rectangles.get(&parent_id).expect(
+                        "Drop target must have a rectangle or it could not be a drop target",
+                    );
                     // For directories the drop marker should expand its height to include all
                     // its child nodes. To do this, first we have to find its last child node,
                     // then we can get the correct y range.
@@ -819,14 +818,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     }
                     let y_range = match last_child {
                         Some(last_child_id) => {
-                            let row_rectangles_end =
-                                result.row_rectangles.get(&last_child_id).expect(
-                                    "last_child_id comes from the node states so it must exists",
-                                );
-                            Rangef::new(
-                                row_rectangles_start.row_rect.min.y,
-                                row_rectangles_end.row_rect.max.y,
-                            )
+                            let row_rectangles_end = result.row_rectangles.get(&last_child_id);
+                            let y = match row_rectangles_end {
+                                Some(r) => r.row_rect.max.y,
+                                None => ui.clip_rect().max.y,
+                            };
+                            Rangef::new(row_rectangles_start.row_rect.min.y, y)
                         }
                         None => row_rectangles_start.row_rect.y_range(),
                     };
@@ -848,13 +845,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             let mut selected_rects = state
                 .selected()
                 .iter()
-                .map(|id| {
-                    result
-                        .row_rectangles
-                        .get(id)
-                        .expect("a selected node should have a rectangle in the results")
-                        .row_rect
-                })
+                .filter_map(|id| result.row_rectangles.get(id).map(|r| r.row_rect))
                 .collect::<Vec<_>>();
             selected_rects.sort_by(|a, b| {
                 if a.min.y > b.min.y {

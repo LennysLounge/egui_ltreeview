@@ -169,7 +169,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .map(|node_state| node_state.open)
             .unwrap_or(node.default_open);
 
-        let (row, closer) = if self.parent_dir_is_open() && !node.flatten {
+        let closer = if self.parent_dir_is_open() && !node.flatten {
             let node_height = *node.node_height.get_or_insert(
                 self.settings
                     .default_node_height
@@ -183,14 +183,22 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
             if is_visible {
                 node.set_is_open(open);
-                self.node_internal(&mut node)
+                let (row, closer) = self.node_internal(&mut node);
+                self.result.row_rectangles.insert(
+                    node.id,
+                    RowRectangles {
+                        row_rect: row,
+                        closer_rect: closer,
+                    },
+                );
+                closer
             } else {
                 self.ui
                     .add_space(node_height + self.ui.spacing().item_spacing.y);
-                (Rect::NOTHING, Some(Rect::NOTHING))
+                Some(Rect::NOTHING)
             }
         } else {
-            (Rect::NOTHING, Some(Rect::NOTHING))
+            Some(Rect::NOTHING)
         };
 
         self.result.new_node_states.push(NodeState {
@@ -202,13 +210,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             dir: node.is_dir,
             activatable: node.activatable,
         });
-        self.result.row_rectangles.insert(
-            node.id,
-            RowRectangles {
-                row_rect: row,
-                closer_rect: closer,
-            },
-        );
 
         if node.is_dir {
             self.stack.push(DirectoryState {
