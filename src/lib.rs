@@ -847,45 +847,47 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 .iter()
                 .filter_map(|id| result.row_rectangles.get(id).map(|r| r.row_rect))
                 .collect::<Vec<_>>();
-            selected_rects.sort_by(|a, b| {
-                if a.min.y > b.min.y {
-                    Ordering::Greater
-                } else {
-                    Ordering::Less
-                }
-            });
+            if !selected_rects.is_empty() {
+                selected_rects.sort_by(|a, b| {
+                    if a.min.y > b.min.y {
+                        Ordering::Greater
+                    } else {
+                        Ordering::Less
+                    }
+                });
 
-            let mut combined_rects = Vec::new();
-            let mut current_rect = selected_rects[0];
-            for rect in selected_rects.iter().skip(1) {
-                if (rect.min.y - current_rect.max.y).abs() < 1.0 {
-                    current_rect = Rect::from_min_max(current_rect.min, rect.max)
-                } else {
-                    combined_rects.push(current_rect);
-                    current_rect = *rect;
+                let mut combined_rects = Vec::new();
+                let mut current_rect = selected_rects[0];
+                for rect in selected_rects.iter().skip(1) {
+                    if (rect.min.y - current_rect.max.y).abs() < 1.0 {
+                        current_rect = Rect::from_min_max(current_rect.min, rect.max)
+                    } else {
+                        combined_rects.push(current_rect);
+                        current_rect = *rect;
+                    }
                 }
-            }
-            combined_rects.push(current_rect);
+                combined_rects.push(current_rect);
 
-            for (rect, shape_idx) in combined_rects.iter().zip(&background.background_idx) {
-                ui.painter().set(
-                    *shape_idx,
-                    epaint::RectShape::new(
-                        *rect,
-                        ui.visuals().widgets.active.corner_radius,
-                        if has_focus {
-                            ui.visuals().selection.bg_fill
-                        } else {
-                            ui.visuals()
-                                .widgets
-                                .inactive
-                                .weak_bg_fill
-                                .linear_multiply(0.3)
-                        },
-                        Stroke::NONE,
-                        egui::StrokeKind::Inside,
-                    ),
-                );
+                for (rect, shape_idx) in combined_rects.iter().zip(&background.background_idx) {
+                    ui.painter().set(
+                        *shape_idx,
+                        epaint::RectShape::new(
+                            *rect,
+                            ui.visuals().widgets.active.corner_radius,
+                            if has_focus {
+                                ui.visuals().selection.bg_fill
+                            } else {
+                                ui.visuals()
+                                    .widgets
+                                    .inactive
+                                    .weak_bg_fill
+                                    .linear_multiply(0.3)
+                            },
+                            Stroke::NONE,
+                            egui::StrokeKind::Inside,
+                        ),
+                    );
+                }
             }
         }
 
