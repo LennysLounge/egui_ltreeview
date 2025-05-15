@@ -13,8 +13,8 @@ struct DirectoryState<NodeIdType> {
     id: NodeIdType,
     /// If directory is expanded
     is_open: bool,
-    /// The rectangle of the icon.
-    icon_rect: Rect,
+    /// The range of the row
+    row_range: Option<Rangef>,
     /// Positions of each child node of this directory.
     child_node_positions: Vec<Pos2>,
     /// The level of indentation.
@@ -116,34 +116,47 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         // Draw indent hint
         if current_dir.is_open {
-            let top = current_dir.icon_rect.center_bottom() + vec2(0.0, 2.0);
+            if let Some(row_range) = current_dir.row_range {
+                let top = pos2(
+                    self.ui.cursor().min.x
+                        + self.ui.spacing().item_spacing.x
+                        + self.ui.spacing().icon_width * 0.5
+                        + (current_dir.indent_level - 1) as f32
+                            * self
+                                .settings
+                                .override_indent
+                                .unwrap_or(self.ui.spacing().indent),
+                    row_range.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
+                );
 
-            let bottom = match self.settings.indent_hint_style {
-                IndentHintStyle::None => top,
-                IndentHintStyle::Line => pos2(
-                    top.x,
-                    self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
-                ),
-                IndentHintStyle::Hook => pos2(
-                    top.x,
-                    current_dir
-                        .child_node_positions
-                        .last()
-                        .map(|pos| pos.y)
-                        .unwrap_or(top.y),
-                ),
-            };
-            self.ui.painter().line_segment(
-                [top, bottom],
-                self.ui.visuals().widgets.noninteractive.bg_stroke,
-            );
-            if matches!(self.settings.indent_hint_style, IndentHintStyle::Hook) {
-                for child_pos in current_dir.child_node_positions.iter() {
-                    let p1 = pos2(top.x, child_pos.y);
-                    let p2 = *child_pos + vec2(-2.0, 0.0);
-                    self.ui
-                        .painter()
-                        .line_segment([p1, p2], self.ui.visuals().widgets.noninteractive.bg_stroke);
+                let bottom = match self.settings.indent_hint_style {
+                    IndentHintStyle::None => top,
+                    IndentHintStyle::Line => pos2(
+                        top.x,
+                        self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
+                    ),
+                    IndentHintStyle::Hook => pos2(
+                        top.x,
+                        current_dir
+                            .child_node_positions
+                            .last()
+                            .map(|pos| pos.y)
+                            .unwrap_or(top.y),
+                    ),
+                };
+                self.ui.painter().line_segment(
+                    [top, bottom],
+                    self.ui.visuals().widgets.noninteractive.bg_stroke,
+                );
+                if matches!(self.settings.indent_hint_style, IndentHintStyle::Hook) {
+                    for child_pos in current_dir.child_node_positions.iter() {
+                        let p1 = pos2(top.x, child_pos.y);
+                        let p2 = *child_pos + vec2(-2.0, 0.0);
+                        self.ui.painter().line_segment(
+                            [p1, p2],
+                            self.ui.visuals().widgets.noninteractive.bg_stroke,
+                        );
+                    }
                 }
             }
         }
@@ -169,37 +182,29 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .map(|node_state| node_state.open)
             .unwrap_or(node.default_open);
 
-        let closer = if self.parent_dir_is_open() && !node.flatten {
-            let node_height = *node.node_height.get_or_insert(
-                self.settings
-                    .default_node_height
-                    .expect("Should have been filled with a default value"),
+        node.set_is_open(open);
+        let node_response = self.node_internal(&mut node);
+
+        if let Some(NodeResponse {
+            range: _,
+            rects: Some(node_rects),
+        }) = &node_response
+        {
+            self.push_child_node_position(
+                node_rects
+                    .closer
+                    .or(node_rects.icon)
+                    .unwrap_or(node_rects.label)
+                    .left_center(),
             );
-
-            let row_range =
-                Rangef::new(self.ui.cursor().min.y, self.ui.cursor().min.y + node_height)
-                    .expand(self.ui.spacing().item_spacing.y);
-            let is_visible = self.ui.clip_rect().y_range().intersects(row_range);
-
-            if is_visible {
-                node.set_is_open(open);
-                let (row, closer) = self.node_internal(&mut node);
-                self.result.row_rectangles.insert(
-                    node.id,
-                    RowRectangles {
-                        row_rect: row,
-                        closer_rect: closer,
-                    },
-                );
-                closer
-            } else {
-                self.ui
-                    .add_space(node_height + self.ui.spacing().item_spacing.y);
-                Some(Rect::NOTHING)
-            }
-        } else {
-            Some(Rect::NOTHING)
-        };
+            self.result.row_rectangles.insert(
+                node.id,
+                RowRectangles {
+                    row_rect: node_rects.row,
+                    closer_rect: node_rects.closer,
+                },
+            );
+        }
 
         self.result.new_node_states.push(NodeState {
             id: node.id,
@@ -215,7 +220,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             self.stack.push(DirectoryState {
                 is_open: self.parent_dir_is_open() && open,
                 id: node.id,
-                icon_rect: closer.expect("Closer response should be availabel for dirs"),
+                row_range: node_response.map(|n| n.range),
                 child_node_positions: Vec::new(),
                 indent_level: if node.flatten {
                     self.get_indent_level()
@@ -233,7 +238,31 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     #[instrument(skip_all)]
-    fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> (Rect, Option<Rect>) {
+    fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> Option<NodeResponse> {
+        if !self.parent_dir_is_open() {
+            return None;
+        }
+        if node.flatten {
+            return None;
+        }
+
+        let node_height = *node.node_height.get_or_insert(
+            self.settings
+                .default_node_height
+                .expect("Should have been filled with a default value"),
+        );
+        let row_range = Rangef::new(self.ui.cursor().min.y, self.ui.cursor().min.y + node_height)
+            .expand(self.ui.spacing().item_spacing.y);
+        let is_visible = self.ui.clip_rect().y_range().intersects(row_range);
+        if !is_visible {
+            self.ui
+                .add_space(node_height + self.ui.spacing().item_spacing.y);
+            return Some(NodeResponse {
+                range: row_range,
+                rects: None,
+            });
+        }
+
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
         node.set_indent(self.get_indent_level());
@@ -293,9 +322,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             self.result.context_menu_was_open = node.show_context_menu(&self.result.interaction);
         }
 
-        self.push_child_node_position(closer.or(icon).unwrap_or(label).left_center());
-
-        (row, closer)
+        Some(NodeResponse {
+            range: row_range,
+            rects: Some(NodeRectangles {
+                row,
+                closer,
+                icon,
+                label,
+            }),
+        })
     }
 
     #[instrument(skip_all)]
@@ -321,4 +356,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     fn get_indent_level(&self) -> usize {
         self.stack.last().map(|d| d.indent_level).unwrap_or(0)
     }
+}
+
+struct NodeResponse {
+    range: Rangef,
+    rects: Option<NodeRectangles>,
+}
+struct NodeRectangles {
+    row: Rect,
+    closer: Option<Rect>,
+    icon: Option<Rect>,
+    label: Rect,
 }
