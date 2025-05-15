@@ -13,12 +13,10 @@ struct DirectoryState<NodeIdType> {
     id: NodeIdType,
     /// If directory is expanded
     is_open: bool,
-    /// The range of the row
-    row_range: Option<Rangef>,
+    /// Anchor for the indent hint.
+    indent_hint_anchor: Option<Pos2>,
     /// Positions of each child node of this directory.
     child_node_positions: Vec<Pos2>,
-    /// The level of indentation.
-    indent_level: usize,
     /// If this dir was flattened.
     flattened: bool,
 }
@@ -47,6 +45,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     stack: Vec<DirectoryState<NodeIdType>>,
     tree_has_focus: bool,
     result: TreeViewBuilderResult<NodeIdType>,
+    indent_level: i32,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -74,6 +73,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             settings,
             tree_has_focus,
             ui,
+            indent_level: 0,
         }
     }
 
@@ -113,44 +113,33 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let Some(current_dir) = self.stack.pop() else {
             return;
         };
+        self.indent_level -= 1;
 
         // Draw indent hint
         if current_dir.is_open {
-            if let Some(row_range) = current_dir.row_range {
-                let top = pos2(
-                    self.ui.cursor().min.x
-                        + self.ui.spacing().item_spacing.x
-                        + self.ui.spacing().icon_width * 0.5
-                        + (current_dir.indent_level - 1) as f32
-                            * self
-                                .settings
-                                .override_indent
-                                .unwrap_or(self.ui.spacing().indent),
-                    row_range.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
-                );
-
+            if let Some(anchor) = current_dir.indent_hint_anchor {
                 let bottom = match self.settings.indent_hint_style {
-                    IndentHintStyle::None => top,
+                    IndentHintStyle::None => anchor,
                     IndentHintStyle::Line => pos2(
-                        top.x,
+                        anchor.x,
                         self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
                     ),
                     IndentHintStyle::Hook => pos2(
-                        top.x,
+                        anchor.x,
                         current_dir
                             .child_node_positions
                             .last()
                             .map(|pos| pos.y)
-                            .unwrap_or(top.y),
+                            .unwrap_or(anchor.y),
                     ),
                 };
                 self.ui.painter().line_segment(
-                    [top, bottom],
+                    [anchor, bottom],
                     self.ui.visuals().widgets.noninteractive.bg_stroke,
                 );
                 if matches!(self.settings.indent_hint_style, IndentHintStyle::Hook) {
                     for child_pos in current_dir.child_node_positions.iter() {
-                        let p1 = pos2(top.x, child_pos.y);
+                        let p1 = pos2(anchor.x, child_pos.y);
                         let p2 = *child_pos + vec2(-2.0, 0.0);
                         self.ui.painter().line_segment(
                             [p1, p2],
@@ -217,16 +206,27 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         });
 
         if node.is_dir {
+            let indent_hint_anchor = node_response.map(|res| {
+                pos2(
+                    self.ui.cursor().min.x
+                        + self.ui.spacing().item_spacing.x
+                        + self.ui.spacing().icon_width * 0.5
+                        + (self.indent_level) as f32
+                            * self
+                                .settings
+                                .override_indent
+                                .unwrap_or(self.ui.spacing().indent),
+                    res.range.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
+                )
+            });
+            if !node.flatten {
+                self.indent_level += 1;
+            }
             self.stack.push(DirectoryState {
                 is_open: self.parent_dir_is_open() && open,
                 id: node.id,
-                row_range: node_response.map(|n| n.range),
+                indent_hint_anchor,
                 child_node_positions: Vec::new(),
-                indent_level: if node.flatten {
-                    self.get_indent_level()
-                } else {
-                    self.get_indent_level() + 1
-                },
                 flattened: node.flatten,
             });
         }
@@ -265,7 +265,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
-        node.set_indent(self.get_indent_level());
+        node.set_indent(self.indent_level as usize);
         let (row, closer, icon, label) = self
             .ui
             .scope(|ui| {
@@ -351,10 +351,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         if let Some(parent_dir) = self.stack.last_mut() {
             parent_dir.child_node_positions.push(pos);
         }
-    }
-    #[instrument(skip_all)]
-    fn get_indent_level(&self) -> usize {
-        self.stack.last().map(|d| d.indent_level).unwrap_or(0)
     }
 }
 
