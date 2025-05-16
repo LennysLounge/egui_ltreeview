@@ -42,7 +42,7 @@ struct MyApp {
 impl MyApp {
     fn new() -> Self {
         MyApp {
-            tree: build_tree(100, 10),
+            tree: build_tree(10_000, 100),
             state: TreeViewState::default(),
             measurer: Measurer::new(None),
             client: Client::start(),

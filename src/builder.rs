@@ -80,7 +80,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     /// Get the current parent id if any.
-    #[instrument(skip_all)]
+    //#[instrument(skip_all)]
     pub fn parent_id(&self) -> Option<NodeIdType> {
         self.parent_dir().map(|state| state.id)
     }
@@ -110,7 +110,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     /// Close the current directory.
-    #[instrument(skip_all)]
+    //#[instrument(skip_all)]
     pub fn close_dir(&mut self) {
         let Some(current_dir) = self.stack.pop() else {
             return;
@@ -222,7 +222,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
-    #[instrument(skip_all)]
+    //#[instrument(skip_all)]
     pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType> {
         self.result
     }
@@ -323,7 +323,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         })
     }
 
-    #[instrument(skip_all)]
+    //#[instrument(skip_all)]
     fn parent_dir(&self) -> Option<&DirectoryState<NodeIdType>> {
         if self.stack.is_empty() {
             None
@@ -331,12 +331,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             self.stack.last()
         }
     }
-    #[instrument(skip_all)]
+    //#[instrument(skip_all)]
     fn parent_dir_is_open(&self) -> bool {
         self.parent_dir().is_none_or(|dir| dir.is_open)
     }
 
-    #[instrument(skip_all)]
+    //#[instrument(skip_all)]
     fn push_child_node_position(&mut self, pos: Pos2) {
         if let Some(indent) = self.indents.last_mut() {
             indent.positions.push(pos);
