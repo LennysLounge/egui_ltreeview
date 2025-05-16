@@ -2,7 +2,6 @@ use egui::{
     emath, epaint, remap, vec2, CursorIcon, Id, Label, LayerId, Layout, Rect, Response, Sense,
     Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
-use tracing::instrument;
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
 
@@ -160,7 +159,6 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         self.indent = indent;
     }
 
-    #[instrument(skip_all)]
     pub(crate) fn show_node(
         &mut self,
         ui: &mut Ui,
@@ -298,7 +296,6 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Draw the content as a drag overlay if it is beeing dragged.
-    //#[instrument(skip_all)]
     pub(crate) fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
@@ -327,7 +324,6 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             });
     }
 
-    //#[instrument(skip_all)]
     pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
         if let Some(context_menu) = self.context_menu.as_mut() {
             let mut was_open = false;
@@ -343,7 +339,6 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
 }
 
 /// Paint the arrow icon that indicated if the region is open or not
-//#[instrument(skip_all)]
 pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, is_hovered: bool) {
     let visuals = if is_hovered {
         ui.visuals().widgets.hovered

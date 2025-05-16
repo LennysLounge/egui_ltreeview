@@ -171,7 +171,6 @@ use egui::{
     Layout, Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 use std::{cmp::Ordering, collections::HashSet, hash::Hash};
-use tracing::instrument;
 
 pub use builder::*;
 pub use node::*;
@@ -351,7 +350,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     ///
     /// Construct the tree view using the [`TreeViewBuilder`] by adding
     /// directories or leaves to the tree.
-    #[instrument(skip_all)]
     pub fn show_state(
         mut self,
         ui: &mut Ui,
@@ -465,7 +463,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         (tree_builder_result.interaction, actions)
     }
 
-    #[instrument(skip_all)]
     fn draw_foreground(
         &mut self,
         ui: &mut Ui,
@@ -524,7 +521,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         response
     }
 
-    #[instrument(skip_all)]
     fn handle_fallback_context_menu(
         &mut self,
         tree_view_result: &TreeViewBuilderResult<NodeIdType>,
@@ -546,7 +542,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         state.context_menu_was_open = tree_view_result.interaction.context_menu_opened();
     }
 
-    #[instrument(skip_all)]
     fn handle_input(
         &mut self,
         ui: &mut Ui,
@@ -757,7 +752,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
     }
 
-    #[instrument(skip_all)]
     fn draw_background(
         &self,
         ui: &mut Ui,
@@ -939,7 +933,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
     }
 }
-#[instrument(skip_all)]
 fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     state: &TreeViewState<NodeIdType>,
     nodes: &[NodeIdType],
@@ -966,7 +959,6 @@ fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     result
 }
 
-#[instrument(skip_all)]
 fn get_drop_position_node<NodeIdType: NodeId>(
     node: &NodeState<NodeIdType>,
     drop_quater: &DropQuarter,

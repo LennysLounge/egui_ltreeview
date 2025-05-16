@@ -3,19 +3,10 @@
 use egui::{ThemePreference, Ui};
 use egui_ltreeview::{NodeBuilder, TreeView, TreeViewBuilder, TreeViewState};
 use performance_measure::performance_measure::Measurer;
-use tracing::{info, instrument};
-use tracing_subscriber::{layer::SubscriberExt, FmtSubscriber};
-use tracing_tracy::client::span;
-use tracy_client::{Client, FrameName};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
     //tracing::subscriber::set_global_default(FmtSubscriber::new());
-
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
-    )
-    .expect("setup tracy layer");
 
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
@@ -37,25 +28,21 @@ struct MyApp {
     tree: Node,
     state: TreeViewState<Uuid>,
     measurer: Measurer,
-    client: Client,
 }
 impl MyApp {
     fn new() -> Self {
         MyApp {
-            tree: build_tree(10_000, 100),
+            tree: build_tree(10_000, 10),
             state: TreeViewState::default(),
             measurer: Measurer::new(None),
-            client: Client::start(),
         }
     }
 }
 
 impl eframe::App for MyApp {
-    #[instrument(skip_all)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
-                let _span = span!("build tree");
                 self.measurer.start_measure();
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                     ui,
@@ -86,11 +73,9 @@ impl eframe::App for MyApp {
                 self.measurer.get_max().as_millis()
             ));
         });
-        self.client.frame_mark();
     }
 }
 
-#[instrument(skip_all)]
 fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     build_node(node, builder);
 }
@@ -110,9 +95,8 @@ fn build_node(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     }
 }
 
-#[instrument(skip_all)]
 fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) {
-    builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+    builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
 }
 
 #[derive(Debug)]

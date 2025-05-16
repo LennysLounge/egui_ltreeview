@@ -2,7 +2,7 @@
 mod data;
 
 use egui::{vec2, Color32, Rect, Sense, ThemePreference, UiBuilder};
-use egui_ltreeview::{NodeBuilder, TreeView};
+use egui_ltreeview::TreeView;
 
 fn main() -> Result<(), eframe::Error> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).

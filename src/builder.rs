@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use egui::{pos2, vec2, LayerId, Order, Pos2, Rangef, Rect, Response, Ui, WidgetText};
 use indexmap::IndexMap;
-use tracing::instrument;
 
 use crate::{
     node::NodeBuilder, IndentHintStyle, NodeId, NodeState, TreeViewSettings, TreeViewState,
@@ -81,7 +80,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     /// Get the current parent id if any.
-    //#[instrument(skip_all)]
     pub fn parent_id(&self) -> Option<NodeIdType> {
         self.parent_dir().map(|state| state.id)
     }
@@ -89,7 +87,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// Add a leaf directly to the tree with an id and the label text.
     ///
     /// To customize the node that is added to the tree consider using [`TreeViewBuilder::node`]
-    #[instrument(skip_all)]
     pub fn leaf(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
         self.node(NodeBuilder::leaf(id).label_ui(|ui| {
@@ -102,7 +99,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// Must call [`TreeViewBuilder::close_dir`] to close the directory.
     ///
     /// To customize the node that is added to the tree consider using [`TreeViewBuilder::node`]
-    #[instrument(skip_all)]
     pub fn dir(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
         let widget_text = label.into();
         self.node(NodeBuilder::dir(id).label_ui(|ui| {
@@ -111,7 +107,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     /// Close the current directory.
-    //#[instrument(skip_all)]
     pub fn close_dir(&mut self) {
         let Some(current_dir) = self.stack.pop() else {
             return;
@@ -155,7 +150,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// Add a node to the tree.
     ///
     /// If the node is a directory, you must call [`TreeViewBuilder::close_dir`] to close the directory.
-    #[instrument(skip_all)]
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
         let open = self
             .state
@@ -226,12 +220,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
-    //#[instrument(skip_all)]
     pub(crate) fn get_result(self) -> TreeViewBuilderResult<NodeIdType> {
         self.result
     }
 
-    #[instrument(skip_all)]
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> Option<NodeResponse> {
         if !self.parent_dir_is_open() {
             return None;
@@ -327,7 +319,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         })
     }
 
-    //#[instrument(skip_all)]
     fn parent_dir(&self) -> Option<&DirectoryState<NodeIdType>> {
         if self.stack.is_empty() {
             None
@@ -335,12 +326,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             self.stack.last()
         }
     }
-    //#[instrument(skip_all)]
     fn parent_dir_is_open(&self) -> bool {
         self.parent_dir().is_none_or(|dir| dir.is_open)
     }
 
-    //#[instrument(skip_all)]
     fn push_child_node_position(&mut self, pos: Pos2) {
         if let Some(indent) = self.indents.last_mut() {
             indent.positions.push(pos);
