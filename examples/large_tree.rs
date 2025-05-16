@@ -32,7 +32,7 @@ struct MyApp {
 impl MyApp {
     fn new() -> Self {
         MyApp {
-            tree: build_tree(10_000, 10),
+            tree: build_tree(100_000, 10),
             state: TreeViewState::default(),
             measurer: Measurer::new(None),
         }
@@ -96,7 +96,7 @@ fn build_node(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
 }
 
 fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) {
-    builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
+    builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
 }
 
 #[derive(Debug)]
@@ -130,7 +130,7 @@ fn build_sub_tree(node_count: u32, max_depth: u32, max_width: u32) -> (Node, u32
         return (
             Node::Leaf {
                 id,
-                name: format!("{:?}", id),
+                name: format!("{node_count}"),
             },
             1,
         );
@@ -152,7 +152,7 @@ fn build_sub_tree(node_count: u32, max_depth: u32, max_width: u32) -> (Node, u32
         Node::Directory {
             id,
             children: child_nodes,
-            name: format!("{:?}", id),
+            name: format!("{node_count}"),
         },
         nodes_made,
     )
@@ -162,9 +162,10 @@ fn get_tree_width(node_count: u32, max_depth: u32) -> (u32, u32) {
     for width in 2..100 {
         let mut total_count = width;
         let mut prev_width = width;
-        for _ in 0..max_depth {
-            prev_width = prev_width * prev_width;
+        for d in 0..max_depth {
+            prev_width = prev_width * width;
             total_count += prev_width;
+            println!("total count {total_count} width: {width}, depth: {d}");
             if total_count > node_count {
                 return (width, total_count);
             }
