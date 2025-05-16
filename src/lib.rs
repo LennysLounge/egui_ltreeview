@@ -569,7 +569,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         let node_ids = state
             .node_states()
             .iter()
-            .map(|ns| ns.id)
+            .map(|(id, _)| *id)
             .collect::<Vec<_>>();
         for node_id in node_ids {
             let Some(RowRectangles {
@@ -668,26 +668,26 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     .iter()
                     .for_each(|id| _ = invalid_drop_targets.insert(*id));
             }
-            for node_state in state.node_states() {
+            for (id, node_state) in state.node_states() {
                 // Dropping a node on itself is technically a fine thing to do
                 // but it causes all sorts of problems for the implementer of the drop action.
                 // They would have to remove a node and then somehow insert it after itself.
                 // For that reason it is easier to disallow dropping on itself altogether.
-                if invalid_drop_targets.contains(&node_state.id) {
+                if invalid_drop_targets.contains(id) {
                     continue;
                 }
                 // If the parent of a node is in the list of invalid drop targets that means
                 // it is a distant child of the dragged node. This is not allowed
                 if let Some(parent_id) = node_state.parent_id {
                     if invalid_drop_targets.contains(&parent_id) {
-                        invalid_drop_targets.insert(node_state.id);
+                        invalid_drop_targets.insert(*id);
                         continue;
                     }
                 }
                 // At this point we have a potentially valid node to drop on.
                 // Now we only need to check if the mouse is over the node, get the correct
                 // drop quarter and then get the correct drop position.
-                let Some(row_rectangles) = row_rectangles.get(&node_state.id) else {
+                let Some(row_rectangles) = row_rectangles.get(id) else {
                     continue;
                 };
                 let drop_quarter = interaction
@@ -709,7 +709,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     .dragged
                     .as_ref()
                     .map(|drag_state| drag_state.node_ids.clone())
-                    .or(state.node_states().first().map(|n| vec![n.id]));
+                    .or(state.node_states().first().map(|(id, _)| vec![*id]));
                 if let Some(fallback_selection) = fallback_selection {
                     state.set_selected(fallback_selection);
                     selection_changed = true;
@@ -808,7 +808,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     let mut last_child = None;
                     let mut child_nodes = HashSet::<NodeIdType>::new();
                     child_nodes.insert(parent_id);
-                    for node in state.node_states() {
+                    for (_, node) in state.node_states() {
                         if let Some(parent_id) = node.parent_id {
                             if child_nodes.contains(&parent_id) {
                                 child_nodes.insert(node.id);
@@ -948,8 +948,8 @@ fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.
     let mut result = Vec::new();
     let mut known_nodes = HashSet::new();
-    for node in state.node_states() {
-        if !nodes.contains(&node.id) {
+    for (id, node) in state.node_states() {
+        if !nodes.contains(id) {
             continue;
         }
 
@@ -958,9 +958,9 @@ fn simplify_selection_for_dnd<NodeIdType: NodeId>(
             .as_ref()
             .map_or(true, |parent_id| !known_nodes.contains(parent_id));
         if is_unknown_node {
-            result.push(node.id);
+            result.push(*id);
         }
-        known_nodes.insert(node.id);
+        known_nodes.insert(*id);
     }
 
     result

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use egui::{pos2, vec2, LayerId, Order, Pos2, Rangef, Rect, Response, Ui, WidgetText};
+use indexmap::IndexMap;
 use tracing::instrument;
 
 use crate::{
@@ -24,7 +25,7 @@ struct IndentState<NodeIdType> {
 }
 
 pub(crate) struct TreeViewBuilderResult<NodeIdType> {
-    pub(crate) new_node_states: Vec<NodeState<NodeIdType>>,
+    pub(crate) new_node_states: IndexMap<NodeIdType, NodeState<NodeIdType>>,
     pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
     pub(crate) seconday_click: Option<NodeIdType>,
     pub(crate) context_menu_was_open: bool,
@@ -60,7 +61,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     ) -> Self {
         Self {
             result: TreeViewBuilderResult {
-                new_node_states: Vec::new(),
+                new_node_states: IndexMap::new(),
                 row_rectangles: HashMap::new(),
                 seconday_click: None,
                 interaction,
@@ -186,15 +187,18 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         }
 
-        self.result.new_node_states.push(NodeState {
-            id: node.id,
-            parent_id: self.parent_id(),
-            open,
-            visible: self.parent_dir_is_open() && !node.flatten,
-            drop_allowed: node.drop_allowed,
-            dir: node.is_dir,
-            activatable: node.activatable,
-        });
+        self.result.new_node_states.insert(
+            node.id,
+            NodeState {
+                id: node.id,
+                parent_id: self.parent_id(),
+                open,
+                visible: self.parent_dir_is_open() && !node.flatten,
+                drop_allowed: node.drop_allowed,
+                dir: node.is_dir,
+                activatable: node.activatable,
+            },
+        );
 
         if node.is_dir {
             if let Some(node_response) = node_response {

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
+use indexmap::IndexMap;
 use tracing::instrument;
 
 use crate::NodeId;
@@ -57,7 +58,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     pub(crate) size: Vec2,
     /// Open states of the dirs in this tree.
-    node_states: Vec<NodeState<NodeIdType>>,
+    node_states: IndexMap<NodeIdType, NodeState<NodeIdType>>,
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
     /// The last node that was clicked. Used for double click detection.
@@ -73,7 +74,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
-            node_states: Vec::new(),
+            node_states: IndexMap::new(),
             context_menu_was_open: false,
             last_clicked_node: None,
         }
@@ -146,14 +147,14 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     //#[instrument(skip_all)]
-    pub(crate) fn set_node_states(&mut self, states: Vec<NodeState<NodeIdType>>) {
+    pub(crate) fn set_node_states(&mut self, states: IndexMap<NodeIdType, NodeState<NodeIdType>>) {
         self.node_states = states;
         self.selected
-            .retain(|node_id| self.node_states.iter().any(|ns| &ns.id == node_id));
+            .retain(|node_id| self.node_states.contains_key(node_id));
     }
 
     //#[instrument(skip_all)]
-    pub(crate) fn node_states(&self) -> &Vec<NodeState<NodeIdType>> {
+    pub(crate) fn node_states(&self) -> &IndexMap<NodeIdType, NodeState<NodeIdType>> {
         &self.node_states
     }
 
@@ -165,7 +166,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Get the node state for an id.
     #[instrument(skip_all)]
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        self.node_states.iter().find(|ns| &ns.id == id)
+        self.node_states.get(id)
     }
     /// Get the node state for an id.
     //#[instrument(skip_all)]
@@ -173,7 +174,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         &mut self,
         id: &NodeIdType,
     ) -> Option<&mut NodeState<NodeIdType>> {
-        self.node_states.iter_mut().find(|ns| &ns.id == id)
+        self.node_states.get_mut(id)
     }
 
     /// Is the current drag valid.
@@ -236,7 +237,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 let pivot_pos = self.position_of_id(selection_pivot).unwrap();
                 self.node_states[clicked_pos.min(pivot_pos)..=clicked_pos.max(pivot_pos)]
                     .iter()
-                    .for_each(|node| self.selected.push(node.id));
+                    .for_each(|(id, _state)| self.selected.push(*id));
             } else {
                 self.selected.clear();
                 self.selected.push(clicked_id);
@@ -271,13 +272,13 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                     Key::ArrowUp => self.node_states[0..cursor_pos]
                         .iter()
                         .rev()
-                        .find(|node| node.visible),
+                        .find(|(_id, node)| node.visible),
                     Key::ArrowDown => self.node_states[(cursor_pos + 1)..]
                         .iter()
-                        .find(|node| node.visible),
+                        .find(|(_id, node)| node.visible),
                     _ => unreachable!(),
                 };
-                if let Some(new_cursor) = new_cursor {
+                if let Some((_id, new_cursor)) = new_cursor {
                     if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                         let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
@@ -286,7 +287,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                         self.node_states
                             [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
                             .iter()
-                            .for_each(|node| self.selected.push(node.id));
+                            .for_each(|(id, _node)| self.selected.push(*id));
                     } else if modifiers.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                     } else if modifiers.shift && modifiers.command && allow_multi_select {
@@ -372,7 +373,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     fn first_visible_child_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
         let mut valid_nodes = HashSet::new();
         valid_nodes.insert(id);
-        for node in &self.node_states {
+        for (_id, node) in &self.node_states {
             let is_child_of_target = node
                 .parent_id
                 .is_some_and(|parent_id| valid_nodes.contains(&parent_id));
@@ -388,6 +389,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     //#[instrument(skip_all)]
     fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
-        self.node_states.iter().position(|n| n.id == id)
+        self.node_states.get_index_of(&id)
     }
 }
