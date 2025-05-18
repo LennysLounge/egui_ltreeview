@@ -71,6 +71,14 @@ impl eframe::App for MyApp {
                 self.measurer.get_max().as_millis()
             ));
         });
+        if ctx.input(|i| i.viewport().close_requested()) {
+            println!(
+                "avg: {:?}\tlow: {:?}\thigh: {:?}",
+                self.measurer.get_average(),
+                self.measurer.get_min(),
+                self.measurer.get_max()
+            );
+        }
     }
 }
 
