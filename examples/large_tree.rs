@@ -1,6 +1,4 @@
-#![allow(unused)]
-
-use egui::{ThemePreference, Ui};
+use egui::ThemePreference;
 use egui_ltreeview::{NodeBuilder, TreeView, TreeViewBuilder, TreeViewState};
 use performance_measure::performance_measure::Measurer;
 use uuid::Uuid;
@@ -32,7 +30,7 @@ struct MyApp {
 impl MyApp {
     fn new() -> Self {
         MyApp {
-            tree: build_tree(100_000, 10),
+            tree: build_tree(100_000, 11),
             state: TreeViewState::default(),
             measurer: Measurer::new(None),
         }
@@ -77,26 +75,33 @@ impl eframe::App for MyApp {
 }
 
 fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
-    build_node(node, builder);
-}
-
-fn build_node(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
-    match node {
-        Node::Directory { id, children, name } => {
-            build_dir(id, name, builder);
-            for n in children.iter() {
-                build_node(n, builder);
-            }
-            builder.close_dir();
-        }
-        Node::Leaf { id, name } => {
-            builder.leaf(*id, name);
+    enum Stack<'a> {
+        Node(&'a Node),
+        CloseDir,
+    }
+    let mut stack = vec![Stack::Node(node)];
+    while !stack.is_empty() {
+        let elem = stack.pop().unwrap();
+        match elem {
+            Stack::Node(node) => match node {
+                Node::Directory { id, children, name } => {
+                    build_dir(id, name, builder);
+                    stack.push(Stack::CloseDir);
+                    for child in children {
+                        stack.push(Stack::Node(child))
+                    }
+                }
+                Node::Leaf { id, name } => {
+                    builder.leaf(*id, name);
+                }
+            },
+            Stack::CloseDir => builder.close_dir(),
         }
     }
 }
 
 fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) {
-    builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+    builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
 }
 
 #[derive(Debug)]
@@ -176,7 +181,7 @@ fn get_tree_width(node_count: u32, max_depth: u32) -> (u32, u32) {
 
 fn count_nodes(node: &Node) -> (i32, i32) {
     match node {
-        Node::Directory { id, children, name } => {
+        Node::Directory { children, .. } => {
             let mut dirs = 1;
             let mut leafs = 0;
             for child in children {
@@ -186,6 +191,6 @@ fn count_nodes(node: &Node) -> (i32, i32) {
             }
             (dirs, leafs)
         }
-        Node::Leaf { id, name } => (0, 1),
+        Node::Leaf { .. } => (0, 1),
     }
 }
