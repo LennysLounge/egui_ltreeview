@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use egui::Pos2;
-use indexmap::IndexMap;
 
-use crate::{NodeBuilder, NodeId, NodeResponse, NodeState, RowRectangles};
+use crate::{node_states::NodeStates, NodeBuilder, NodeId, NodeResponse, NodeState, RowRectangles};
 
 #[derive(Clone)]
 struct DirectoryState<NodeIdType> {
@@ -22,7 +21,7 @@ pub struct IndentState<NodeIdType> {
 }
 
 pub(crate) struct BuilderState<NodeIdType> {
-    nodes: IndexMap<NodeIdType, NodeState<NodeIdType>>,
+    nodes: NodeStates<NodeIdType>,
     row_rectangles: HashMap<NodeIdType, RowRectangles>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
@@ -30,7 +29,7 @@ pub(crate) struct BuilderState<NodeIdType> {
 impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
     pub fn new() -> Self {
         Self {
-            nodes: IndexMap::new(),
+            nodes: NodeStates::new(),
             row_rectangles: HashMap::new(),
             stack: Vec::new(),
             indents: Vec::new(),
@@ -124,12 +123,7 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
     pub fn get_indent(&self) -> usize {
         self.indents.len()
     }
-    pub fn take(
-        self,
-    ) -> (
-        IndexMap<NodeIdType, NodeState<NodeIdType>>,
-        HashMap<NodeIdType, RowRectangles>,
-    ) {
+    pub fn take(self) -> (NodeStates<NodeIdType>, HashMap<NodeIdType, RowRectangles>) {
         (self.nodes, self.row_rectangles)
     }
 }

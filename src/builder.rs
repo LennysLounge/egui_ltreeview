@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
 use egui::{pos2, vec2, LayerId, Order, Rangef, Rect, Response, Ui, WidgetText};
-use indexmap::IndexMap;
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, NodeState,
-    TreeViewSettings, TreeViewState,
+    builder_state::BuilderState, node::NodeBuilder, node_states::NodeStates, IndentHintStyle,
+    NodeId, TreeViewSettings, TreeViewState,
 };
 
 // #[derive(Clone)]
@@ -25,7 +24,7 @@ use crate::{
 // }
 
 pub(crate) struct TreeViewBuilderResult<NodeIdType> {
-    pub(crate) new_node_states: IndexMap<NodeIdType, NodeState<NodeIdType>>,
+    pub(crate) new_node_states: NodeStates<NodeIdType>,
     pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
     pub(crate) seconday_click: Option<NodeIdType>,
     pub(crate) context_menu_was_open: bool,
@@ -60,7 +59,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     ) -> Self {
         Self {
             result: TreeViewBuilderResult {
-                new_node_states: IndexMap::new(),
+                new_node_states: NodeStates::new(),
                 row_rectangles: HashMap::new(),
                 seconday_click: None,
                 interaction,

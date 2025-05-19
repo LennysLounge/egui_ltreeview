@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
 use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
-use indexmap::IndexMap;
 
-use crate::NodeId;
+use crate::{node_states::NodeStates, NodeId};
 
 /// State of the dragged node.
 #[derive(Clone)]
@@ -57,7 +56,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     pub(crate) size: Vec2,
     /// Open states of the dirs in this tree.
-    node_states: IndexMap<NodeIdType, NodeState<NodeIdType>>,
+    node_states: NodeStates<NodeIdType>,
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
     /// The last node that was clicked. Used for double click detection.
@@ -73,7 +72,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
-            node_states: IndexMap::new(),
+            node_states: NodeStates::new(),
             context_menu_was_open: false,
             last_clicked_node: None,
         }
@@ -137,13 +136,13 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             .and_then(|node_state| node_state.parent_id)
     }
 
-    pub(crate) fn set_node_states(&mut self, states: IndexMap<NodeIdType, NodeState<NodeIdType>>) {
+    pub(crate) fn set_node_states(&mut self, states: NodeStates<NodeIdType>) {
         self.node_states = states;
         self.selected
             .retain(|node_id| self.node_states.contains_key(node_id));
     }
 
-    pub(crate) fn node_states(&self) -> &IndexMap<NodeIdType, NodeState<NodeIdType>> {
+    pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
         &self.node_states
     }
 
@@ -365,6 +364,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
-        self.node_states.get_index_of(&id)
+        self.node_states.position_of_id(id)
     }
 }
