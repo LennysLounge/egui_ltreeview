@@ -165,6 +165,7 @@
 mod builder;
 mod node;
 mod state;
+mod builder_state;
 
 use egui::{
     self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key,
