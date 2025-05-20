@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use indexmap::IndexMap;
 
 use crate::{NodeId, NodeState};
@@ -43,12 +41,6 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
     }
     pub(crate) fn first<'a>(&'a self) -> Option<(&'a NodeIdType, &'a NodeState<NodeIdType>)> {
         self.states.first()
-    }
-    pub(crate) fn iter_child_nodes_of<'a>(
-        &'a self,
-        node_id: &NodeIdType,
-    ) -> ChildIter<'a, NodeIdType> {
-        ChildIter::new(self, node_id)
     }
     pub(crate) fn iter_from_to<'a>(
         &'a self,
@@ -100,44 +92,6 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
                 return Some(state);
             }
             current_id = state.next?;
-        }
-    }
-}
-
-/// Iterator over all child nodes of a directory node.
-pub(crate) struct ChildIter<'a, NodeIdType> {
-    valid_directories: HashSet<NodeIdType>,
-    nodes: &'a NodeStates<NodeIdType>,
-    next: Option<NodeIdType>,
-}
-impl<'a, NodeIdType: NodeId> Iterator for ChildIter<'a, NodeIdType> {
-    type Item = &'a NodeState<NodeIdType>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next_node = self.next.and_then(|next_id| self.nodes.get(&next_id))?;
-        let is_child_node = next_node
-            .parent_id
-            .is_some_and(|parent_id| self.valid_directories.contains(&parent_id));
-        if !is_child_node {
-            self.next = None;
-            return None;
-        }
-        if next_node.dir {
-            self.valid_directories.insert(next_node.id);
-        }
-        self.next = next_node.next;
-        Some(next_node)
-    }
-}
-impl<'a, NodeIdType: NodeId> ChildIter<'a, NodeIdType> {
-    pub fn new(nodes: &'a NodeStates<NodeIdType>, start_id: &NodeIdType) -> Self {
-        let next = nodes.get(start_id).and_then(|node_state| node_state.next);
-        let mut valid_directories = HashSet::new();
-        valid_directories.insert(*start_id);
-        Self {
-            valid_directories,
-            nodes,
-            next,
         }
     }
 }

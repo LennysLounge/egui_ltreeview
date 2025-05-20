@@ -315,13 +315,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                         node.open = true;
                     } else {
                         let node_id = node.id;
-                        let first_visible_child = self
-                            .node_states
-                            .iter_child_nodes_of(&node_id)
-                            .filter(|ns| ns.visible)
-                            .next();
-                        if let Some(first_visible_child) = first_visible_child {
-                            self.set_one_selected(first_visible_child.id);
+                        let next_visible = self.node_states.find_next_visible(&node_id);
+                        if let Some(next_visible) = next_visible {
+                            if self.node_states.is_child_of(&next_visible.id, &node_id) {
+                                self.set_one_selected(next_visible.id);
+                            }
                         }
                     }
                 }
