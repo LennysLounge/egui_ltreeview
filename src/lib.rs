@@ -121,7 +121,7 @@
 //! ```
 //!
 //!
-//! **A side node about sizing of the context menu:**  
+//! **A side node about sizing of the context menu:**
 //! All nodes and the fallback share the same context menu. In egui, the size of a context menu
 //! is determined the first time the context menu becomes visible. For this reason, you might have
 //! to set the size of the context menu manually with `ui.set_width` if you plan on having multiple
@@ -141,7 +141,7 @@
 //!
 //! ### Drag and Move actions
 //! The [`Drag`](`Action::Drag`) and [`Move`](`Action::Move`) can be used to implement a drag and drop
-//! interaction of the tree.  
+//! interaction of the tree.
 //! A drag that has not yet been dropped is represented by the [`Drag`](`Action::Drag`) action. With
 //! this action you can test if the drag is valid or not. If the drag invalid you may decide to remove the drop
 //! marker from the tree by calling the [`DragAndDrop::remove_drop_marker`] method of the action.
@@ -423,6 +423,25 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                         drop_marker_idx: background_shapes.drop_marker_idx,
                     }))
                 }
+            } else {
+                if let Some(cursor_pos) = ui.ctx().pointer_latest_pos() {
+                    if !response.rect.contains(cursor_pos) {
+                        if let Some(dragged) = &state.dragged {
+                            if ui.ctx().input(|i| i.pointer.primary_released()) {
+                                actions.push(Action::MoveExternal(DragAndDropExternal {
+                                    position: cursor_pos,
+                                    source: dragged.node_ids.clone()
+                                }));
+                            }
+                            else {
+                                actions.push(Action::DragExternal(DragAndDropExternal {
+                                    position: cursor_pos,
+                                    source: dragged.node_ids.clone()
+                                }));
+                            }
+                        }
+                    }
+                }
             }
         }
         // Create a selection action.
@@ -557,6 +576,8 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             .iter()
             .map(|ns| ns.id)
             .collect::<Vec<_>>();
+
+        let mut cursor_above_any_row = false;
         for node_id in node_ids {
             let RowRectangles {
                 row_rect,
@@ -579,6 +600,9 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             let cursor_above_row = interaction
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos));
+            if cursor_above_row {
+                cursor_above_any_row = true;
+            }
             if cursor_above_row && !closer_clicked {
                 let was_last_clicked = state.last_clicked_node.is_some_and(|last| last == node_id);
 
@@ -643,7 +667,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         let mut drop_position = None;
-        if state.drag_valid() {
+        if state.drag_valid() && cursor_above_any_row {
             // Search the node states for the correct drop target.
             // If a node is dragged to a child node then that drop target is invalid.
             let mut invalid_drop_targets = HashSet::new();
@@ -1131,6 +1155,23 @@ pub enum Action<NodeIdType> {
     /// view will create this action.
     /// Can be used to open a file for example.
     Activate(Activate<NodeIdType>),
+    /// Indicates that nodes are being dragged outside the TreeView
+    /// (but not yet dropped).
+    DragExternal(DragAndDropExternal<NodeIdType>),
+    /// Triggered when dragged nodes are released outside the TreeView.
+    /// Indicates that the nodes should be moved to an
+    /// external target (e.g., another panel).
+    MoveExternal(DragAndDropExternal<NodeIdType>),
+}
+
+/// Represents a drag-and-drop interaction where nodes are dragged outside the TreeView.
+/// Used to handle external drops (e.g., onto another UI component or the workspace).
+#[derive(Clone)]
+pub struct DragAndDropExternal<NodeIdType> {
+    /// The nodes that are being dragged
+    pub source : Vec<NodeIdType>,
+    /// The position where the dragged nodes are dropped outside of the TreeView.
+    pub position : egui::Pos2
 }
 
 /// Information about drag and drop action that is currently
