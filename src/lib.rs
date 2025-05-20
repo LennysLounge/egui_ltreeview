@@ -402,13 +402,14 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         let mut actions = Vec::new();
 
         let input_result = self.handle_input(ui, &tree_builder_result, state);
+        let drag_and_drop_position = self.get_drop_position(&tree_builder_result, state);
 
         self.draw_background(
             ui,
             state,
             &tree_builder_result,
             &background_shapes,
-            input_result.drag_and_drop,
+            drag_and_drop_position,
         );
 
         // Remember the size of the tree for next frame.
@@ -417,7 +418,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         // Create a drag or move action.
         if state.drag_valid() {
             if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(input_result.drag_and_drop)
+                state.dragged.as_ref().zip(drag_and_drop_position)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     actions.push(Action::Move(DragAndDrop {
@@ -567,7 +568,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         ui: &mut Ui,
         tree_view_result: &TreeViewBuilderResult<NodeIdType>,
         state: &mut TreeViewState<NodeIdType>,
-    ) -> InputResult<NodeIdType> {
+    ) -> InputResult {
         let TreeViewBuilderResult {
             row_rectangles,
             interaction,
@@ -587,7 +588,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
 
-        let mut cursor_above_any_row = false;
         for node_id in node_ids {
             let Some(RowRectangles {
                 row_rect,
@@ -611,9 +611,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             let cursor_above_row = interaction
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos));
-            if cursor_above_row {
-                cursor_above_any_row = true;
-            }
             if cursor_above_row && !closer_clicked {
                 let was_last_clicked = state.last_clicked_node.is_some_and(|last| last == node_id);
 
@@ -677,49 +674,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             }
         }
 
-        let mut drop_position = None;
-        if state.drag_valid() && cursor_above_any_row {
-            // Search the node states for the correct drop target.
-            // If a node is dragged to a child node then that drop target is invalid.
-            let mut invalid_drop_targets = HashSet::new();
-            if let Some(drag_state) = &state.dragged {
-                drag_state
-                    .node_ids
-                    .iter()
-                    .for_each(|id| _ = invalid_drop_targets.insert(*id));
-            }
-            for (id, node_state) in state.node_states() {
-                // Dropping a node on itself is technically a fine thing to do
-                // but it causes all sorts of problems for the implementer of the drop action.
-                // They would have to remove a node and then somehow insert it after itself.
-                // For that reason it is easier to disallow dropping on itself altogether.
-                if invalid_drop_targets.contains(id) {
-                    continue;
-                }
-                // If the parent of a node is in the list of invalid drop targets that means
-                // it is a distant child of the dragged node. This is not allowed
-                if let Some(parent_id) = node_state.parent_id {
-                    if invalid_drop_targets.contains(&parent_id) {
-                        invalid_drop_targets.insert(*id);
-                        continue;
-                    }
-                }
-                // At this point we have a potentially valid node to drop on.
-                // Now we only need to check if the mouse is over the node, get the correct
-                // drop quarter and then get the correct drop position.
-                let Some(row_rectangles) = row_rectangles.get(id) else {
-                    continue;
-                };
-                let drop_quarter = interaction
-                    .hover_pos()
-                    .and_then(|pos| DropQuarter::new(row_rectangles.row_rect.y_range(), pos.y));
-                if let Some(drop_quarter) = drop_quarter {
-                    drop_position = get_drop_position_node(node_state, &drop_quarter);
-                    break;
-                }
-            }
-        }
-
         if ui.memory(|m| m.has_focus(self.id)) {
             // If the widget is focused but no node is selected we want to select any node
             // to allow navigating throught the tree.
@@ -771,10 +725,56 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         }
 
         InputResult {
-            drag_and_drop: drop_position,
             selection_changed,
             should_activate,
         }
+    }
+
+    fn get_drop_position(
+        &mut self,
+        tree_view_result: &TreeViewBuilderResult<NodeIdType>,
+        state: &mut TreeViewState<NodeIdType>,
+    ) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
+        if !state.drag_valid() {
+            return None;
+        }
+        let drag_state = state.dragged.as_ref()?;
+        let hover_pos = tree_view_result.interaction.hover_pos()?;
+        let (hovered_id, drop_quarter) = tree_view_result
+            .row_rectangles
+            .iter()
+            .filter_map(|(id, row)| {
+                let drop_quarter = DropQuarter::new(row.row_rect.y_range(), hover_pos.y)?;
+                Some((id, drop_quarter))
+            })
+            .next()?;
+
+        // At this point we know that the drag is valid and the cursor
+        // is hovering above a row in the tree.
+
+        // Dropping a node on itself is technically a fine thing to do
+        // but it causes all sorts of problems for the implementer of the drop action.
+        // They would have to remove a node and then somehow insert it after itself.
+        // For that reason it is easier to disallow dropping on itself altogether.
+        if drag_state.node_ids.contains(hovered_id) {
+            return None;
+        }
+
+        // If the hovered node is a child of one of the dragged node then this
+        // is not a valid drop target
+
+        let is_hovering_on_child_of_dragged_node = drag_state
+            .node_ids
+            .iter()
+            .any(|id| state.node_states().is_child_of(hovered_id, id));
+        if is_hovering_on_child_of_dragged_node {
+            return None;
+        }
+
+        let hovered_node = state.node_state_of(hovered_id).expect(
+            "If the node exists in the row rectangles it should also exist in the node states",
+        );
+        return get_drop_position_node(hovered_node, &drop_quarter);
     }
 
     fn draw_background(
@@ -1241,8 +1241,7 @@ impl BackgroundShapes {
     }
 }
 
-struct InputResult<NodeIdType> {
-    drag_and_drop: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+struct InputResult {
     selection_changed: bool,
     should_activate: bool,
 }
@@ -1260,7 +1259,7 @@ impl DropQuarter {
 
         let h0 = range.min;
         let h1 = range.min + DROP_LINE_HOVER_HEIGHT;
-        let h2 = (range.min + range.max) / 2.0;
+        let h2 = range.center();
         let h3 = range.max - DROP_LINE_HOVER_HEIGHT;
         let h4 = range.max;
 

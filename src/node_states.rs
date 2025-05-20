@@ -57,6 +57,24 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
     ) -> ChildIter<'a, NodeIdType> {
         ChildIter::new(self, node_id)
     }
+
+    pub(crate) fn is_child_of(&self, child_id: &NodeIdType, parent_id: &NodeIdType) -> bool {
+        let mut current_id = *child_id;
+
+        loop {
+            let Some(current_node) = self.states.get(&current_id) else {
+                return false;
+            };
+            let Some(current_parent_id) = current_node.parent_id else {
+                return false;
+            };
+
+            if current_parent_id == *parent_id {
+                return true;
+            }
+            current_id = current_parent_id;
+        }
+    }
 }
 
 impl<NodeIdType> Index<usize> for NodeStates<NodeIdType> {
