@@ -215,12 +215,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         } else if modifiers.shift_only() && allow_multi_select {
             if let Some(selection_pivot) = self.selection_pivot {
                 self.selected.clear();
-
-                let clicked_pos = self.position_of_id(clicked_id).unwrap();
-                let pivot_pos = self.position_of_id(selection_pivot).unwrap();
-                self.node_states[clicked_pos.min(pivot_pos)..=clicked_pos.max(pivot_pos)]
-                    .iter()
-                    .for_each(|(id, _state)| self.selected.push(*id));
+                self.node_states
+                    .iter_from_to(&clicked_id, &selection_pivot)
+                    .for_each(|ns| self.selected.push(ns.id));
             } else {
                 self.selected.clear();
                 self.selected.push(clicked_id);
@@ -257,13 +254,10 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 if let Some(new_cursor) = new_cursor {
                     if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
-                        let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
-                        let pivot_pos = self.position_of_id(pivot_id).unwrap();
                         self.selected.clear();
                         self.node_states
-                            [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
-                            .iter()
-                            .for_each(|(id, _node)| self.selected.push(*id));
+                            .iter_from_to(&new_cursor.id, &pivot_id)
+                            .for_each(|ns| self.selected.push(ns.id));
                     } else if modifiers.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                     } else if modifiers.shift && modifiers.command && allow_multi_select {
@@ -346,9 +340,5 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             next_parent = node.parent_id;
         }
         None
-    }
-
-    fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
-        self.node_states.position_of_id(id)
     }
 }

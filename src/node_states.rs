@@ -1,7 +1,4 @@
-use std::{
-    collections::HashSet,
-    ops::{Index, Range, RangeFrom, RangeInclusive},
-};
+use std::collections::HashSet;
 
 use indexmap::IndexMap;
 
@@ -35,10 +32,6 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
     pub(crate) fn get_mut(&mut self, id: &NodeIdType) -> Option<&mut NodeState<NodeIdType>> {
         self.states.get_mut(id)
     }
-
-    pub(crate) fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
-        self.states.get_index_of(&id)
-    }
     pub(crate) fn insert(&mut self, node_id: NodeIdType, state: NodeState<NodeIdType>) {
         if self.first.is_none() {
             self.first = Some(node_id);
@@ -56,6 +49,13 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
         node_id: &NodeIdType,
     ) -> ChildIter<'a, NodeIdType> {
         ChildIter::new(self, node_id)
+    }
+    pub(crate) fn iter_from_to<'a>(
+        &'a self,
+        from: &NodeIdType,
+        to: &NodeIdType,
+    ) -> IterFromTo<'a, NodeIdType> {
+        IterFromTo::new(self, *from, *to)
     }
 
     pub(crate) fn is_child_of(&self, child_id: &NodeIdType, parent_id: &NodeIdType) -> bool {
@@ -104,29 +104,6 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
     }
 }
 
-impl<NodeIdType> Index<usize> for NodeStates<NodeIdType> {
-    type Output = NodeState<NodeIdType>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.states[index]
-    }
-}
-impl<NodeIdType> Index<RangeInclusive<usize>> for NodeStates<NodeIdType> {
-    type Output = indexmap::map::Slice<NodeIdType, NodeState<NodeIdType>>;
-
-    fn index(&self, index: RangeInclusive<usize>) -> &Self::Output {
-        &self.states[index]
-    }
-}
-
-impl<NodeIdType> Index<RangeFrom<usize>> for NodeStates<NodeIdType> {
-    type Output = indexmap::map::Slice<NodeIdType, NodeState<NodeIdType>>;
-
-    fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
-        &self.states[index]
-    }
-}
-
 /// Iterator over all child nodes of a directory node.
 pub(crate) struct ChildIter<'a, NodeIdType> {
     valid_directories: HashSet<NodeIdType>,
@@ -161,6 +138,60 @@ impl<'a, NodeIdType: NodeId> ChildIter<'a, NodeIdType> {
             valid_directories,
             nodes,
             next,
+        }
+    }
+}
+
+pub(crate) enum IterFromTo<'a, NodeIdType> {
+    Invalid,
+    Valid {
+        nodes: &'a NodeStates<NodeIdType>,
+        current: NodeIdType,
+        to: NodeIdType,
+    },
+}
+impl<'a, NodeIdType: NodeId> Iterator for IterFromTo<'a, NodeIdType> {
+    type Item = &'a NodeState<NodeIdType>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            IterFromTo::Invalid => None,
+            IterFromTo::Valid { nodes, current, to } => {
+                let state = nodes.get(&current)?;
+                match state.next {
+                    Some(next) => {
+                        if current == to {
+                            *self = Self::Invalid
+                        } else {
+                            *current = next
+                        }
+                    }
+                    None => *self = Self::Invalid,
+                }
+                Some(state)
+            }
+        }
+    }
+}
+impl<'a, NodeIdType: NodeId> IterFromTo<'a, NodeIdType> {
+    pub fn new(nodes: &'a NodeStates<NodeIdType>, a: NodeIdType, b: NodeIdType) -> Self {
+        let a_state = nodes.get(&a);
+        let b_state = nodes.get(&b);
+
+        let (from, to) = match a_state.zip(b_state) {
+            Some((a, b)) => {
+                if a.position < b.position {
+                    (a.id, b.id)
+                } else {
+                    (b.id, a.id)
+                }
+            }
+            None => return Self::Invalid,
+        };
+        Self::Valid {
+            nodes,
+            current: from,
+            to,
         }
     }
 }
