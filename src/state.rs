@@ -34,6 +34,12 @@ pub(crate) struct NodeState<NodeIdType> {
     pub dir: bool,
     /// Wether this node can be activated.
     pub activatable: bool,
+    /// The position of this node in the tree.
+    pub position: usize,
+    /// The node id of the previous node.
+    pub previous: Option<NodeIdType>,
+    /// The node id of the next node.
+    pub next: Option<NodeIdType>,
 }
 
 /// Represents the state of the tree view.

@@ -7,12 +7,14 @@ use crate::{NodeId, NodeState};
 #[derive(Clone)]
 pub(crate) struct NodeStates<NodeIdType> {
     states: IndexMap<NodeIdType, NodeState<NodeIdType>>,
+    first: Option<NodeIdType>,
 }
 
 impl<NodeIdType> NodeStates<NodeIdType> {
     pub fn new() -> Self {
         Self {
             states: IndexMap::new(),
+            first: None,
         }
     }
 }
@@ -35,6 +37,9 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
         self.states.get_index_of(&id)
     }
     pub(crate) fn insert(&mut self, node_id: NodeIdType, state: NodeState<NodeIdType>) {
+        if self.first.is_none() {
+            self.first = Some(node_id);
+        }
         self.states.insert(node_id, state);
     }
     pub(crate) fn iter<'a>(&'a self) -> indexmap::map::Iter<'a, NodeIdType, NodeState<NodeIdType>> {

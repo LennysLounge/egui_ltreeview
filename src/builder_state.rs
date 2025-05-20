@@ -25,6 +25,8 @@ pub(crate) struct BuilderState<NodeIdType> {
     row_rectangles: HashMap<NodeIdType, RowRectangles>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
+    node_count: usize,
+    last_node_id_added: Option<NodeIdType>,
 }
 impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
     pub fn new() -> Self {
@@ -33,6 +35,8 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
             row_rectangles: HashMap::new(),
             stack: Vec::new(),
             indents: Vec::new(),
+            node_count: 0,
+            last_node_id_added: None,
         }
     }
     pub fn insert_node(&mut self, node: &NodeBuilder<NodeIdType>) {
@@ -46,8 +50,19 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
                 drop_allowed: node.drop_allowed,
                 dir: node.is_dir,
                 activatable: node.activatable,
+                position: self.node_count,
+                previous: self.last_node_id_added,
+                next: None,
             },
         );
+        if let Some(last_node_id_added) = self.last_node_id_added {
+            self.nodes
+                .get_mut(&last_node_id_added)
+                .expect("The previous added node id should always point to a node in the map")
+                .next = Some(node.id);
+        }
+        self.last_node_id_added = Some(node.id);
+        self.node_count += 1;
     }
 
     pub fn insert_node_response(
