@@ -249,18 +249,12 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 let Some(current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
                     break 'arm;
                 };
-                let cursor_pos = self.position_of_id(current_cursor_id).unwrap();
                 let new_cursor = match key {
-                    Key::ArrowUp => self.node_states[0..cursor_pos]
-                        .iter()
-                        .rev()
-                        .find(|(_id, node)| node.visible),
-                    Key::ArrowDown => self.node_states[(cursor_pos + 1)..]
-                        .iter()
-                        .find(|(_id, node)| node.visible),
+                    Key::ArrowUp => self.node_states.find_previously_visible(&current_cursor_id),
+                    Key::ArrowDown => self.node_states.find_next_visible(&current_cursor_id),
                     _ => unreachable!(),
                 };
-                if let Some((_id, new_cursor)) = new_cursor {
+                if let Some(new_cursor) = new_cursor {
                     if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                         let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();

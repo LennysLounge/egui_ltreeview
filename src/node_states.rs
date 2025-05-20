@@ -75,6 +75,33 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
             current_id = current_parent_id;
         }
     }
+
+    pub(crate) fn find_previously_visible(
+        &self,
+        start_id: &NodeIdType,
+    ) -> Option<&NodeState<NodeIdType>> {
+        let mut current_id = self.states.get(start_id)?.previous?;
+        loop {
+            let state = self.states.get(&current_id)?;
+            if state.visible {
+                return Some(state);
+            }
+            current_id = state.previous?;
+        }
+    }
+    pub(crate) fn find_next_visible(
+        &self,
+        start_id: &NodeIdType,
+    ) -> Option<&NodeState<NodeIdType>> {
+        let mut current_id = self.states.get(start_id)?.next?;
+        loop {
+            let state = self.states.get(&current_id)?;
+            if state.visible {
+                return Some(state);
+            }
+            current_id = state.next?;
+        }
+    }
 }
 
 impl<NodeIdType> Index<usize> for NodeStates<NodeIdType> {
@@ -96,14 +123,6 @@ impl<NodeIdType> Index<RangeFrom<usize>> for NodeStates<NodeIdType> {
     type Output = indexmap::map::Slice<NodeIdType, NodeState<NodeIdType>>;
 
     fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
-        &self.states[index]
-    }
-}
-
-impl<NodeIdType> Index<Range<usize>> for NodeStates<NodeIdType> {
-    type Output = indexmap::map::Slice<NodeIdType, NodeState<NodeIdType>>;
-
-    fn index(&self, index: Range<usize>) -> &Self::Output {
         &self.states[index]
     }
 }
