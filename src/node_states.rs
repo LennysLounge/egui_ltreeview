@@ -108,16 +108,6 @@ impl<NodeIdType> Index<Range<usize>> for NodeStates<NodeIdType> {
     }
 }
 
-impl<'a, NodeIdType> IntoIterator for &'a NodeStates<NodeIdType> {
-    type Item = (&'a NodeIdType, &'a NodeState<NodeIdType>);
-
-    type IntoIter = indexmap::map::Iter<'a, NodeIdType, NodeState<NodeIdType>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.states.iter()
-    }
-}
-
 /// Iterator over all child nodes of a directory node.
 pub(crate) struct ChildIter<'a, NodeIdType> {
     valid_directories: HashSet<NodeIdType>,

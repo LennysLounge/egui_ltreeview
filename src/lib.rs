@@ -172,7 +172,7 @@ use egui::{
     self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, InnerResponse, Key,
     Layout, Modifiers, NumExt, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
-use std::{cmp::Ordering, collections::HashSet, hash::Hash};
+use std::{cmp::Ordering, hash::Hash};
 
 pub use builder::*;
 pub use node::*;
@@ -957,22 +957,24 @@ fn simplify_selection_for_dnd<NodeIdType: NodeId>(
     // When multiple nodes are selected it is possible that a folder is selected aswell as a
     // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.
     let mut result = Vec::new();
-    let mut known_nodes = HashSet::new();
-    for (id, node) in state.node_states() {
-        if !nodes.contains(id) {
-            continue;
-        }
+    let mut node_states = nodes
+        .into_iter()
+        .filter_map(|id| state.node_states().get(id))
+        .collect::<Vec<_>>();
+    node_states.sort_by_key(|ns| ns.position);
 
-        let is_unknown_node = node
-            .parent_id
-            .as_ref()
-            .map_or(true, |parent_id| !known_nodes.contains(parent_id));
-        if is_unknown_node {
-            result.push(*id);
+    'i: for i in 0..node_states.len() {
+        for j in 0..i {
+            let i_is_child_of_j = state
+                .node_states()
+                .is_child_of(&node_states[i].id, &node_states[j].id);
+            if i_is_child_of_j {
+                continue 'i;
+            }
         }
-        known_nodes.insert(*id);
+        // is is not a child of any of 0..j
+        result.push(node_states[i].id);
     }
-
     result
 }
 
