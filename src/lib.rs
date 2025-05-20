@@ -824,24 +824,16 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     // For directories the drop marker should expand its height to include all
                     // its child nodes. To do this, first we have to find its last child node,
                     // then we can get the correct y range.
-                    let mut last_child = None;
-                    let mut child_nodes = HashSet::<NodeIdType>::new();
-                    child_nodes.insert(parent_id);
-                    for (_, node) in state.node_states() {
-                        if let Some(parent_id) = node.parent_id {
-                            if child_nodes.contains(&parent_id) {
-                                child_nodes.insert(node.id);
-                                last_child = Some(node.id);
-                            }
-                        }
-                    }
-                    let y_range = match last_child {
-                        Some(last_child_id) => {
-                            let row_rectangles_end = result.row_rectangles.get(&last_child_id);
-                            let y = match row_rectangles_end {
-                                Some(r) => r.row_rect.max.y,
-                                None => ui.clip_rect().max.y,
-                            };
+                    let last_visible_child_row = result
+                        .row_rectangles
+                        .iter()
+                        .filter(|(id, _row)| state.node_states().is_child_of(&id, &parent_id))
+                        .map(|(_, value)| value)
+                        .max_by_key(|row| row.row_rect.max.y as i32);
+
+                    let y_range = match last_visible_child_row {
+                        Some(last_visible_child_row) => {
+                            let y = last_visible_child_row.row_rect.max.y;
                             Rangef::new(row_rectangles_start.row_rect.min.y, y)
                         }
                         None => row_rectangles_start.row_rect.y_range(),
