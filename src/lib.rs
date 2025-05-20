@@ -183,9 +183,9 @@ pub use state::*;
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
 #[cfg(not(feature = "persistence"))]
-pub trait NodeId: Clone + Copy + PartialEq + Eq + Hash {}
+pub trait NodeId: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
 #[cfg(not(feature = "persistence"))]
-impl<T> NodeId for T where T: Clone + Copy + PartialEq + Eq + Hash {}
+impl<T> NodeId for T where T: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
 
 #[cfg(feature = "persistence")]
 /// A node in the tree is identified by an id that must implement this trait.
@@ -441,13 +441,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                             if ui.ctx().input(|i| i.pointer.primary_released()) {
                                 actions.push(Action::MoveExternal(DragAndDropExternal {
                                     position: cursor_pos,
-                                    source: dragged.node_ids.clone()
+                                    source: dragged.node_ids.clone(),
                                 }));
-                            }
-                            else {
+                            } else {
                                 actions.push(Action::DragExternal(DragAndDropExternal {
                                     position: cursor_pos,
-                                    source: dragged.node_ids.clone()
+                                    source: dragged.node_ids.clone(),
                                 }));
                             }
                         }
@@ -1177,9 +1176,9 @@ pub enum Action<NodeIdType> {
 #[derive(Clone)]
 pub struct DragAndDropExternal<NodeIdType> {
     /// The nodes that are being dragged
-    pub source : Vec<NodeIdType>,
+    pub source: Vec<NodeIdType>,
     /// The position where the dragged nodes are dropped outside of the TreeView.
-    pub position : egui::Pos2
+    pub position: egui::Pos2,
 }
 
 /// Information about drag and drop action that is currently

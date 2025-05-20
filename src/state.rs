@@ -324,15 +324,19 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 }
                 let selected_node = self.selected[0];
                 let node = self.node_state_of_mut(&selected_node).unwrap();
-                if !node.open && node.dir {
-                    node.open = true;
-                } else {
-                    let node_id = node.id;
-                    if let Some(first_child_id) = self.first_visible_child_of(node_id).map(|n| n.id)
-                    {
-                        self.selected.clear();
-                        self.selected.push(first_child_id);
-                        self.selection_pivot = Some(first_child_id);
+                if node.dir {
+                    if !node.open {
+                        node.open = true;
+                    } else {
+                        let node_id = node.id;
+                        let first_visible_child = self
+                            .node_states
+                            .iter_child_nodes_of(&node_id)
+                            .filter(|ns| ns.visible)
+                            .next();
+                        if let Some(first_visible_child) = first_visible_child {
+                            self.set_one_selected(first_visible_child.id);
+                        }
                     }
                 }
             }
@@ -348,23 +352,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 return Some(node);
             }
             next_parent = node.parent_id;
-        }
-        None
-    }
-
-    fn first_visible_child_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        let mut valid_nodes = HashSet::new();
-        valid_nodes.insert(id);
-        for (_id, node) in &self.node_states {
-            let is_child_of_target = node
-                .parent_id
-                .is_some_and(|parent_id| valid_nodes.contains(&parent_id));
-            if is_child_of_target {
-                if node.visible {
-                    return Some(node);
-                }
-                valid_nodes.insert(node.id);
-            }
         }
         None
     }
