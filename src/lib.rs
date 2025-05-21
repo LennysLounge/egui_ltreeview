@@ -582,20 +582,11 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         let mut selection_changed = false;
         let mut should_activate = false;
 
-        let node_ids = state
-            .node_states()
-            .iter()
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-
-        for node_id in node_ids {
-            let Some(RowRectangles {
+        for (node_id, row) in row_rectangles {
+            let RowRectangles {
                 row_rect,
                 closer_rect,
-            }) = row_rectangles.get(&node_id)
-            else {
-                continue;
-            };
+            } = row;
 
             // Closer interactions
             let closer_clicked = closer_rect
@@ -612,7 +603,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 .hover_pos()
                 .is_some_and(|pos| row_rect.contains(pos));
             if cursor_above_row && !closer_clicked {
-                let was_last_clicked = state.last_clicked_node.is_some_and(|last| last == node_id);
+                let was_last_clicked = state.last_clicked_node.is_some_and(|last| last == *node_id);
 
                 if interaction.double_clicked() && was_last_clicked {
                     let node_state = state.node_state_of_mut(&node_id).unwrap();
@@ -640,14 +631,14 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     // React to primary clicking
                     selection_changed = true;
                     state.handle_click(
-                        node_id,
+                        *node_id,
                         ui.ctx().input(|i| i.modifiers),
                         self.settings.allow_multi_select,
                     );
                 }
 
                 if interaction.clicked() {
-                    state.last_clicked_node = Some(node_id);
+                    state.last_clicked_node = Some(*node_id);
                 }
 
                 // React to a dragging
@@ -663,7 +654,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     let node_ids = if state.is_selected(&node_id) {
                         state.selected().clone()
                     } else {
-                        vec![node_id]
+                        vec![*node_id]
                     };
                     state.dragged = Some(DragState {
                         node_ids,

@@ -36,9 +36,6 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
         }
         self.states.insert(node_id, state);
     }
-    pub(crate) fn iter<'a>(&'a self) -> indexmap::map::Iter<'a, NodeIdType, NodeState<NodeIdType>> {
-        self.states.iter()
-    }
     pub(crate) fn first<'a>(&'a self) -> Option<(&'a NodeIdType, &'a NodeState<NodeIdType>)> {
         self.states.first()
     }
