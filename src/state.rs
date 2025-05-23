@@ -140,12 +140,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             .and_then(|node_state| node_state.parent_id)
     }
 
-    pub(crate) fn set_node_states(&mut self, states: NodeStates<NodeIdType>) {
-        self.node_states = states;
-        self.selected
-            .retain(|node_id| self.node_states.contains_key(node_id));
-    }
-
     pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
         &self.node_states
     }
@@ -173,19 +167,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             .as_ref()
             .is_some_and(|drag_state| drag_state.drag_valid)
     }
-    /// Is the given id part of a valid drag.
-    pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
-        self.dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
-    }
 
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
         self.selected.contains(id)
-    }
-
-    pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
-        self.secondary_selection.as_ref().is_some_and(|n| n == id)
     }
 
     pub(crate) fn handle_click(
@@ -328,5 +312,79 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             next_parent = node.parent_id;
         }
         None
+    }
+
+    pub(crate) fn prune_selection_to_known_ids(&mut self) {
+        self.selected.retain(|id| self.node_states.contains_key(id));
+    }
+    pub(crate) fn prune_selection_to_single_id(&mut self) {
+        if self.selected.len() > 1 {
+            let new_selection = self.selected[0];
+            self.set_one_selected(new_selection);
+        }
+    }
+
+    pub(crate) fn split<'a>(
+        &'a mut self,
+    ) -> (
+        &'a mut NodeStates<NodeIdType>,
+        PartialTreeViewState<'a, NodeIdType>,
+    ) {
+        let TreeViewState {
+            selected,
+            dragged,
+            secondary_selection,
+            node_states,
+            ..
+        } = self;
+        (
+            node_states,
+            PartialTreeViewState {
+                selected,
+                dragged,
+                secondary_selection,
+            },
+        )
+    }
+}
+
+/// Represents the state of the tree view.
+///
+/// This holds which node is selected and the open/close
+/// state of the directories.
+#[derive(Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
+    /// Id of the node that was selected.
+    selected: &'a Vec<NodeIdType>,
+    /// Information about the dragged node.
+    pub(crate) dragged: &'a Option<DragState<NodeIdType>>,
+    /// Id of the node that was right clicked.
+    pub(crate) secondary_selection: &'a Option<NodeIdType>,
+}
+impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
+    /// Is the current drag valid.
+    /// `false` if no drag is currently registered.
+    pub(crate) fn drag_valid(&self) -> bool {
+        self.dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid)
+    }
+    /// Is the given id part of a valid drag.
+    pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
+        self.dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
+    }
+
+    pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
+        self.selected.contains(id)
+    }
+
+    pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
+        self.secondary_selection.as_ref().is_some_and(|n| n == id)
+    }
+    pub(crate) fn selected_count(&self) -> usize {
+        self.selected.len()
     }
 }

@@ -1,8 +1,8 @@
 use egui::{pos2, vec2, Rangef, Rect, Ui, WidgetText};
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, RowRectangles,
-    TreeViewSettings, TreeViewState, UiData,
+    builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, PartialTreeViewState,
+    RowRectangles, TreeViewSettings, TreeViewState, UiData,
 };
 
 /// The builder used to construct the tree.
@@ -10,25 +10,26 @@ use crate::{
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
-    state: &'ui TreeViewState<NodeIdType>,
+    state: PartialTreeViewState<'ui, NodeIdType>,
     settings: &'ui TreeViewSettings,
     ui_data: &'ui mut UiData<NodeIdType>,
-    builder_state: BuilderState<NodeIdType>,
+    builder_state: BuilderState<'ui, NodeIdType>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        state: &'ui TreeViewState<NodeIdType>,
+        state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
         ui_data: &'ui mut UiData<NodeIdType>,
     ) -> Self {
+        let (node_states, state) = state.split();
         Self {
             ui_data,
             state,
             settings,
             ui,
-            builder_state: BuilderState::new(),
+            builder_state: BuilderState::new(node_states),
         }
     }
 
@@ -57,11 +58,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         self.node(NodeBuilder::dir(id).label_ui(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
         }));
-    }
-
-    pub(crate) fn get_result(self) -> () {
-        let new_node_states = self.builder_state.take();
-        self.ui_data.new_node_states = new_node_states;
     }
 
     /// Close the current directory.
@@ -118,14 +114,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     ///
     /// If the node is a directory, you must call [`TreeViewBuilder::close_dir`] to close the directory.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
-        let open = self
-            .state
-            .node_state_of(&node.id)
-            .map(|node_state| node_state.open)
-            .unwrap_or(node.default_open);
-        node.set_is_open(open);
-        node.set_indent(self.builder_state.get_indent());
-        self.builder_state.insert_node(&node);
+        node = self.builder_state.update_and_insert_node(node);
 
         let node_response = self.node_internal(&mut node);
 
@@ -220,7 +209,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let was_right_clicked = self.ui_data.seconday_click.is_some_and(|id| id == node.id)
             || self.state.is_secondary_selected(&node.id);
         let was_only_target = !self.state.is_selected(&node.id)
-            || self.state.is_selected(&node.id) && self.state.selected().len() == 1;
+            || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
         if was_right_clicked && was_only_target {
             self.ui_data.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
         }

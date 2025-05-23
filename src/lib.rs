@@ -172,7 +172,6 @@ use egui::{
     self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout,
     Modifiers, NumExt, Order, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
-use node_states::NodeStates;
 use std::{cmp::Ordering, collections::HashMap, hash::Hash};
 
 pub use builder::*;
@@ -381,9 +380,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             )
         });
 
-        if !settings.allow_multi_select && state.selected().len() > 1 {
-            let new_selection = state.selected()[0];
-            state.set_one_selected(new_selection);
+        if !settings.allow_multi_select {
+            state.prune_selection_to_single_id();
         }
 
         let (ui_data, response) = draw_foreground(
@@ -396,12 +394,12 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         );
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
-        state.set_node_states(ui_data.new_node_states.clone());
+        state.prune_selection_to_known_ids();
 
         draw_background(ui, state, &ui_data);
 
         let input_result = handle_input(ui, id, &settings, &ui_data, state);
-        
+
         let mut actions = Vec::new();
         // Create a drag or move action.
         if state.drag_valid() {
@@ -501,7 +499,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     );
 
     let mut ui_data = UiData {
-        new_node_states: NodeStates::new(),
         row_rectangles: HashMap::new(),
         seconday_click: None,
         interaction: interact_no_expansion(
@@ -529,7 +526,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
             let mut tree_builder = TreeViewBuilder::new(ui, state, settings, &mut ui_data);
             build_tree_view(&mut tree_builder);
-            tree_builder.get_result();
 
             // Add negative space because the place will add the item spacing on top of this.
             ui.add_space(-ui.spacing().item_spacing.y * 0.5);
@@ -1241,7 +1237,6 @@ impl DropQuarter {
 }
 
 struct UiData<NodeIdType> {
-    new_node_states: NodeStates<NodeIdType>,
     row_rectangles: HashMap<NodeIdType, RowRectangles>,
     seconday_click: Option<NodeIdType>,
     context_menu_was_open: bool,

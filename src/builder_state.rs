@@ -18,22 +18,37 @@ pub struct IndentState<NodeIdType> {
     positions: Vec<Pos2>,
 }
 
-pub(crate) struct BuilderState<NodeIdType> {
-    nodes: NodeStates<NodeIdType>,
+pub(crate) struct BuilderState<'a, NodeIdType> {
+    nodes: &'a mut NodeStates<NodeIdType>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
     node_count: usize,
     last_node_id_added: Option<NodeIdType>,
 }
-impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
-    pub fn new() -> Self {
+impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
+    pub fn new(nodes: &'a mut NodeStates<NodeIdType>) -> Self {
         Self {
-            nodes: NodeStates::new(),
+            nodes,
             stack: Vec::new(),
             indents: Vec::new(),
             node_count: 0,
             last_node_id_added: None,
         }
+    }
+
+    pub fn update_and_insert_node<'ui>(
+        &mut self,
+        mut node: NodeBuilder<'ui, NodeIdType>,
+    ) -> NodeBuilder<'ui, NodeIdType> {
+        let open = self
+            .nodes
+            .get(&node.id)
+            .map(|node_state| node_state.open)
+            .unwrap_or(node.default_open);
+        node.set_is_open(open);
+        node.set_indent(self.get_indent());
+        self.insert_node(&node);
+        node
     }
     pub fn insert_node(&mut self, node: &NodeBuilder<NodeIdType>) {
         self.nodes.insert(
@@ -126,8 +141,5 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
     }
     pub fn get_indent(&self) -> usize {
         self.indents.len()
-    }
-    pub fn take(self) -> NodeStates<NodeIdType> {
-        self.nodes
     }
 }
