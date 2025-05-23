@@ -109,7 +109,7 @@ fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
 }
 
 fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) {
-    builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
+    builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
 }
 
 #[derive(Debug)]
