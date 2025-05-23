@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use egui::Pos2;
 
-use crate::{node_states::NodeStates, NodeBuilder, NodeId, NodeResponse, NodeState, RowRectangles};
+use crate::{node_states::NodeStates, NodeBuilder, NodeId, NodeResponse, NodeState};
 
 #[derive(Clone)]
 struct DirectoryState<NodeIdType> {
@@ -22,7 +20,6 @@ pub struct IndentState<NodeIdType> {
 
 pub(crate) struct BuilderState<NodeIdType> {
     nodes: NodeStates<NodeIdType>,
-    row_rectangles: HashMap<NodeIdType, RowRectangles>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
     node_count: usize,
@@ -32,7 +29,6 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
     pub fn new() -> Self {
         Self {
             nodes: NodeStates::new(),
-            row_rectangles: HashMap::new(),
             stack: Vec::new(),
             indents: Vec::new(),
             node_count: 0,
@@ -81,13 +77,6 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
                     .or(node_rects.icon)
                     .unwrap_or(node_rects.label)
                     .left_center(),
-            );
-            self.row_rectangles.insert(
-                node.id,
-                RowRectangles {
-                    row_rect: node_rects.row,
-                    closer_rect: node_rects.closer,
-                },
             );
         }
 
@@ -138,7 +127,7 @@ impl<NodeIdType: NodeId> BuilderState<NodeIdType> {
     pub fn get_indent(&self) -> usize {
         self.indents.len()
     }
-    pub fn take(self) -> (NodeStates<NodeIdType>, HashMap<NodeIdType, RowRectangles>) {
-        (self.nodes, self.row_rectangles)
+    pub fn take(self) -> NodeStates<NodeIdType> {
+        self.nodes
     }
 }

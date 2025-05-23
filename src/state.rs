@@ -188,16 +188,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         self.secondary_selection.as_ref().is_some_and(|n| n == id)
     }
 
-    pub(crate) fn prepare(&mut self, multi_select_allowed: bool) {
-        if !multi_select_allowed && self.selected.len() > 1 {
-            let new_selection = self.selected[0];
-            self.selected.clear();
-            self.selected.push(new_selection);
-            self.selection_pivot = Some(new_selection);
-            self.selection_cursor = None;
-        }
-    }
-
     pub(crate) fn handle_click(
         &mut self,
         clicked_id: NodeIdType,

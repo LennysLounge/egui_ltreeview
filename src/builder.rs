@@ -1,41 +1,9 @@
-use std::collections::HashMap;
-
-use egui::{pos2, vec2, LayerId, Order, Rangef, Rect, Response, Ui, WidgetText};
+use egui::{pos2, vec2, Rangef, Rect, Ui, WidgetText};
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, node_states::NodeStates, IndentHintStyle,
-    NodeId, TreeViewSettings, TreeViewState,
+    builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, RowRectangles,
+    TreeViewSettings, TreeViewState, UiData,
 };
-
-// #[derive(Clone)]
-// pub struct DirectoryState<NodeIdType> {
-//     /// Id of the directory node.
-//     id: NodeIdType,
-//     /// If directory is expanded
-//     is_open: bool,
-// }
-// pub struct IndentState<NodeIdType> {
-//     /// Id of the node that created this indent
-//     source_node: NodeIdType,
-//     /// Anchor for the indent hint at the source directory
-//     anchor: Pos2,
-//     /// Positions of child nodes for the indent hint.
-//     positions: Vec<Pos2>,
-// }
-
-pub(crate) struct TreeViewBuilderResult<NodeIdType> {
-    pub(crate) new_node_states: NodeStates<NodeIdType>,
-    pub(crate) row_rectangles: HashMap<NodeIdType, RowRectangles>,
-    pub(crate) seconday_click: Option<NodeIdType>,
-    pub(crate) context_menu_was_open: bool,
-    pub(crate) interaction: Response,
-    pub(crate) drag_layer: LayerId,
-}
-
-pub(crate) struct RowRectangles {
-    pub(crate) row_rect: Rect,
-    pub(crate) closer_rect: Option<Rect>,
-}
 
 /// The builder used to construct the tree.
 ///
@@ -44,34 +12,21 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
     state: &'ui TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
-    tree_has_focus: bool,
-    result: TreeViewBuilderResult<NodeIdType>,
+    ui_data: &'ui mut UiData<NodeIdType>,
     builder_state: BuilderState<NodeIdType>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn new(
         ui: &'ui mut Ui,
-        interaction: Response,
-        state: &'ui mut TreeViewState<NodeIdType>,
+        state: &'ui TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
-        tree_has_focus: bool,
+        ui_data: &'ui mut UiData<NodeIdType>,
     ) -> Self {
         Self {
-            result: TreeViewBuilderResult {
-                new_node_states: NodeStates::new(),
-                row_rectangles: HashMap::new(),
-                seconday_click: None,
-                interaction,
-                context_menu_was_open: false,
-                drag_layer: LayerId::new(
-                    Order::Tooltip,
-                    ui.make_persistent_id("ltreeviw drag layer"),
-                ),
-            },
+            ui_data,
             state,
             settings,
-            tree_has_focus,
             ui,
             builder_state: BuilderState::new(),
         }
@@ -102,6 +57,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         self.node(NodeBuilder::dir(id).label_ui(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
         }));
+    }
+
+    pub(crate) fn get_result(self) -> () {
+        let new_node_states = self.builder_state.take();
+        self.ui_data.new_node_states = new_node_states;
     }
 
     /// Close the current directory.
@@ -169,15 +129,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         let node_response = self.node_internal(&mut node);
 
+        if let Some(node_rects) = node_response.as_ref().and_then(|nr| nr.rects.as_ref()) {
+            self.ui_data.row_rectangles.insert(
+                node.id,
+                RowRectangles {
+                    row_rect: node_rects.row,
+                    closer_rect: node_rects.closer,
+                },
+            );
+        }
         self.builder_state
             .insert_node_response(&node, node_response);
-    }
-
-    pub(crate) fn get_result(mut self) -> TreeViewBuilderResult<NodeIdType> {
-        let (new_node_states, row_rectangles) = self.builder_state.take();
-        self.result.new_node_states = new_node_states;
-        self.result.row_rectangles = row_rectangles;
-        self.result
     }
 
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> Option<NodeResponse> {
@@ -191,7 +153,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let node_height = *node.node_height.get_or_insert(
             self.settings
                 .default_node_height
-                .expect("Should have been filled with a default value"),
+                .unwrap_or(self.ui.spacing().interact_size.y),
         );
         let row_range = Rangef::new(self.ui.cursor().min.y, self.ui.cursor().min.y + node_height)
             .expand(self.ui.spacing().item_spacing.y);
@@ -212,7 +174,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .scope(|ui| {
                 // Set the fg stroke colors here so that the ui added by the user
                 // has the correct colors when selected or focused.
-                let fg_stroke = if self.state.is_selected(&node.id) && self.tree_has_focus {
+                let fg_stroke = if self.state.is_selected(&node.id) && self.ui_data.has_focus {
                     ui.visuals().selection.stroke
                 } else if self.state.is_selected(&node.id) {
                     ui.visuals().widgets.inactive.fg_stroke
@@ -222,16 +184,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
                 ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
 
-                node.show_node(ui, &self.result.interaction, self.settings)
+                node.show_node(ui, &self.ui_data.interaction, self.settings)
             })
             .inner;
 
         if self.state.is_dragged(&node.id) {
             node.show_node_dragged(
                 self.ui,
-                &self.result.interaction,
+                &self.ui_data.interaction,
                 self.settings,
-                self.result.drag_layer,
+                self.ui_data.drag_layer,
                 drag_overlay_rect,
             );
         }
@@ -243,24 +205,24 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // context menu would never show up.
         // To fix this we handle the secondary click here and return the even in the result.
         let is_mouse_above_row = self
-            .result
+            .ui_data
             .interaction
             .hover_pos()
             .is_some_and(|pos| row.contains(pos));
         if is_mouse_above_row
-            && self.result.interaction.secondary_clicked()
+            && self.ui_data.interaction.secondary_clicked()
             && !self.state.drag_valid()
         {
-            self.result.seconday_click = Some(node.id);
+            self.ui_data.seconday_click = Some(node.id);
         }
 
         // Show the context menu.
-        let was_right_clicked = self.result.seconday_click.is_some_and(|id| id == node.id)
+        let was_right_clicked = self.ui_data.seconday_click.is_some_and(|id| id == node.id)
             || self.state.is_secondary_selected(&node.id);
         let was_only_target = !self.state.is_selected(&node.id)
             || self.state.is_selected(&node.id) && self.state.selected().len() == 1;
         if was_right_clicked && was_only_target {
-            self.result.context_menu_was_open = node.show_context_menu(&self.result.interaction);
+            self.ui_data.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
         }
 
         Some(NodeResponse {
