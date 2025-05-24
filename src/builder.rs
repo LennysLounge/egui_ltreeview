@@ -50,14 +50,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
     /// Add a directory to the tree.
     ///
+    /// Returns `true` if the directory is open and its child are visible.
+    /// Returns `false` if the directory is closed.
+    ///
     /// Must call [`TreeViewBuilder::close_dir`] to close the directory.
     ///
     /// To customize the node that is added to the tree consider using [`TreeViewBuilder::node`]
-    pub fn dir(&mut self, id: NodeIdType, label: impl Into<WidgetText>) {
+    pub fn dir(&mut self, id: NodeIdType, label: impl Into<WidgetText>) -> bool {
         let widget_text = label.into();
         self.node(NodeBuilder::dir(id).label_ui(|ui| {
             ui.add(egui::Label::new(widget_text.clone()).selectable(false));
-        }));
+        }))
     }
 
     /// Close the current directory.
@@ -112,8 +115,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
     /// Add a node to the tree.
     ///
+    /// If the node is a directory this method returns the openness state of the ndode.
+    /// Returns `true` if the directory is open and its child are visible.
+    /// Returns `false` if the directory is closed.
+    ///
     /// If the node is a directory, you must call [`TreeViewBuilder::close_dir`] to close the directory.
-    pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) {
+    pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
         node = self.builder_state.update_and_insert_node(node);
 
         let node_response = self.node_internal(&mut node);
@@ -129,6 +136,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
         self.builder_state
             .insert_node_response(&node, node_response);
+        node.is_open
     }
 
     fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> Option<NodeResponse> {

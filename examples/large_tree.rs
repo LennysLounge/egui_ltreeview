@@ -93,10 +93,14 @@ fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
         match elem {
             Stack::Node(node) => match node {
                 Node::Directory { id, children, name } => {
-                    build_dir(id, name, builder);
-                    stack.push(Stack::CloseDir);
-                    for child in children {
-                        stack.push(Stack::Node(child))
+                    let open = build_dir(id, name, builder);
+                    if open {
+                        stack.push(Stack::CloseDir);
+                        for child in children {
+                            stack.push(Stack::Node(child))
+                        }
+                    } else {
+                        builder.close_dir();
                     }
                 }
                 Node::Leaf { id, name } => {
@@ -108,8 +112,8 @@ fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     }
 }
 
-fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) {
-    builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) -> bool {
+    builder.node(NodeBuilder::dir(*id).label(name).default_open(true))
 }
 
 #[derive(Debug)]
