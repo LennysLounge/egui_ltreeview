@@ -40,32 +40,44 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         &mut self,
         mut node: NodeBuilder<'ui, NodeIdType>,
     ) -> NodeBuilder<'ui, NodeIdType> {
-        let open = self
-            .nodes
-            .get(&node.id)
-            .map(|node_state| node_state.open)
-            .unwrap_or(node.default_open);
-        node.set_is_open(open);
+        let parent_id = self.parent_id();
+        let parent_dir_is_open = self.parent_dir_is_open();
+
         node.set_indent(self.get_indent());
-        self.insert_node(&node);
-        node
-    }
-    pub fn insert_node(&mut self, node: &NodeBuilder<NodeIdType>) {
-        self.nodes.insert(
-            node.id,
-            NodeState {
+        let last_node_state = self.nodes.get_mut(&node.id);
+        if let Some(last_node_state) = last_node_state {
+            node.set_is_open(last_node_state.open);
+            *last_node_state = NodeState {
                 id: node.id,
-                parent_id: self.parent_id(),
+                parent_id: parent_id,
                 open: node.is_open,
-                visible: self.parent_dir_is_open() && !node.flatten,
+                visible: parent_dir_is_open && !node.flatten,
                 drop_allowed: node.drop_allowed,
                 dir: node.is_dir,
                 activatable: node.activatable,
                 position: self.node_count,
                 previous: self.last_node_id_added,
                 next: None,
-            },
-        );
+            };
+        } else {
+            node.set_is_open(node.default_open);
+            self.nodes.insert(
+                node.id,
+                NodeState {
+                    id: node.id,
+                    parent_id: parent_id,
+                    open: node.is_open,
+                    visible: parent_dir_is_open && !node.flatten,
+                    drop_allowed: node.drop_allowed,
+                    dir: node.is_dir,
+                    activatable: node.activatable,
+                    position: self.node_count,
+                    previous: self.last_node_id_added,
+                    next: None,
+                },
+            );
+        }
+
         if let Some(last_node_id_added) = self.last_node_id_added {
             self.nodes
                 .get_mut(&last_node_id_added)
@@ -74,6 +86,7 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         }
         self.last_node_id_added = Some(node.id);
         self.node_count += 1;
+        node
     }
 
     pub fn insert_node_response(
