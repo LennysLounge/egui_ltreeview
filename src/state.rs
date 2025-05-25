@@ -1,8 +1,6 @@
-use std::collections::HashSet;
-
 use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
 
-use crate::NodeId;
+use crate::{node_states::NodeStates, NodeId};
 
 /// State of the dragged node.
 #[derive(Clone)]
@@ -34,6 +32,12 @@ pub(crate) struct NodeState<NodeIdType> {
     pub dir: bool,
     /// Wether this node can be activated.
     pub activatable: bool,
+    /// The position of this node in the tree.
+    pub position: usize,
+    /// The node id of the previous node.
+    pub previous: Option<NodeIdType>,
+    /// The node id of the next node.
+    pub next: Option<NodeIdType>,
 }
 
 /// Represents the state of the tree view.
@@ -56,7 +60,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     pub(crate) size: Vec2,
     /// Open states of the dirs in this tree.
-    node_states: Vec<NodeState<NodeIdType>>,
+    node_states: NodeStates<NodeIdType>,
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
     /// The last node that was clicked. Used for double click detection.
@@ -72,7 +76,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
-            node_states: Vec::new(),
+            node_states: NodeStates::new(),
             context_menu_was_open: false,
             last_clicked_node: None,
         }
@@ -136,13 +140,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             .and_then(|node_state| node_state.parent_id)
     }
 
-    pub(crate) fn set_node_states(&mut self, states: Vec<NodeState<NodeIdType>>) {
-        self.node_states = states;
-        self.selected
-            .retain(|node_id| self.node_states.iter().any(|ns| &ns.id == node_id));
-    }
-
-    pub(crate) fn node_states(&self) -> &Vec<NodeState<NodeIdType>> {
+    pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
         &self.node_states
     }
 
@@ -152,14 +150,14 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Get the node state for an id.
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        self.node_states.iter().find(|ns| &ns.id == id)
+        self.node_states.get(id)
     }
     /// Get the node state for an id.
     pub(crate) fn node_state_of_mut(
         &mut self,
         id: &NodeIdType,
     ) -> Option<&mut NodeState<NodeIdType>> {
-        self.node_states.iter_mut().find(|ns| &ns.id == id)
+        self.node_states.get_mut(id)
     }
 
     /// Is the current drag valid.
@@ -169,29 +167,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             .as_ref()
             .is_some_and(|drag_state| drag_state.drag_valid)
     }
-    /// Is the given id part of a valid drag.
-    pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
-        self.dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
-    }
 
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
         self.selected.contains(id)
-    }
-
-    pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
-        self.secondary_selection.as_ref().is_some_and(|n| n == id)
-    }
-
-    pub(crate) fn prepare(&mut self, multi_select_allowed: bool) {
-        if !multi_select_allowed && self.selected.len() > 1 {
-            let new_selection = self.selected[0];
-            self.selected.clear();
-            self.selected.push(new_selection);
-            self.selection_pivot = Some(new_selection);
-            self.selection_cursor = None;
-        }
     }
 
     pub(crate) fn handle_click(
@@ -211,12 +189,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         } else if modifiers.shift_only() && allow_multi_select {
             if let Some(selection_pivot) = self.selection_pivot {
                 self.selected.clear();
-
-                let clicked_pos = self.position_of_id(clicked_id).unwrap();
-                let pivot_pos = self.position_of_id(selection_pivot).unwrap();
-                self.node_states[clicked_pos.min(pivot_pos)..=clicked_pos.max(pivot_pos)]
-                    .iter()
-                    .for_each(|node| self.selected.push(node.id));
+                self.node_states
+                    .iter_from_to(&clicked_id, &selection_pivot)
+                    .for_each(|ns| self.selected.push(ns.id));
             } else {
                 self.selected.clear();
                 self.selected.push(clicked_id);
@@ -245,27 +220,18 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 let Some(current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
                     break 'arm;
                 };
-                let cursor_pos = self.position_of_id(current_cursor_id).unwrap();
                 let new_cursor = match key {
-                    Key::ArrowUp => self.node_states[0..cursor_pos]
-                        .iter()
-                        .rev()
-                        .find(|node| node.visible),
-                    Key::ArrowDown => self.node_states[(cursor_pos + 1)..]
-                        .iter()
-                        .find(|node| node.visible),
+                    Key::ArrowUp => self.node_states.find_previously_visible(&current_cursor_id),
+                    Key::ArrowDown => self.node_states.find_next_visible(&current_cursor_id),
                     _ => unreachable!(),
                 };
                 if let Some(new_cursor) = new_cursor {
                     if modifiers.shift_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
-                        let new_cursor_pos = self.position_of_id(new_cursor.id).unwrap();
-                        let pivot_pos = self.position_of_id(pivot_id).unwrap();
                         self.selected.clear();
                         self.node_states
-                            [new_cursor_pos.min(pivot_pos)..=new_cursor_pos.max(pivot_pos)]
-                            .iter()
-                            .for_each(|node| self.selected.push(node.id));
+                            .iter_from_to(&new_cursor.id, &pivot_id)
+                            .for_each(|ns| self.selected.push(ns.id));
                     } else if modifiers.command_only() && allow_multi_select {
                         self.selection_cursor = Some(new_cursor.id);
                     } else if modifiers.shift && modifiers.command && allow_multi_select {
@@ -318,15 +284,17 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 }
                 let selected_node = self.selected[0];
                 let node = self.node_state_of_mut(&selected_node).unwrap();
-                if !node.open && node.dir {
-                    node.open = true;
-                } else {
-                    let node_id = node.id;
-                    if let Some(first_child_id) = self.first_visible_child_of(node_id).map(|n| n.id)
-                    {
-                        self.selected.clear();
-                        self.selected.push(first_child_id);
-                        self.selection_pivot = Some(first_child_id);
+                if node.dir {
+                    if !node.open {
+                        node.open = true;
+                    } else {
+                        let node_id = node.id;
+                        let next_visible = self.node_states.find_next_visible(&node_id);
+                        if let Some(next_visible) = next_visible {
+                            if self.node_states.is_child_of(&next_visible.id, &node_id) {
+                                self.set_one_selected(next_visible.id);
+                            }
+                        }
                     }
                 }
             }
@@ -345,24 +313,78 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
         None
     }
-    fn first_visible_child_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        let mut valid_nodes = HashSet::new();
-        valid_nodes.insert(id);
-        for node in &self.node_states {
-            let is_child_of_target = node
-                .parent_id
-                .is_some_and(|parent_id| valid_nodes.contains(&parent_id));
-            if is_child_of_target {
-                if node.visible {
-                    return Some(node);
-                }
-                valid_nodes.insert(node.id);
-            }
+
+    pub(crate) fn prune_selection_to_known_ids(&mut self) {
+        self.selected.retain(|id| self.node_states.contains_key(id));
+    }
+    pub(crate) fn prune_selection_to_single_id(&mut self) {
+        if self.selected.len() > 1 {
+            let new_selection = self.selected[0];
+            self.set_one_selected(new_selection);
         }
-        None
     }
 
-    fn position_of_id(&self, id: NodeIdType) -> Option<usize> {
-        self.node_states.iter().position(|n| n.id == id)
+    pub(crate) fn split<'a>(
+        &'a mut self,
+    ) -> (
+        &'a mut NodeStates<NodeIdType>,
+        PartialTreeViewState<'a, NodeIdType>,
+    ) {
+        let TreeViewState {
+            selected,
+            dragged,
+            secondary_selection,
+            node_states,
+            ..
+        } = self;
+        (
+            node_states,
+            PartialTreeViewState {
+                selected,
+                dragged,
+                secondary_selection,
+            },
+        )
+    }
+}
+
+/// Represents the state of the tree view.
+///
+/// This holds which node is selected and the open/close
+/// state of the directories.
+#[derive(Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
+    /// Id of the node that was selected.
+    selected: &'a Vec<NodeIdType>,
+    /// Information about the dragged node.
+    pub(crate) dragged: &'a Option<DragState<NodeIdType>>,
+    /// Id of the node that was right clicked.
+    pub(crate) secondary_selection: &'a Option<NodeIdType>,
+}
+impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
+    /// Is the current drag valid.
+    /// `false` if no drag is currently registered.
+    pub(crate) fn drag_valid(&self) -> bool {
+        self.dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid)
+    }
+    /// Is the given id part of a valid drag.
+    pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
+        self.dragged
+            .as_ref()
+            .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
+    }
+
+    pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
+        self.selected.contains(id)
+    }
+
+    pub(crate) fn is_secondary_selected(&self, id: &NodeIdType) -> bool {
+        self.secondary_selection.as_ref().is_some_and(|n| n == id)
+    }
+    pub(crate) fn selected_count(&self) -> usize {
+        self.selected.len()
     }
 }

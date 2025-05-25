@@ -1,5 +1,5 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, InnerResponse, Label, LayerId, Rect, Response,
+    emath, epaint, remap, vec2, CursorIcon, Id, Label, LayerId, Layout, Rect, Response, Sense,
     Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
 
@@ -14,6 +14,7 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) default_open: bool,
     pub(crate) drop_allowed: bool,
     pub(crate) activatable: bool,
+    pub(crate) node_height: Option<f32>,
     indent: usize,
     #[allow(clippy::type_complexity)]
     icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
@@ -33,6 +34,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             flatten: false,
             drop_allowed: false,
             activatable: true,
+            node_height: None,
             icon: None,
             closer: None,
             label: None,
@@ -51,6 +53,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             flatten: false,
             drop_allowed: true,
             activatable: false,
+            node_height: None,
             icon: None,
             closer: None,
             label: None,
@@ -89,6 +92,12 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     /// Whether or not this node can be activated.
     pub fn activatable(mut self, activatable: bool) -> Self {
         self.activatable = activatable;
+        self
+    }
+
+    /// Set the height of this node.
+    pub fn height(mut self, height: f32) -> Self {
+        self.node_height = Some(height);
         self
     }
 
@@ -170,10 +179,25 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             RowLayout::AlignedIconsAndLabels => (true, self.is_dir, true, self.icon.is_some()),
         };
 
-        let InnerResponse {
-            inner: (closer, icon, label),
-            response: row_response,
-        } = ui.horizontal(|ui| {
+        let row_rect = Rect::from_min_size(
+            ui.cursor().min,
+            vec2(
+                ui.available_width(),
+                self.node_height
+                    .expect("Node height should have been set by now"),
+            ),
+        );
+        let mut row_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(row_rect)
+                .layout(Layout::left_to_right(egui::Align::Center)),
+        );
+
+        let (closer, icon, label) = (|ui: &mut Ui| {
+            ui.set_height(
+                self.node_height
+                    .expect("Node height should have been set by now"),
+            );
             // The layouting in the row has to be pretty tight so we tunr of the item spacing here.
             let original_item_spacing = ui.spacing().item_spacing;
             ui.spacing_mut().item_spacing = Vec2::ZERO;
@@ -256,10 +280,15 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             ui.add_space(original_item_spacing.x);
 
             (closer, icon, label)
-        });
+        })(&mut row_ui);
 
-        let mut row = row_response
-            .rect
+        // Allocate exactly as much as was requested.
+        // If the node height is to small this will cause the row to overflow its bounds.
+        // This is correct to keep the node position correct even if it is not rendered.
+        ui.allocate_rect(row_rect, Sense::hover());
+
+        let mut row = row_ui
+            .min_rect()
             .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
         row.set_width(ui.available_width());
 

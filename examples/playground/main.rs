@@ -213,6 +213,8 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                     app.show_windows_for.insert(*node_id);
                 });
             }
+            Action::DragExternal(..) => {}
+            Action::MoveExternal(..) => {}
         }
     }
     if app.settings.show_size {
