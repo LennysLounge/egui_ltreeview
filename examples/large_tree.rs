@@ -83,37 +83,25 @@ impl eframe::App for MyApp {
 }
 
 fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
-    enum Stack<'a> {
-        Node(&'a Node),
-        CloseDir,
-    }
-    let mut stack = vec![Stack::Node(node)];
-    while !stack.is_empty() {
-        let elem = stack.pop().unwrap();
+    let mut stack = vec![node];
+    while let Some(elem) = stack.pop() {
         match elem {
-            Stack::Node(node) => match node {
-                Node::Directory { id, children, name } => {
-                    let open = build_dir(id, name, builder);
-                    if open {
-                        stack.push(Stack::CloseDir);
-                        for child in children {
-                            stack.push(Stack::Node(child))
-                        }
-                    } else {
-                        builder.close_dir();
+            Node::Directory { id, children, name } => {
+                let open = builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
+                if open {
+                    builder.close_dir_in(children.len());
+                    for child in children {
+                        stack.push(child)
                     }
+                } else {
+                    builder.close_dir();
                 }
-                Node::Leaf { id, name } => {
-                    builder.leaf(*id, name);
-                }
-            },
-            Stack::CloseDir => builder.close_dir(),
+            }
+            Node::Leaf { id, name } => {
+                builder.node(NodeBuilder::leaf(*id).label(name));
+            }
         }
     }
-}
-
-fn build_dir(id: &Uuid, name: &str, builder: &mut TreeViewBuilder<Uuid>) -> bool {
-    builder.node(NodeBuilder::dir(*id).label(name).default_open(true))
 }
 
 #[derive(Debug)]

@@ -8,6 +8,9 @@ struct DirectoryState<NodeIdType> {
     id: NodeIdType,
     /// If directory is expanded
     is_open: bool,
+    /// How many children this directory has.
+    /// Used for automatically closing the directory after all its children have been added.
+    child_count: Option<usize>,
 }
 pub struct IndentState<NodeIdType> {
     /// Id of the node that created this indent
@@ -42,6 +45,14 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
     ) -> NodeBuilder<'ui, NodeIdType> {
         let parent_id = self.parent_id();
         let parent_dir_is_open = self.parent_dir_is_open();
+
+        if let Some(child_count) = self
+            .stack
+            .last_mut()
+            .and_then(|dir| dir.child_count.as_mut())
+        {
+            *child_count -= 1;
+        }
 
         node.set_indent(self.get_indent());
         let last_node_state = self.nodes.get_mut(&node.id);
@@ -120,8 +131,26 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
             self.stack.push(DirectoryState {
                 is_open: self.parent_dir_is_open() && node.is_open,
                 id: node.id,
+                child_count: None,
             });
         }
+    }
+
+    pub fn set_child_count(&mut self, child_count: usize) {
+        if child_count == 0 {
+            self.close_dir();
+        } else {
+            if let Some(dir_state) = self.stack.last_mut() {
+                dir_state.child_count = Some(child_count);
+            }
+        }
+    }
+
+    pub fn should_close_current_dir(&self) -> bool {
+        self.stack
+            .last()
+            .and_then(|dir| dir.child_count)
+            .is_some_and(|count| count == 0)
     }
 
     pub fn close_dir(&mut self) -> Option<(f32, Vec<Pos2>, usize)> {

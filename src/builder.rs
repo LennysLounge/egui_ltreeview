@@ -1,4 +1,4 @@
-use egui::{pos2, vec2, Rangef, Rect, Ui, WidgetText};
+use egui::{pos2, vec2, Pos2, Rangef, Rect, Ui, WidgetText};
 
 use crate::{
     builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, PartialTreeViewState,
@@ -63,11 +63,27 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }))
     }
 
+    /// Automatically close the current dir after `child_count` many nodes
+    /// have been added to the tree.
+    /// If this method is called with `0` the current directory will close immediately.
+    /// Child nodes that were added before this method was called are not counted.
+    pub fn close_dir_in(&mut self, child_count: usize) {
+        self.builder_state.set_child_count(child_count);
+    }
+
     /// Close the current directory.
     pub fn close_dir(&mut self) {
-        let Some((anchor, positions, level)) = self.builder_state.close_dir() else {
-            return;
-        };
+        loop {
+            if let Some((anchor, positions, level)) = self.builder_state.close_dir() {
+                self.draw_indent_hint(anchor, positions, level);
+            }
+            if !self.builder_state.should_close_current_dir() {
+                break;
+            }
+        }
+    }
+
+    fn draw_indent_hint(&mut self, anchor: f32, positions: Vec<Pos2>, level: usize) {
         let top = pos2(
             self.ui.cursor().min.x
                 + self.ui.spacing().item_spacing.x
@@ -134,8 +150,14 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 },
             );
         }
+
         self.builder_state
             .insert_node_response(&node, node_response);
+
+        if self.builder_state.should_close_current_dir() {
+            self.close_dir();
+        }
+
         node.is_open
     }
 
