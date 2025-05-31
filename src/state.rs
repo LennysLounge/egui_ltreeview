@@ -134,6 +134,13 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         }
     }
 
+    /// Set the openness state of a node.
+    pub fn set_openness(&mut self, id: &NodeIdType, open: bool) {
+        if let Some(node_state) = self.node_state_of_mut(id) {
+            node_state.open = open;
+        }
+    }
+
     /// Get the parent id of a node.
     pub fn parent_id_of(&self, id: NodeIdType) -> Option<NodeIdType> {
         self.node_state_of(&id)
