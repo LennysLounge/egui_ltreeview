@@ -183,9 +183,9 @@ pub use state::*;
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
 #[cfg(not(feature = "persistence"))]
-pub trait NodeId: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
+pub trait NodeId: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
 #[cfg(not(feature = "persistence"))]
-impl<T> NodeId for T where T: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
+impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
 
 #[cfg(feature = "persistence")]
 /// A node in the tree is identified by an id that must implement this trait.
@@ -193,12 +193,12 @@ impl<T> NodeId for T where T: Clone + Copy + PartialEq + Eq + Hash + std::fmt::D
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
 pub trait NodeId:
-    Clone + Copy + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize
+    Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize
 {
 }
 #[cfg(feature = "persistence")]
 impl<T> NodeId for T where
-    T: Clone + Copy + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize
+    T: Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize
 {
 }
 
@@ -404,7 +404,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         // Create a drag or move action.
         if state.drag_valid() {
             let drag_and_drop_position = get_drop_position(&ui_data, state);
-            draw_drop(ui, &ui_data, state, drag_and_drop_position);
+            draw_drop(ui, &ui_data, state, drag_and_drop_position.as_ref());
 
             if let Some((drag_state, (drop_id, position))) =
                 state.dragged.as_ref().zip(drag_and_drop_position)
@@ -459,7 +459,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
                             .node_state_of(node_id)
                             .is_some_and(|ns| ns.activatable)
                     })
-                    .copied()
+                    .cloned()
                     .collect::<Vec<_>>(),
                 modifiers: ui.ctx().input(|i| i.modifiers),
             }));
@@ -541,7 +541,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     // Transfer the secondary click
     if ui_data.seconday_click.is_some() {
-        state.secondary_selection = ui_data.seconday_click;
+        state.secondary_selection = ui_data.seconday_click.clone();
     }
     // Do context menu
     if !ui_data.context_menu_was_open {
@@ -598,7 +598,7 @@ fn handle_input<NodeIdType: NodeId>(
             .hover_pos()
             .is_some_and(|pos| row_rect.contains(pos));
         if cursor_above_row && !closer_clicked {
-            let was_last_clicked = state.last_clicked_node.is_some_and(|last| last == *node_id);
+            let was_last_clicked = state.last_clicked_node.as_ref().is_some_and(|last| last == node_id);
 
             if interaction.double_clicked() && was_last_clicked {
                 let node_state = state.node_state_of_mut(&node_id).unwrap();
@@ -626,14 +626,14 @@ fn handle_input<NodeIdType: NodeId>(
                 // React to primary clicking
                 selection_changed = true;
                 state.handle_click(
-                    *node_id,
+                    node_id.clone(),
                     ui.ctx().input(|i| i.modifiers),
                     settings.allow_multi_select,
                 );
             }
 
             if interaction.clicked() {
-                state.last_clicked_node = Some(*node_id);
+                state.last_clicked_node = Some(node_id.clone());
             }
 
             // React to a dragging
@@ -649,7 +649,7 @@ fn handle_input<NodeIdType: NodeId>(
                 let node_ids = if state.is_selected(&node_id) {
                     state.selected().clone()
                 } else {
-                    vec![*node_id]
+                    vec![node_id.clone()]
                 };
                 state.dragged = Some(DragState {
                     node_ids,
@@ -669,7 +669,7 @@ fn handle_input<NodeIdType: NodeId>(
                 .dragged
                 .as_ref()
                 .map(|drag_state| drag_state.node_ids.clone())
-                .or(state.node_states().first().map(|(id, _)| vec![*id]));
+                .or(state.node_states().first().map(|(id, _)| vec![id.clone()]));
             if let Some(fallback_selection) = fallback_selection {
                 state.set_selected(fallback_selection);
                 selection_changed = true;
@@ -766,7 +766,7 @@ fn draw_drop<NodeIdType: NodeId>(
     ui: &mut Ui,
     ui_data: &UiData<NodeIdType>,
     state: &TreeViewState<NodeIdType>,
-    drop_position: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    drop_position: Option<&(NodeIdType, DirPosition<NodeIdType>)>,
 ) {
     pub const DROP_LINE_HEIGHT: f32 = 3.0;
     if let Some((parent_id, drop_position)) = drop_position {
@@ -893,6 +893,7 @@ fn draw_background<NodeIdType: NodeId>(
     if state.context_menu_was_open {
         if let Some(row_rectangles) = state
             .secondary_selection
+            .as_ref()
             .and_then(|id| ui_data.row_rectangles.get(&id))
         {
             ui.painter().set(
@@ -961,7 +962,7 @@ fn simplify_selection_for_dnd<NodeIdType: NodeId>(
             }
         }
         // is is not a child of any of 0..j
-        result.push(node_states[i].id);
+        result.push(node_states[i].id.clone());
     }
     result
 }
@@ -972,41 +973,41 @@ fn get_drop_position_node<NodeIdType: NodeId>(
 ) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
     match drop_quater {
         DropQuarter::Top => {
-            if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DirPosition::Before(node.id)));
+            if let Some(parent_id) = node.parent_id.as_ref() {
+                return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
             }
             if node.drop_allowed {
-                return Some((node.id, DirPosition::Last));
+                return Some((node.id.clone(), DirPosition::Last));
             }
             None
         }
         DropQuarter::MiddleTop => {
             if node.drop_allowed {
-                return Some((node.id, DirPosition::Last));
+                return Some((node.id.clone(), DirPosition::Last));
             }
-            if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DirPosition::Before(node.id)));
+            if let Some(parent_id) = node.parent_id.as_ref() {
+                return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
             }
             None
         }
         DropQuarter::MiddleBottom => {
             if node.drop_allowed {
-                return Some((node.id, DirPosition::Last));
+                return Some((node.id.clone(), DirPosition::Last));
             }
-            if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DirPosition::After(node.id)));
+            if let Some(parent_id) = node.parent_id.as_ref() {
+                return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
             }
             None
         }
         DropQuarter::Bottom => {
             if node.drop_allowed && node.open {
-                return Some((node.id, DirPosition::First));
+                return Some((node.id.clone(), DirPosition::First));
             }
-            if let Some(parent_id) = node.parent_id {
-                return Some((parent_id, DirPosition::After(node.id)));
+            if let Some(parent_id) = node.parent_id.as_ref() {
+                return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
             }
             if node.drop_allowed {
-                return Some((node.id, DirPosition::Last));
+                return Some((node.id.clone(), DirPosition::Last));
             }
             None
         }

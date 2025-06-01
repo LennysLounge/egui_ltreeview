@@ -104,13 +104,13 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Set which nodes are selected in the tree
     pub fn set_selected(&mut self, selected: Vec<NodeIdType>) {
-        self.selection_pivot = selected.first().copied();
+        self.selection_pivot = selected.first().cloned();
         self.selected = selected;
     }
 
     /// Set a single node to be selected.
     pub fn set_one_selected(&mut self, selected: NodeIdType) {
-        self.selection_pivot = Some(selected);
+        self.selection_pivot = Some(selected.clone());
         self.selected.clear();
         self.selected.push(selected);
     }
@@ -127,8 +127,8 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     pub fn expand_node(&mut self, mut id: NodeIdType) {
         while let Some(node_state) = self.node_state_of_mut(&id) {
             node_state.open = true;
-            id = match node_state.parent_id {
-                Some(id) => id,
+            id = match node_state.parent_id.as_ref() {
+                Some(id) => id.clone(),
                 None => break,
             }
         }
@@ -144,7 +144,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Get the parent id of a node.
     pub fn parent_id_of(&self, id: NodeIdType) -> Option<NodeIdType> {
         self.node_state_of(&id)
-            .and_then(|node_state| node_state.parent_id)
+            .and_then(|node_state| node_state.parent_id.clone())
     }
 
     pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
@@ -152,7 +152,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     pub(crate) fn selection_cursor(&self) -> Option<NodeIdType> {
-        self.selection_cursor
+        self.selection_cursor.clone()
     }
 
     /// Get the node state for an id.
@@ -189,25 +189,25 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             if self.selected.contains(&clicked_id) {
                 self.selected.retain(|id| id != &clicked_id);
             } else {
-                self.selected.push(clicked_id);
+                self.selected.push(clicked_id.clone());
             }
             self.selection_pivot = Some(clicked_id);
             self.selection_cursor = None;
         } else if modifiers.shift_only() && allow_multi_select {
-            if let Some(selection_pivot) = self.selection_pivot {
+            if let Some(selection_pivot) = self.selection_pivot.as_ref() {
                 self.selected.clear();
                 self.node_states
                     .iter_from_to(&clicked_id, &selection_pivot)
-                    .for_each(|ns| self.selected.push(ns.id));
+                    .for_each(|ns| self.selected.push(ns.id.clone()));
             } else {
                 self.selected.clear();
-                self.selected.push(clicked_id);
+                self.selected.push(clicked_id.clone());
                 self.selection_pivot = Some(clicked_id);
             }
             self.selection_cursor = None;
         } else {
             self.selected.clear();
-            self.selected.push(clicked_id);
+            self.selected.push(clicked_id.clone());
             self.selection_pivot = Some(clicked_id);
             self.selection_cursor = None;
         }
@@ -221,10 +221,10 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     ) {
         match key {
             Key::ArrowUp | Key::ArrowDown => 'arm: {
-                let Some(pivot_id) = self.selection_pivot else {
+                let Some(pivot_id) = self.selection_pivot.as_ref() else {
                     break 'arm;
                 };
-                let Some(current_cursor_id) = self.selection_cursor.or(self.selection_pivot) else {
+                let Some(current_cursor_id) = self.selection_cursor.as_ref().or(self.selection_pivot.as_ref()) else {
                     break 'arm;
                 };
                 let new_cursor = match key {
@@ -234,53 +234,53 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 };
                 if let Some(new_cursor) = new_cursor {
                     if modifiers.shift_only() && allow_multi_select {
-                        self.selection_cursor = Some(new_cursor.id);
+                        self.selection_cursor = Some(new_cursor.id.clone());
                         self.selected.clear();
                         self.node_states
                             .iter_from_to(&new_cursor.id, &pivot_id)
-                            .for_each(|ns| self.selected.push(ns.id));
+                            .for_each(|ns| self.selected.push(ns.id.clone()));
                     } else if modifiers.command_only() && allow_multi_select {
-                        self.selection_cursor = Some(new_cursor.id);
+                        self.selection_cursor = Some(new_cursor.id.clone());
                     } else if modifiers.shift && modifiers.command && allow_multi_select {
                         if !self.selected.contains(&new_cursor.id) {
-                            self.selected.push(new_cursor.id);
+                            self.selected.push(new_cursor.id.clone());
                         }
-                        self.selection_cursor = Some(new_cursor.id);
+                        self.selection_cursor = Some(new_cursor.id.clone());
                     } else {
                         self.selected.clear();
-                        self.selected.push(new_cursor.id);
-                        self.selection_pivot = Some(new_cursor.id);
+                        self.selected.push(new_cursor.id.clone());
+                        self.selection_pivot = Some(new_cursor.id.clone());
                         self.selection_cursor = None;
                     }
                 }
             }
             Key::Space => 'arm: {
-                let Some(cursor_id) = self.selection_cursor else {
+                let Some(cursor_id) = self.selection_cursor.as_ref() else {
                     break 'arm;
                 };
                 if self.selected.contains(&cursor_id) {
-                    self.selected.retain(|id| id != &cursor_id);
-                    self.selection_pivot = Some(cursor_id);
+                    self.selected.retain(|id| id != cursor_id);
+                    self.selection_pivot = Some(cursor_id.clone());
                 } else {
-                    self.selected.push(cursor_id);
-                    self.selection_pivot = Some(cursor_id);
+                    self.selected.push(cursor_id.clone());
+                    self.selection_pivot = Some(cursor_id.clone());
                 }
             }
             Key::ArrowLeft => 'arm: {
                 if self.selected.len() != 1 {
                     break 'arm;
                 }
-                let selected_node = self.selected[0];
+                let selected_node = self.selected[0].clone();
                 let node = self.node_state_of_mut(&selected_node).unwrap();
                 if node.open && node.dir && node.visible {
                     node.open = false;
                 } else {
-                    let node_id = node.id;
+                    let node_id = node.id.clone();
                     if let Some(parent_node_id) =
-                        self.first_visible_parent_of(node_id).map(|n| n.id)
+                        self.first_visible_parent_of(node_id).map(|n| n.id.clone())
                     {
                         self.selected.clear();
-                        self.selected.push(parent_node_id);
+                        self.selected.push(parent_node_id.clone());
                         self.selection_pivot = Some(parent_node_id);
                     }
                 }
@@ -289,17 +289,17 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 if self.selected.len() != 1 {
                     break 'arm;
                 }
-                let selected_node = self.selected[0];
+                let selected_node = self.selected[0].clone();
                 let node = self.node_state_of_mut(&selected_node).unwrap();
                 if node.dir {
                     if !node.open {
                         node.open = true;
                     } else {
-                        let node_id = node.id;
+                        let node_id = node.id.clone();
                         let next_visible = self.node_states.find_next_visible(&node_id);
                         if let Some(next_visible) = next_visible {
                             if self.node_states.is_child_of(&next_visible.id, &node_id) {
-                                self.set_one_selected(next_visible.id);
+                                self.set_one_selected(next_visible.id.clone());
                             }
                         }
                     }
@@ -310,13 +310,13 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     fn first_visible_parent_of(&self, id: NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        let mut next_parent = self.node_state_of(&id).and_then(|n| n.parent_id);
+        let mut next_parent = self.node_state_of(&id).and_then(|n| n.parent_id.clone());
         while let Some(next_parent_id) = next_parent {
             let node = self.node_state_of(&next_parent_id).unwrap();
             if node.visible {
                 return Some(node);
             }
-            next_parent = node.parent_id;
+            next_parent = node.parent_id.clone();
         }
         None
     }
@@ -326,7 +326,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
     pub(crate) fn prune_selection_to_single_id(&mut self) {
         if self.selected.len() > 1 {
-            let new_selection = self.selected[0];
+            let new_selection = self.selected[0].clone();
             self.set_one_selected(new_selection);
         }
     }

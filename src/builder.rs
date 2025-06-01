@@ -143,7 +143,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         if let Some(node_rects) = node_response.as_ref().and_then(|nr| nr.rects.as_ref()) {
             self.ui_data.row_rectangles.insert(
-                node.id,
+                node.id.clone(),
                 RowRectangles {
                     row_rect: node_rects.row,
                     closer_rect: node_rects.closer,
@@ -232,11 +232,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             && self.ui_data.interaction.secondary_clicked()
             && !self.state.drag_valid()
         {
-            self.ui_data.seconday_click = Some(node.id);
+            self.ui_data.seconday_click = Some(node.id.clone());
         }
 
         // Show the context menu.
-        let was_right_clicked = self.ui_data.seconday_click.is_some_and(|id| id == node.id)
+        let was_right_clicked = self.ui_data.seconday_click.as_ref().is_some_and(|id| id == &node.id)
             || self.state.is_secondary_selected(&node.id);
         let was_only_target = !self.state.is_selected(&node.id)
             || self.state.is_selected(&node.id) && self.state.selected_count() == 1;

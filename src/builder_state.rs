@@ -59,7 +59,7 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         if let Some(last_node_state) = last_node_state {
             node.set_is_open(last_node_state.open);
             *last_node_state = NodeState {
-                id: node.id,
+                id: node.id.clone(),
                 parent_id: parent_id,
                 open: node.is_open,
                 visible: parent_dir_is_open && !node.flatten,
@@ -67,15 +67,15 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
                 dir: node.is_dir,
                 activatable: node.activatable,
                 position: self.node_count,
-                previous: self.last_node_id_added,
+                previous: self.last_node_id_added.clone(),
                 next: None,
             };
         } else {
             node.set_is_open(node.default_open);
             self.nodes.insert(
-                node.id,
+                node.id.clone(),
                 NodeState {
-                    id: node.id,
+                    id: node.id.clone(),
                     parent_id: parent_id,
                     open: node.is_open,
                     visible: parent_dir_is_open && !node.flatten,
@@ -83,19 +83,19 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
                     dir: node.is_dir,
                     activatable: node.activatable,
                     position: self.node_count,
-                    previous: self.last_node_id_added,
+                    previous: self.last_node_id_added.clone(),
                     next: None,
                 },
             );
         }
 
-        if let Some(last_node_id_added) = self.last_node_id_added {
+        if let Some(last_node_id_added) = self.last_node_id_added.as_ref() {
             self.nodes
                 .get_mut(&last_node_id_added)
                 .expect("The previous added node id should always point to a node in the map")
-                .next = Some(node.id);
+                .next = Some(node.id.clone());
         }
-        self.last_node_id_added = Some(node.id);
+        self.last_node_id_added = Some(node.id.clone());
         self.node_count += 1;
         node
     }
@@ -123,14 +123,14 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
             if let Some(node_response) = node_response {
                 let anchor = node_response.range.center();
                 self.indents.push(IndentState {
-                    source_node: node.id,
+                    source_node: node.id.clone(),
                     anchor,
                     positions: Vec::new(),
                 });
             }
             self.stack.push(DirectoryState {
                 is_open: self.parent_dir_is_open() && node.is_open,
-                id: node.id,
+                id: node.id.clone(),
                 child_count: None,
             });
         }
@@ -169,7 +169,7 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
 
     /// Get the current parent id if any.
     pub fn parent_id(&self) -> Option<NodeIdType> {
-        self.parent_dir().map(|state| state.id)
+        self.parent_dir().map(|state| state.id.clone())
     }
     fn parent_dir(&self) -> Option<&DirectoryState<NodeIdType>> {
         if self.stack.is_empty() {
