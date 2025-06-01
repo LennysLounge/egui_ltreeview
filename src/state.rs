@@ -116,18 +116,19 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Expand all parent nodes of the node with the given id.
-    pub fn expand_parents_of(&mut self, id: NodeIdType) {
+    pub fn expand_parents_of(&mut self, id: &NodeIdType) {
         if let Some(parent_id) = self.parent_id_of(id) {
-            self.expand_node(parent_id);
+            self.expand_node(&parent_id.clone());
         }
     }
 
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
-    pub fn expand_node(&mut self, mut id: NodeIdType) {
-        while let Some(node_state) = self.node_state_of_mut(&id) {
+    pub fn expand_node(&mut self, id: &NodeIdType) {
+        let mut current_id = id.clone();
+        while let Some(node_state) = self.node_state_of_mut(&current_id) {
             node_state.open = true;
-            id = match node_state.parent_id.as_ref() {
+            current_id = match node_state.parent_id.as_ref() {
                 Some(id) => id.clone(),
                 None => break,
             }
@@ -142,9 +143,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Get the parent id of a node.
-    pub fn parent_id_of(&self, id: NodeIdType) -> Option<NodeIdType> {
-        self.node_state_of(&id)
-            .and_then(|node_state| node_state.parent_id.clone())
+    pub fn parent_id_of(&self, id: &NodeIdType) -> Option<&NodeIdType> {
+        self.node_state_of(id)
+            .and_then(|node_state| node_state.parent_id.as_ref())
     }
 
     pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
@@ -224,7 +225,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 let Some(pivot_id) = self.selection_pivot.as_ref() else {
                     break 'arm;
                 };
-                let Some(current_cursor_id) = self.selection_cursor.as_ref().or(self.selection_pivot.as_ref()) else {
+                let Some(current_cursor_id) = self
+                    .selection_cursor
+                    .as_ref()
+                    .or(self.selection_pivot.as_ref())
+                else {
                     break 'arm;
                 };
                 let new_cursor = match key {

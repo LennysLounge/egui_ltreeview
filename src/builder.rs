@@ -34,7 +34,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     /// Get the current parent id if any.
-    pub fn parent_id(&self) -> Option<NodeIdType> {
+    pub fn parent_id(&self) -> Option<&NodeIdType> {
         self.builder_state.parent_id()
     }
 

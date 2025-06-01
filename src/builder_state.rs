@@ -43,7 +43,7 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         &mut self,
         mut node: NodeBuilder<'ui, NodeIdType>,
     ) -> NodeBuilder<'ui, NodeIdType> {
-        let parent_id = self.parent_id();
+        let parent_id = self.parent_id().cloned();
         let parent_dir_is_open = self.parent_dir_is_open();
 
         if let Some(child_count) = self
@@ -168,8 +168,8 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
     }
 
     /// Get the current parent id if any.
-    pub fn parent_id(&self) -> Option<NodeIdType> {
-        self.parent_dir().map(|state| state.id.clone())
+    pub fn parent_id(&self) -> Option<&NodeIdType> {
+        self.parent_dir().map(|state| &state.id)
     }
     fn parent_dir(&self) -> Option<&DirectoryState<NodeIdType>> {
         if self.stack.is_empty() {

@@ -235,14 +235,14 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                 let id = *leaf.id();
                 _ = app.tree.insert(&parent_uuid, position, leaf);
                 app.tree_view_state.set_selected(vec![id]);
-                app.tree_view_state.expand_node(parent_uuid);
+                app.tree_view_state.expand_node(&parent_uuid);
             }
             ContextMenuActions::AddDir(parent_uuid, parent) => {
                 let dir = Node::dir("new directory", vec![]);
                 let id = *dir.id();
                 _ = app.tree.insert(&parent_uuid, parent, dir);
                 app.tree_view_state.set_selected(vec![id]);
-                app.tree_view_state.expand_node(parent_uuid);
+                app.tree_view_state.expand_node(&parent_uuid);
             }
         }
     }
@@ -326,7 +326,10 @@ fn show_file(
     file: &File,
     actions: &mut Vec<ContextMenuActions>,
 ) {
-    let parent_node = builder.parent_id().expect("All nodes should have a parent");
+    let parent_node = builder
+        .parent_id()
+        .expect("All nodes should have a parent")
+        .clone();
     let mut node = NodeBuilder::leaf(file.id)
         .label(&file.name)
         .activatable(file.activatable)

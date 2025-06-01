@@ -69,7 +69,7 @@ impl eframe::App for MyApp {
                 let selected_index = (self.tree.selected().last().unwrap_or(&0) + 1) % 11;
                 self.tree.set_selected(vec![selected_index]);
                 if self.should_open_dirs {
-                    self.tree.expand_node(selected_index);
+                    self.tree.expand_node(&selected_index);
                 }
             }
         });
