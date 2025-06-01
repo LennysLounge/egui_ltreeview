@@ -26,8 +26,6 @@ pub(crate) struct NodeState<NodeIdType> {
     pub open: bool,
     /// Wether the node is visible or not.
     pub visible: bool,
-    /// Wether this node is a valid target for drag and drop.
-    pub drop_allowed: bool,
     /// Wether this node is a directory.
     pub dir: bool,
     /// Wether this node can be activated.

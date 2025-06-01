@@ -169,8 +169,8 @@ mod node_states;
 mod state;
 
 use egui::{
-    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout,
-    Modifiers, NumExt, Order, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    self, emath, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout, Modifiers,
+    NumExt, Order, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, Vec2,
 };
 use std::{collections::HashMap, hash::Hash};
 
@@ -390,6 +390,17 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             state.prune_selection_to_single_id();
         }
 
+        // Update the drag state
+        // A drag only becomes a valid drag after the pointer has traveled some distance.
+        if let Some(drag_state) = state.dragged.as_mut() {
+            if !drag_state.drag_valid {
+                drag_state.drag_valid = drag_state
+                    .drag_start_pos
+                    .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
+                    > 5.0;
+            }
+        }
+
         let (ui_data, response) = draw_foreground(
             ui,
             id,
@@ -409,11 +420,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         let mut actions = Vec::new();
         // Create a drag or move action.
         if state.drag_valid() {
-            let drag_and_drop_position = get_drop_position(&ui_data, state);
-            draw_drop(ui, &ui_data, state, drag_and_drop_position.as_ref());
-
             if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(drag_and_drop_position)
+                state.dragged.as_ref().zip(ui_data.drop_target)
             {
                 if ui.ctx().input(|i| i.pointer.primary_released()) {
                     actions.push(Action::Move(DragAndDrop {
@@ -517,6 +525,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
+        drop_target: None,
     };
 
     // Run the build tree view closure
@@ -703,139 +712,10 @@ fn handle_input<NodeIdType: NodeId>(
             }
         });
     }
-    // Update the drag state
-    // A drag only becomes a valid drag after the pointer has traveled some distance.
-    if let Some(drag_state) = state.dragged.as_mut() {
-        if !drag_state.drag_valid {
-            drag_state.drag_valid = drag_state
-                .drag_start_pos
-                .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
-                > 5.0;
-        }
-    }
 
     InputResult {
         selection_changed,
         should_activate,
-    }
-}
-
-fn get_drop_position<NodeIdType: NodeId>(
-    tree_view_result: &UiData<NodeIdType>,
-    state: &mut TreeViewState<NodeIdType>,
-) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
-    if !state.drag_valid() {
-        return None;
-    }
-    let drag_state = state.dragged.as_ref()?;
-    let hover_pos = tree_view_result.interaction.hover_pos()?;
-    let (hovered_id, drop_quarter) = tree_view_result
-        .row_rectangles
-        .iter()
-        .filter_map(|(id, row)| {
-            let drop_quarter = DropQuarter::new(row.row_rect.y_range(), hover_pos.y)?;
-            Some((id, drop_quarter))
-        })
-        .next()?;
-
-    // At this point we know that the drag is valid and the cursor
-    // is hovering above a row in the tree.
-
-    // Dropping a node on itself is technically a fine thing to do
-    // but it causes all sorts of problems for the implementer of the drop action.
-    // They would have to remove a node and then somehow insert it after itself.
-    // For that reason it is easier to disallow dropping on itself altogether.
-    if drag_state.node_ids.contains(hovered_id) {
-        return None;
-    }
-
-    // If the hovered node is a child of one of the dragged node then this
-    // is not a valid drop target
-
-    let is_hovering_on_child_of_dragged_node = drag_state
-        .node_ids
-        .iter()
-        .any(|id| state.node_states().is_child_of(hovered_id, id));
-    if is_hovering_on_child_of_dragged_node {
-        return None;
-    }
-
-    let hovered_node = state
-        .node_state_of(hovered_id)
-        .expect("If the node exists in the row rectangles it should also exist in the node states");
-    return get_drop_position_node(hovered_node, &drop_quarter);
-}
-
-fn draw_drop<NodeIdType: NodeId>(
-    ui: &mut Ui,
-    ui_data: &UiData<NodeIdType>,
-    state: &TreeViewState<NodeIdType>,
-    drop_position: Option<&(NodeIdType, DirPosition<NodeIdType>)>,
-) {
-    pub const DROP_LINE_HEIGHT: f32 = 3.0;
-    if let Some((parent_id, drop_position)) = drop_position {
-        let drop_marker =
-            match drop_position {
-                DirPosition::Before(target_id) => {
-                    let row_rectangles = ui_data.row_rectangles.get(&target_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    Rect::from_x_y_ranges(
-                        row_rectangles.row_rect.x_range(),
-                        Rangef::point(row_rectangles.row_rect.min.y).expand(DROP_LINE_HEIGHT * 0.5),
-                    )
-                }
-                DirPosition::After(target_id) => {
-                    let row_rectangles = ui_data.row_rectangles.get(&target_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    Rect::from_x_y_ranges(
-                        row_rectangles.row_rect.x_range(),
-                        Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
-                    )
-                }
-                DirPosition::First => {
-                    let row_rectangles = ui_data.row_rectangles.get(&parent_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    Rect::from_x_y_ranges(
-                        row_rectangles.row_rect.x_range(),
-                        Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
-                    )
-                }
-                DirPosition::Last => {
-                    let row_rectangles_start = ui_data.row_rectangles.get(&parent_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    // For directories the drop marker should expand its height to include all
-                    // its child nodes. To do this, first we have to find its last child node,
-                    // then we can get the correct y range.
-                    let last_visible_child_row = ui_data
-                        .row_rectangles
-                        .iter()
-                        .filter(|(id, _row)| state.node_states().is_child_of(&id, &parent_id))
-                        .map(|(_, value)| value)
-                        .max_by_key(|row| row.row_rect.max.y as i32);
-
-                    let y_range = match last_visible_child_row {
-                        Some(last_visible_child_row) => {
-                            let y = last_visible_child_row.row_rect.max.y;
-                            Rangef::new(row_rectangles_start.row_rect.min.y, y)
-                        }
-                        None => row_rectangles_start.row_rect.y_range(),
-                    };
-                    Rect::from_x_y_ranges(row_rectangles_start.row_rect.x_range(), y_range)
-                }
-            };
-
-        let shape = epaint::RectShape::new(
-            drop_marker,
-            ui.visuals().widgets.active.corner_radius,
-            ui.style().visuals.selection.bg_fill.linear_multiply(0.6),
-            Stroke::NONE,
-            egui::StrokeKind::Inside,
-        );
-        ui.painter().set(ui_data.drop_marker_idx, shape);
     }
 }
 
@@ -882,53 +762,6 @@ fn simplify_selection_for_dnd<NodeIdType: NodeId>(
         result.push(node_states[i].id.clone());
     }
     result
-}
-
-fn get_drop_position_node<NodeIdType: NodeId>(
-    node: &NodeState<NodeIdType>,
-    drop_quater: &DropQuarter,
-) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
-    match drop_quater {
-        DropQuarter::Top => {
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
-            }
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            None
-        }
-        DropQuarter::MiddleTop => {
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
-            }
-            None
-        }
-        DropQuarter::MiddleBottom => {
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
-            }
-            None
-        }
-        DropQuarter::Bottom => {
-            if node.drop_allowed && node.open {
-                return Some((node.id.clone(), DirPosition::First));
-            }
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
-            }
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            None
-        }
-    }
 }
 
 /// A position inside a directory node.
@@ -1166,10 +999,23 @@ struct UiData<NodeIdType> {
     drag_layer: LayerId,
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
+    drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
 }
 
 #[derive(Debug)]
 struct RowRectangles {
     row_rect: Rect,
     closer_rect: Option<Rect>,
+}
+
+/// When you ast a rectangle if it contains a point it does so inclusive the upper bound.
+/// like this: min <= p <= max
+/// Visually the rectangle is displayed exclusive the upper bound.
+/// like this: min <= p < max
+///
+/// This means that two rectangles can not overlap visually but overlap when aksing if a point
+/// is contained in them.
+/// This check if a point is contained exclusive the upper bound.
+fn rect_contains_visually(rect: &Rect, pos: &Pos2) -> bool {
+    rect.min.x <= pos.x && pos.x < rect.max.x && rect.min.y <= pos.y && pos.y < rect.max.y
 }

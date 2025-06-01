@@ -1,8 +1,9 @@
 use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, PartialTreeViewState,
-    RowRectangles, TreeViewSettings, TreeViewState, UiData,
+    builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition,
+    DropQuarter, IndentHintStyle, NodeId, PartialTreeViewState, RowRectangles, TreeViewSettings,
+    TreeViewState, UiData,
 };
 
 /// The builder used to construct the tree.
@@ -76,8 +77,30 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// Close the current directory.
     pub fn close_dir(&mut self) {
         loop {
-            if let Some((anchor, positions, level)) = self.builder_state.close_dir() {
+            if let Some((anchor, positions, level, dir_id)) = self.builder_state.close_dir() {
                 self.draw_indent_hint(anchor, positions, level);
+                let draw_drop_marker = matches!(
+                    self.ui_data.drop_target.as_ref(),
+                    Some((id, DirPosition::Last)) if *id == dir_id
+                );
+                if draw_drop_marker {
+                    let rect = Rect::from_min_max(
+                        pos2(self.ui.cursor().min.x, anchor.min),
+                        pos2(self.ui.cursor().max.x, self.ui.cursor().min.y),
+                    );
+                    let color = self
+                        .ui
+                        .style()
+                        .visuals
+                        .selection
+                        .bg_fill
+                        .linear_multiply(0.6);
+                    let radius = self.ui.visuals().widgets.active.corner_radius;
+                    self.ui.painter().set(
+                        self.ui_data.drop_marker_idx,
+                        Shape::rect_filled(rect, radius, color),
+                    );
+                }
             }
             if !self.builder_state.should_close_current_dir() {
                 break;
@@ -85,7 +108,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
-    fn draw_indent_hint(&mut self, anchor: f32, positions: Vec<Pos2>, level: usize) {
+    fn draw_indent_hint(&mut self, anchor: Rangef, positions: Vec<Pos2>, level: usize) {
         let top = pos2(
             self.ui.cursor().min.x
                 + self.ui.spacing().item_spacing.x
@@ -95,7 +118,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         .settings
                         .override_indent
                         .unwrap_or(self.ui.spacing().indent),
-            anchor + self.ui.spacing().icon_width * 0.5 + 2.0,
+            anchor.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
         );
 
         match self.settings.indent_hint_style {
@@ -160,6 +183,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             self.close_dir();
         }
 
+        if node.is_dir && self.state.is_dragged(&node.id) {
+            self.builder_state.disallow_dir_as_drop_target();
+        }
+
         node.is_open
     }
 
@@ -193,6 +220,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             pos2(self.ui.cursor().max.x, self.ui.cursor().min.y + node_height),
         )
         .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
+        let cursor_above_row = self
+            .ui_data
+            .interaction
+            .hover_pos()
+            .is_some_and(|pos| rect_contains_visually(&row_rect, &pos));
 
         // React to secondary clicks
         // Context menus in egui only show up when the secondary mouse button is pressed.
@@ -265,8 +297,48 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         }
 
+        // Handle drop position
+        if self.state.drag_valid() && cursor_above_row {
+            if self.builder_state.dir_allowed_as_drop_target() && !self.state.is_dragged(&node.id) {
+                self.ui_data.drop_target = self.get_drop_position(row_rect, node);
+            }
+        }
+
+        // Draw drop marker
+        if cursor_above_row {
+            if let Some((_, position)) = self.ui_data.drop_target.as_ref() {
+                let color = self
+                    .ui
+                    .style()
+                    .visuals
+                    .selection
+                    .bg_fill
+                    .linear_multiply(0.6);
+                let radius = self.ui.visuals().widgets.active.corner_radius;
+                pub const DROP_LINE_HEIGHT: f32 = 3.0;
+                if !matches!(position, DirPosition::Last) {
+                    let y = match position {
+                        DirPosition::First => row_rect.max.y,
+                        DirPosition::After(_) => row_rect.max.y,
+                        DirPosition::Before(_) => row_rect.min.y,
+                        DirPosition::Last => unreachable!(),
+                    };
+                    let rect = Rect::from_x_y_ranges(
+                        row_rect.x_range(),
+                        Rangef::point(y).expand(DROP_LINE_HEIGHT * 0.5),
+                    );
+
+                    self.ui.painter().set(
+                        self.ui_data.drop_marker_idx,
+                        Shape::rect_filled(rect, radius, color),
+                    );
+                }
+            }
+        }
+
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
+        // Draw node
         let (row, closer, icon, label) = self
             .ui
             .scope(|ui| {
@@ -286,6 +358,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             })
             .inner;
 
+        // Draw node dragged
         if self.state.is_dragged(&node.id) {
             node.show_node_dragged(
                 self.ui,
@@ -305,6 +378,60 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 label,
             }),
         })
+    }
+
+    fn get_drop_position(
+        &self,
+        row: Rect,
+        node: &NodeBuilder<NodeIdType>,
+    ) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
+        let drop_quarter = self
+            .ui_data
+            .interaction
+            .hover_pos()
+            .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
+            .expect("Cursor is above row so the drop quarter should be known");
+        match drop_quarter {
+            DropQuarter::Top => {
+                if let Some(parent_id) = self.parent_id() {
+                    return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
+                }
+                if node.drop_allowed {
+                    return Some((node.id.clone(), DirPosition::Last));
+                }
+                None
+            }
+            DropQuarter::MiddleTop => {
+                if node.drop_allowed {
+                    return Some((node.id.clone(), DirPosition::Last));
+                }
+                if let Some(parent_id) = self.parent_id() {
+                    return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
+                }
+                None
+            }
+            DropQuarter::MiddleBottom => {
+                if node.drop_allowed {
+                    return Some((node.id.clone(), DirPosition::Last));
+                }
+                if let Some(parent_id) = self.parent_id() {
+                    return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
+                }
+                None
+            }
+            DropQuarter::Bottom => {
+                if node.drop_allowed && node.is_open {
+                    return Some((node.id.clone(), DirPosition::First));
+                }
+                if let Some(parent_id) = self.parent_id() {
+                    return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
+                }
+                if node.drop_allowed {
+                    return Some((node.id.clone(), DirPosition::Last));
+                }
+                None
+            }
+        }
     }
 }
 
