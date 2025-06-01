@@ -365,7 +365,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         build_tree_view: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
     ) -> (Response, Vec<Action<NodeIdType>>)
     where
-        NodeIdType: NodeId + Send + Sync + 'static,
+        NodeIdType: NodeId,
     {
         let TreeView {
             id,
