@@ -305,6 +305,12 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         self
     }
 
+    /// Set if nodes in the tree are allowed to be dragged and dropped.
+    pub fn allow_drag_and_drop(mut self, allow_drag_and_drop: bool) -> Self {
+        self.settings.allow_drag_and_drop = allow_drag_and_drop;
+        self
+    }
+
     /// Set the default node height for this tree.
     pub fn default_node_height(mut self, default_node_height: Option<f32>) -> Self {
         self.settings.default_node_height = default_node_height;
@@ -598,7 +604,10 @@ fn handle_input<NodeIdType: NodeId>(
             .hover_pos()
             .is_some_and(|pos| row_rect.contains(pos));
         if cursor_above_row && !closer_clicked {
-            let was_last_clicked = state.last_clicked_node.as_ref().is_some_and(|last| last == node_id);
+            let was_last_clicked = state
+                .last_clicked_node
+                .as_ref()
+                .is_some_and(|last| last == node_id);
 
             if interaction.double_clicked() && was_last_clicked {
                 let node_state = state.node_state_of_mut(&node_id).unwrap();
@@ -644,7 +653,7 @@ fn handle_input<NodeIdType: NodeId>(
             // graphical artifacts. Sometimes the user is a little fast with the mouse and
             // it creates the drag overlay when it really shouldn't have.
             let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
-            if primary_pressed {
+            if primary_pressed && settings.allow_drag_and_drop {
                 let pointer_pos = ui.ctx().pointer_latest_pos().unwrap_or_default();
                 let node_ids = if state.is_selected(&node_id) {
                     state.selected().clone()
@@ -1067,6 +1076,9 @@ pub struct TreeViewSettings {
     /// If the tree view is allowed to select multiple nodes at once.
     /// Default is true.
     pub allow_multi_select: bool,
+    /// If the nodes in the tree view are allowed to be dragged and dropped.
+    /// Default is true.
+    pub allow_drag_and_drop: bool,
     /// The default height of a node.
     /// If none is set the default height will be `interact_size.y` from `egui::style::Spacing`.
     pub default_node_height: Option<f32>,
@@ -1085,6 +1097,7 @@ impl Default for TreeViewSettings {
             fill_space_horizontal: true,
             fill_space_vertical: false,
             allow_multi_select: true,
+            allow_drag_and_drop: true,
             default_node_height: None,
         }
     }
