@@ -194,6 +194,37 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         )
         .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
 
+        // React to secondary clicks
+        // Context menus in egui only show up when the secondary mouse button is pressed.
+        // Since we are handling inputs after the tree has already been build we only know
+        // that we should show a context menu one frame after the click has happened and the
+        // context menu would never show up.
+        // To fix this we handle the secondary click here and return the even in the result.
+        let is_mouse_above_row = self
+            .ui_data
+            .interaction
+            .hover_pos()
+            .is_some_and(|pos| row_rect.contains(pos));
+        if is_mouse_above_row
+            && self.ui_data.interaction.secondary_clicked()
+            && !self.state.drag_valid()
+        {
+            self.ui_data.seconday_click = Some(node.id.clone());
+        }
+
+        // Show the context menu.
+        let was_right_clicked = self
+            .ui_data
+            .seconday_click
+            .as_ref()
+            .is_some_and(|id| id == &node.id)
+            || self.state.is_secondary_selected(&node.id);
+        let was_only_target = !self.state.is_selected(&node.id)
+            || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
+        if was_right_clicked && was_only_target {
+            self.ui_data.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
+        }
+
         // Draw background
         if self.state.is_selected(&node.id) {
             let (shape_idx, rect) = self
@@ -212,6 +243,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         } else {
             self.selection_background = None;
+        }
+
+        // Draw context menu marker
+        if self.state.is_secondary_selected(&node.id) && self.ui_data.context_menu_was_open {
+            self.ui.painter().rect_stroke(
+                row_rect,
+                self.ui.visuals().widgets.active.corner_radius,
+                self.ui.visuals().widgets.inactive.fg_stroke,
+                egui::StrokeKind::Inside,
+            );
         }
 
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
@@ -243,37 +284,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 self.ui_data.drag_layer,
                 drag_overlay_rect,
             );
-        }
-
-        // React to secondary clicks
-        // Context menus in egui only show up when the secondary mouse button is pressed.
-        // Since we are handling inputs after the tree has already been build we only know
-        // that we should show a context menu one frame after the click has happened and the
-        // context menu would never show up.
-        // To fix this we handle the secondary click here and return the even in the result.
-        let is_mouse_above_row = self
-            .ui_data
-            .interaction
-            .hover_pos()
-            .is_some_and(|pos| row.contains(pos));
-        if is_mouse_above_row
-            && self.ui_data.interaction.secondary_clicked()
-            && !self.state.drag_valid()
-        {
-            self.ui_data.seconday_click = Some(node.id.clone());
-        }
-
-        // Show the context menu.
-        let was_right_clicked = self
-            .ui_data
-            .seconday_click
-            .as_ref()
-            .is_some_and(|id| id == &node.id)
-            || self.state.is_secondary_selected(&node.id);
-        let was_only_target = !self.state.is_selected(&node.id)
-            || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
-        if was_right_clicked && was_only_target {
-            self.ui_data.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
         }
 
         Some(NodeResponse {
