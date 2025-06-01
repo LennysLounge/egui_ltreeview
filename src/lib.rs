@@ -516,7 +516,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
-        selection_cursor_idx: ui.painter().add(Shape::Noop),
         drop_marker_idx: ui.painter().add(Shape::Noop),
     };
 
@@ -845,24 +844,6 @@ fn draw_background<NodeIdType: NodeId>(
     state: &TreeViewState<NodeIdType>,
     ui_data: &UiData<NodeIdType>,
 ) {
-    if ui_data.has_focus {
-        if let Some(row_rectangles) = state
-            .selection_cursor()
-            .and_then(|id| ui_data.row_rectangles.get(&id))
-        {
-            ui.painter().set(
-                ui_data.selection_cursor_idx,
-                epaint::RectShape::new(
-                    row_rectangles.row_rect,
-                    ui.visuals().widgets.active.corner_radius,
-                    egui::Color32::TRANSPARENT,
-                    ui.visuals().widgets.inactive.fg_stroke,
-                    egui::StrokeKind::Inside,
-                ),
-            );
-        }
-    }
-
     if let Some(drag_state) = &state.dragged {
         if drag_state.drag_valid {
             if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
@@ -1184,7 +1165,6 @@ struct UiData<NodeIdType> {
     interaction: Response,
     drag_layer: LayerId,
     has_focus: bool,
-    selection_cursor_idx: ShapeIdx,
     drop_marker_idx: ShapeIdx,
 }
 

@@ -151,11 +151,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
         &self.node_states
     }
-
-    pub(crate) fn selection_cursor(&self) -> Option<NodeIdType> {
-        self.selection_cursor.clone()
-    }
-
     /// Get the node state for an id.
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
         self.node_states.get(id)
@@ -346,6 +341,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             selected,
             dragged,
             secondary_selection,
+            selection_cursor,
             node_states,
             ..
         } = self;
@@ -355,6 +351,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 selected,
                 dragged,
                 secondary_selection,
+                selection_cursor,
             },
         )
     }
@@ -370,9 +367,11 @@ pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
     /// Id of the node that was selected.
     selected: &'a Vec<NodeIdType>,
     /// Information about the dragged node.
-    pub(crate) dragged: &'a Option<DragState<NodeIdType>>,
+    dragged: &'a Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
-    pub(crate) secondary_selection: &'a Option<NodeIdType>,
+    secondary_selection: &'a Option<NodeIdType>,
+    /// The element where the selection curosr is at the moment.
+    selection_cursor: &'a Option<NodeIdType>,
 }
 impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     /// Is the current drag valid.
@@ -398,5 +397,10 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     }
     pub(crate) fn selected_count(&self) -> usize {
         self.selected.len()
+    }
+    pub(crate) fn is_selection_cursor(&self, id: &NodeIdType) -> bool {
+        self.selection_cursor
+            .as_ref()
+            .is_some_and(|cursor_id| cursor_id == id)
     }
 }

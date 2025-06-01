@@ -255,6 +255,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         }
 
+        // Draw selection cursor
+        if self.state.is_selection_cursor(&node.id) {
+            self.ui.painter().rect_stroke(
+                row_rect,
+                self.ui.visuals().widgets.active.corner_radius,
+                self.ui.visuals().widgets.inactive.fg_stroke,
+                egui::StrokeKind::Inside,
+            );
+        }
+
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
         let (row, closer, icon, label) = self
