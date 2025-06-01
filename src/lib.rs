@@ -172,7 +172,7 @@ use egui::{
     self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout,
     Modifiers, NumExt, Order, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
-use std::{cmp::Ordering, collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash};
 
 pub use builder::*;
 pub use node::*;
@@ -516,9 +516,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
-        background_idx: (0..(state.selected().len() + 1))
-            .map(|_| ui.painter().add(Shape::Noop))
-            .collect(),
         secondary_selection_idx: ui.painter().add(Shape::Noop),
         selection_cursor_idx: ui.painter().add(Shape::Noop),
         drop_marker_idx: ui.painter().add(Shape::Noop),
@@ -849,56 +846,6 @@ fn draw_background<NodeIdType: NodeId>(
     state: &TreeViewState<NodeIdType>,
     ui_data: &UiData<NodeIdType>,
 ) {
-    if !state.selected().is_empty() {
-        let mut selected_rects = state
-            .selected()
-            .iter()
-            .filter_map(|id| ui_data.row_rectangles.get(id).map(|r| r.row_rect))
-            .collect::<Vec<_>>();
-        if !selected_rects.is_empty() {
-            selected_rects.sort_by(|a, b| {
-                if a.min.y > b.min.y {
-                    Ordering::Greater
-                } else {
-                    Ordering::Less
-                }
-            });
-
-            let mut combined_rects = Vec::new();
-            let mut current_rect = selected_rects[0];
-            for rect in selected_rects.iter().skip(1) {
-                if (rect.min.y - current_rect.max.y).abs() < 1.0 {
-                    current_rect = Rect::from_min_max(current_rect.min, rect.max)
-                } else {
-                    combined_rects.push(current_rect);
-                    current_rect = *rect;
-                }
-            }
-            combined_rects.push(current_rect);
-
-            for (rect, shape_idx) in combined_rects.iter().zip(&ui_data.background_idx) {
-                ui.painter().set(
-                    *shape_idx,
-                    epaint::RectShape::new(
-                        *rect,
-                        ui.visuals().widgets.active.corner_radius,
-                        if ui_data.has_focus {
-                            ui.visuals().selection.bg_fill
-                        } else {
-                            ui.visuals()
-                                .widgets
-                                .inactive
-                                .weak_bg_fill
-                                .linear_multiply(0.3)
-                        },
-                        Stroke::NONE,
-                        egui::StrokeKind::Inside,
-                    ),
-                );
-            }
-        }
-    }
-
     if state.context_menu_was_open {
         if let Some(row_rectangles) = state
             .secondary_selection
@@ -1257,7 +1204,6 @@ struct UiData<NodeIdType> {
     interaction: Response,
     drag_layer: LayerId,
     has_focus: bool,
-    background_idx: Vec<ShapeIdx>,
     secondary_selection_idx: ShapeIdx,
     selection_cursor_idx: ShapeIdx,
     drop_marker_idx: ShapeIdx,

@@ -1,4 +1,4 @@
-use egui::{pos2, vec2, Pos2, Rangef, Rect, Ui, WidgetText};
+use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
     builder_state::BuilderState, node::NodeBuilder, IndentHintStyle, NodeId, PartialTreeViewState,
@@ -14,6 +14,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     settings: &'ui TreeViewSettings,
     ui_data: &'ui mut UiData<NodeIdType>,
     builder_state: BuilderState<'ui, NodeIdType>,
+    selection_background: Option<(ShapeIdx, Rect)>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -30,6 +31,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             settings,
             ui,
             builder_state: BuilderState::new(node_states),
+            selection_background: None,
         }
     }
 
@@ -186,6 +188,32 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             });
         }
 
+        let row_rect = Rect::from_min_max(
+            self.ui.cursor().min,
+            pos2(self.ui.cursor().max.x, self.ui.cursor().min.y + node_height),
+        )
+        .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
+
+        // Draw background
+        if self.state.is_selected(&node.id) {
+            let (shape_idx, rect) = self
+                .selection_background
+                .get_or_insert_with(|| (self.ui.painter().add(Shape::Noop), Rect::NOTHING));
+            *rect = Rect::from_min_max(rect.min.min(row_rect.min), rect.max.max(row_rect.max));
+            let visuals = self.ui.visuals();
+            let color = if self.ui_data.has_focus {
+                visuals.selection.bg_fill
+            } else {
+                visuals.widgets.inactive.weak_bg_fill.linear_multiply(0.3)
+            };
+            self.ui.painter().set(
+                *shape_idx,
+                Shape::rect_filled(*rect, self.ui.visuals().widgets.active.corner_radius, color),
+            );
+        } else {
+            self.selection_background = None;
+        }
+
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
         let (row, closer, icon, label) = self
@@ -236,7 +264,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Show the context menu.
-        let was_right_clicked = self.ui_data.seconday_click.as_ref().is_some_and(|id| id == &node.id)
+        let was_right_clicked = self
+            .ui_data
+            .seconday_click
+            .as_ref()
+            .is_some_and(|id| id == &node.id)
             || self.state.is_secondary_selected(&node.id);
         let was_only_target = !self.state.is_selected(&node.id)
             || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
