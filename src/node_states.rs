@@ -36,9 +36,6 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
         }
         self.states.insert(node_id.clone(), state);
     }
-    pub(crate) fn first<'a>(&'a self) -> Option<(&'a NodeIdType, &'a NodeState<NodeIdType>)> {
-        self.states.first()
-    }
     pub(crate) fn iter_from_to<'a>(
         &'a self,
         from: &NodeIdType,

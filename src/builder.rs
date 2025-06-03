@@ -1,7 +1,7 @@
 use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition,
+    builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, Dragged,
     DropQuarter, IndentHintStyle, NodeId, PartialTreeViewState, RowRectangles, TreeViewSettings,
     TreeViewState, UiData,
 };
@@ -267,6 +267,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .interaction
             .hover_pos()
             .is_some_and(|pos| rect_contains_visually(&row_rect, &pos));
+        let pressed_on_this_row = self
+            .ui
+            .input(|i| i.pointer.press_origin())
+            .is_some_and(|pos| rect_contains_visually(&row_rect, &pos));
 
         // React to secondary clicks
         // Context menus in egui only show up when the secondary mouse button is pressed.
@@ -279,11 +283,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .interaction
             .hover_pos()
             .is_some_and(|pos| row_rect.contains(pos));
-        if is_mouse_above_row
-            && self.ui_data.interaction.secondary_clicked()
-            && !self.state.drag_valid()
-        {
+        if is_mouse_above_row && self.ui_data.interaction.secondary_clicked() {
             self.ui_data.seconday_click = Some(node.id.clone());
+        }
+
+        // Handle drag start
+        if self.ui_data.interaction.drag_started() && pressed_on_this_row {
+            if self.state.is_selected(&node.id) {
+                self.ui_data.new_dragged = Some(Dragged::Selection);
+            } else {
+                self.ui_data.new_dragged = Some(Dragged::One(node.id.clone()));
+            }
         }
 
         // Show the context menu.
@@ -340,7 +350,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Handle drop position
-        if self.state.drag_valid() && cursor_above_row {
+        if !self.ui_data.interaction.drag_started()
+            && (self.ui_data.interaction.dragged() || self.ui_data.interaction.drag_stopped())
+            && cursor_above_row
+        {
             if !self.current_branch_dragged() && !self.state.is_dragged(&node.id) {
                 self.ui_data.drop_target = self.get_drop_position(row_rect, node);
             }
@@ -401,7 +414,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .inner;
 
         // Draw node dragged
-        if self.state.is_dragged(&node.id) {
+        if self.ui_data.interaction.dragged() && self.state.is_dragged(&node.id) {
             node.show_node_dragged(
                 self.ui,
                 &self.ui_data.interaction,

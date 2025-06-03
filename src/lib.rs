@@ -390,17 +390,6 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             state.prune_selection_to_single_id();
         }
 
-        // Update the drag state
-        // A drag only becomes a valid drag after the pointer has traveled some distance.
-        if let Some(drag_state) = state.dragged.as_mut() {
-            if !drag_state.drag_valid {
-                drag_state.drag_valid = drag_state
-                    .drag_start_pos
-                    .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
-                    > 5.0;
-            }
-        }
-
         let (ui_data, response) = draw_foreground(
             ui,
             id,
@@ -413,49 +402,42 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         state.size = response.rect.size();
         state.prune_selection_to_known_ids();
 
-        draw_background(ui, state, &ui_data);
+        draw_background(ui, &ui_data);
 
         let input_result = handle_input(ui, id, &settings, &ui_data, state);
 
         let mut actions = Vec::new();
         // Create a drag or move action.
-        if state.drag_valid() {
-            if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(ui_data.drop_target)
-            {
-                if ui.ctx().input(|i| i.pointer.primary_released()) {
-                    actions.push(Action::Move(DragAndDrop {
-                        source: simplify_selection_for_dnd(state, &drag_state.node_ids),
-                        target: drop_id,
-                        position,
-                        drop_marker_idx: ui_data.drop_marker_idx,
-                    }))
-                } else {
-                    actions.push(Action::Drag(DragAndDrop {
-                        source: simplify_selection_for_dnd(state, &drag_state.node_ids),
-                        target: drop_id,
-                        position,
-                        drop_marker_idx: ui_data.drop_marker_idx,
-                    }))
-                }
-            } else {
-                if let Some(cursor_pos) = ui.ctx().pointer_latest_pos() {
-                    if !response.rect.contains(cursor_pos) {
-                        if let Some(dragged) = &state.dragged {
-                            if ui.ctx().input(|i| i.pointer.primary_released()) {
-                                actions.push(Action::MoveExternal(DragAndDropExternal {
-                                    position: cursor_pos,
-                                    source: dragged.node_ids.clone(),
-                                }));
-                            } else {
-                                actions.push(Action::DragExternal(DragAndDropExternal {
-                                    position: cursor_pos,
-                                    source: dragged.node_ids.clone(),
-                                }));
-                            }
-                        }
-                    }
-                }
+        if ui_data.interaction.dragged() {
+            if let Some((drop_id, position)) = &ui_data.drop_target {
+                actions.push(Action::Drag(DragAndDrop {
+                    source: simplify_selection_for_dnd(state, &state.get_dragged()),
+                    target: drop_id.clone(),
+                    position: position.clone(),
+                    drop_marker_idx: ui_data.drop_marker_idx,
+                }))
+            }
+            if let Some(position) = ui.ctx().pointer_latest_pos() {
+                actions.push(Action::DragExternal(DragAndDropExternal {
+                    position,
+                    source: state.get_dragged(),
+                }));
+            }
+        }
+        if ui_data.interaction.drag_stopped() {
+            if let Some((drop_id, position)) = ui_data.drop_target {
+                actions.push(Action::Move(DragAndDrop {
+                    source: simplify_selection_for_dnd(state, &state.get_dragged()),
+                    target: drop_id,
+                    position,
+                    drop_marker_idx: ui_data.drop_marker_idx,
+                }))
+            }
+            if let Some(position) = ui.ctx().pointer_latest_pos() {
+                actions.push(Action::MoveExternal(DragAndDropExternal {
+                    position,
+                    source: state.get_dragged(),
+                }));
             }
         }
         // Create a selection action.
@@ -479,9 +461,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             }));
         }
 
-        // Reset the drag state.
-        if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
-            state.dragged = None;
+        if ui_data.interaction.drag_stopped() {
+            state.reset_dragged();
         }
 
         (ui_data.interaction, actions)
@@ -526,8 +507,8 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
+        new_dragged: None,
     };
-
     // Run the build tree view closure
     let response = ui
         .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
@@ -560,6 +541,10 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
                 fallback_context_menu(ui, state.selected());
             });
         }
+    }
+    // Transfer drag
+    if let Some(dragged) = ui_data.new_dragged.take() {
+        state.set_dragged(dragged);
     }
 
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
@@ -648,28 +633,6 @@ fn handle_input<NodeIdType: NodeId>(
             if interaction.clicked() {
                 state.last_clicked_node = Some(node_id.clone());
             }
-
-            // React to a dragging
-            // An egui drag only starts after the pointer has moved but with that first movement
-            // the pointer may have moved to a different node. Instead we want to update
-            // the drag state right when the priamry button was pressed.
-            // We also want to have our own rules when a drag really becomes valid to avoid
-            // graphical artifacts. Sometimes the user is a little fast with the mouse and
-            // it creates the drag overlay when it really shouldn't have.
-            let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
-            if primary_pressed && settings.allow_drag_and_drop {
-                let pointer_pos = ui.ctx().pointer_latest_pos().unwrap_or_default();
-                let node_ids = if state.is_selected(&node_id) {
-                    state.selected().clone()
-                } else {
-                    vec![node_id.clone()]
-                };
-                state.dragged = Some(DragState {
-                    node_ids,
-                    drag_start_pos: pointer_pos,
-                    drag_valid: false,
-                });
-            }
         }
     }
 
@@ -678,13 +641,9 @@ fn handle_input<NodeIdType: NodeId>(
         // to allow navigating throught the tree.
         // In case we gain focus from a drag action we select the dragged node directly.
         if state.selected().is_empty() {
-            let fallback_selection = state
-                .dragged
-                .as_ref()
-                .map(|drag_state| drag_state.node_ids.clone())
-                .or(state.node_states().first().map(|(id, _)| vec![id.clone()]));
+            let fallback_selection = state.get_dragged().pop();
             if let Some(fallback_selection) = fallback_selection {
-                state.set_selected(fallback_selection);
+                state.set_one_selected(fallback_selection);
                 selection_changed = true;
             }
         }
@@ -719,19 +678,14 @@ fn handle_input<NodeIdType: NodeId>(
     }
 }
 
-fn draw_background<NodeIdType: NodeId>(
-    ui: &mut Ui,
-    state: &TreeViewState<NodeIdType>,
-    ui_data: &UiData<NodeIdType>,
-) {
-    if let Some(drag_state) = &state.dragged {
-        if drag_state.drag_valid {
-            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-                let delta = pointer_pos.to_vec2() - drag_state.drag_start_pos.to_vec2();
-                let transform = emath::TSTransform::from_translation(delta);
-                ui.ctx()
-                    .transform_layer_shapes(ui_data.drag_layer, transform);
-            }
+fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>) {
+    if ui_data.interaction.dragged() {
+        let (start, current) = ui.input(|i| (i.pointer.press_origin(), i.pointer.hover_pos()));
+        if let (Some(start), Some(current)) = (start, current) {
+            let delta = current.to_vec2() - start.to_vec2();
+            let transform = emath::TSTransform::from_translation(delta);
+            ui.ctx()
+                .transform_layer_shapes(ui_data.drag_layer, transform);
         }
     }
 }
@@ -1000,6 +954,7 @@ struct UiData<NodeIdType> {
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    new_dragged: Option<Dragged<NodeIdType>>,
 }
 
 #[derive(Debug)]

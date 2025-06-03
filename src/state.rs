@@ -1,19 +1,13 @@
-use egui::{Id, Key, Modifiers, Pos2, Ui, Vec2};
+use egui::{Id, Key, Modifiers, Ui, Vec2};
 
 use crate::{node_states::NodeStates, NodeId};
 
-/// State of the dragged node.
-#[derive(Clone)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct DragState<NodeIdType> {
-    /// Id of the dragged nodes.
-    pub node_ids: Vec<NodeIdType>,
-    /// Position of the pointer when the drag started.
-    pub drag_start_pos: Pos2,
-    /// A drag only becomes valid after it has been dragged for
-    /// a short distance.
-    pub drag_valid: bool,
+#[derive(Clone, Debug)]
+pub(crate) enum Dragged<NodeIdType> {
+    One(NodeIdType),
+    Selection,
 }
+
 /// State of each node in the tree.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
@@ -51,8 +45,6 @@ pub struct TreeViewState<NodeIdType> {
     selection_pivot: Option<NodeIdType>,
     /// The element where the selection curosr is at the moment.
     selection_cursor: Option<NodeIdType>,
-    /// Information about the dragged node.
-    pub(crate) dragged: Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
     pub(crate) secondary_selection: Option<NodeIdType>,
     /// The rectangle the tree view occupied.
@@ -63,6 +55,8 @@ pub struct TreeViewState<NodeIdType> {
     pub(crate) context_menu_was_open: bool,
     /// The last node that was clicked. Used for double click detection.
     pub(crate) last_clicked_node: Option<NodeIdType>,
+    /// If and what is being dragged.
+    dragged: Option<Dragged<NodeIdType>>,
 }
 
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
@@ -159,18 +153,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         id: &NodeIdType,
     ) -> Option<&mut NodeState<NodeIdType>> {
         self.node_states.get_mut(id)
-    }
-
-    /// Is the current drag valid.
-    /// `false` if no drag is currently registered.
-    pub(crate) fn drag_valid(&self) -> bool {
-        self.dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid)
-    }
-
-    pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
-        self.selected.contains(id)
     }
 
     pub(crate) fn handle_click(
@@ -328,6 +310,19 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             self.set_one_selected(new_selection);
         }
     }
+    pub(crate) fn get_dragged(&self) -> Vec<NodeIdType> {
+        match &self.dragged {
+            Some(Dragged::One(id)) => vec![id.clone()],
+            Some(Dragged::Selection) => self.selected.clone(),
+            None => Vec::new(),
+        }
+    }
+    pub(crate) fn set_dragged(&mut self, dragged: Dragged<NodeIdType>) {
+        self.dragged = Some(dragged);
+    }
+    pub(crate) fn reset_dragged(&mut self) {
+        self.dragged = None;
+    }
 
     pub(crate) fn split<'a>(
         &'a mut self,
@@ -365,25 +360,20 @@ pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
     /// Id of the node that was selected.
     selected: &'a Vec<NodeIdType>,
     /// Information about the dragged node.
-    dragged: &'a Option<DragState<NodeIdType>>,
+    dragged: &'a Option<Dragged<NodeIdType>>,
     /// Id of the node that was right clicked.
     secondary_selection: &'a Option<NodeIdType>,
     /// The element where the selection curosr is at the moment.
     selection_cursor: &'a Option<NodeIdType>,
 }
 impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
-    /// Is the current drag valid.
-    /// `false` if no drag is currently registered.
-    pub(crate) fn drag_valid(&self) -> bool {
-        self.dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid)
-    }
     /// Is the given id part of a valid drag.
     pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
-        self.dragged
-            .as_ref()
-            .is_some_and(|drag_state| drag_state.drag_valid && drag_state.node_ids.contains(id))
+        match self.dragged {
+            Some(Dragged::One(dragged_id)) => dragged_id == id,
+            Some(Dragged::Selection) => self.selected.contains(id),
+            None => false,
+        }
     }
 
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
