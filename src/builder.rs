@@ -6,6 +6,27 @@ use crate::{
     TreeViewState, UiData,
 };
 
+#[derive(Clone)]
+struct DirectoryState<NodeIdType> {
+    /// Id of the directory node.
+    id: NodeIdType,
+    /// How many children this directory has.
+    /// Used for automatically closing the directory after all its children have been added.
+    child_count: Option<usize>,
+    /// If current directory branch is expanded or collapsed
+    branch_expanded: bool,
+    /// Whether or not the current branch is being dragged.
+    branch_dragged: bool,
+}
+struct IndentState<NodeIdType> {
+    /// Id of the node that created this indent
+    source_node: NodeIdType,
+    /// Anchor for the indent hint at the source directory
+    anchor: Rangef,
+    /// Positions of child nodes for the indent hint.
+    positions: Vec<Pos2>,
+}
+
 /// The builder used to construct the tree.
 ///
 /// Use this to add directories or leaves to the tree.
@@ -16,6 +37,8 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui_data: &'ui mut UiData<NodeIdType>,
     builder_state: BuilderState<'ui, NodeIdType>,
     selection_background: Option<(ShapeIdx, Rect)>,
+    stack: Vec<DirectoryState<NodeIdType>>,
+    indents: Vec<IndentState<NodeIdType>>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -33,12 +56,14 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             ui,
             builder_state: BuilderState::new(node_states),
             selection_background: None,
+            stack: Vec::new(),
+            indents: Vec::new(),
         }
     }
 
     /// Get the current parent id if any.
     pub fn parent_id(&self) -> Option<&NodeIdType> {
-        self.builder_state.parent_id()
+        self.stack.last().map(|dir| &dir.id)
     }
 
     /// Add a leaf directly to the tree with an id and the label text.
@@ -71,38 +96,26 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// If this method is called with `0` the current directory will close immediately.
     /// Child nodes that were added before this method was called are not counted.
     pub fn close_dir_in(&mut self, child_count: usize) {
-        self.builder_state.set_child_count(child_count);
+        if child_count == 0 {
+            self.close_dir();
+        } else {
+            if let Some(dir_state) = self.stack.last_mut() {
+                dir_state.child_count = Some(child_count);
+            }
+        }
     }
 
     /// Close the current directory.
     pub fn close_dir(&mut self) {
-        loop {
-            if let Some((anchor, positions, level, dir_id)) = self.builder_state.close_dir() {
-                self.draw_indent_hint(anchor, positions, level);
-                let draw_drop_marker = matches!(
-                    self.ui_data.drop_target.as_ref(),
-                    Some((id, DirPosition::Last)) if *id == dir_id
-                );
-                if draw_drop_marker {
-                    let rect = Rect::from_min_max(
-                        pos2(self.ui.cursor().min.x, anchor.min),
-                        pos2(self.ui.cursor().max.x, self.ui.cursor().min.y),
-                    );
-                    let color = self
-                        .ui
-                        .style()
-                        .visuals
-                        .selection
-                        .bg_fill
-                        .linear_multiply(0.6);
-                    let radius = self.ui.visuals().widgets.active.corner_radius;
-                    self.ui.painter().set(
-                        self.ui_data.drop_marker_idx,
-                        Shape::rect_filled(rect, radius, color),
-                    );
-                }
+        while let Some(dir_state) = self.stack.pop() {
+            let indent = self
+                .indents
+                .pop_if(|indent| indent.source_node == dir_state.id);
+            if let Some(indent) = indent {
+                self.draw_indent_hint(indent.anchor, indent.positions, self.indents.len());
+                self.draw_directory_drop_marker(indent.anchor, &dir_state.id);
             }
-            if !self.builder_state.should_close_current_dir() {
+            if !self.should_close_current_dir() {
                 break;
             }
         }
@@ -154,6 +167,31 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
+    fn draw_directory_drop_marker(&mut self, row_range: Rangef, closed_id: &NodeIdType) {
+        let draw_drop_marker = matches!(
+            self.ui_data.drop_target.as_ref(),
+            Some((id, DirPosition::Last)) if id == closed_id
+        );
+        if draw_drop_marker {
+            let rect = Rect::from_min_max(
+                pos2(self.ui.cursor().min.x, row_range.min),
+                pos2(self.ui.cursor().max.x, self.ui.cursor().min.y),
+            );
+            let color = self
+                .ui
+                .style()
+                .visuals
+                .selection
+                .bg_fill
+                .linear_multiply(0.6);
+            let radius = self.ui.visuals().widgets.active.corner_radius;
+            self.ui.painter().set(
+                self.ui_data.drop_marker_idx,
+                Shape::rect_filled(rect, radius, color),
+            );
+        }
+    }
+
     /// Add a node to the tree.
     ///
     /// If the node is a directory this method returns the openness state of the ndode.
@@ -162,62 +200,66 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     ///
     /// If the node is a directory, you must call [`TreeViewBuilder::close_dir`] to close the directory.
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
-        node = self.builder_state.update_and_insert_node(node);
+        self.decrement_current_dir_child_count();
 
-        let node_response = self.node_internal(&mut node);
+        let is_open = self.builder_state.update_and_insert_node(
+            &node,
+            self.parent_id().cloned(),
+            self.current_branch_expanded(),
+        );
+        node.set_is_open(is_open);
+        node.set_indent(self.indents.len());
+        node.set_height(
+            node.node_height
+                .unwrap_or(self.ui.spacing().interact_size.y),
+        );
 
-        if let Some(node_rects) = node_response.as_ref().and_then(|nr| nr.rects.as_ref()) {
-            self.ui_data.row_rectangles.insert(
-                node.id.clone(),
-                RowRectangles {
-                    row_rect: node_rects.row,
-                    closer_rect: node_rects.closer,
-                },
-            );
+        if self.current_branch_expanded() && !node.flatten {
+            self.node_structually_visible(&mut node);
         }
 
-        self.builder_state
-            .insert_node_response(&node, node_response);
+        if node.is_dir {
+            self.stack.push(DirectoryState {
+                id: node.id.clone(),
+                child_count: None,
+                branch_expanded: self.current_branch_expanded() && node.is_open,
+                branch_dragged: self.current_branch_dragged() || self.state.is_dragged(&node.id),
+            });
+        }
 
-        if self.builder_state.should_close_current_dir() {
+        if self.should_close_current_dir() {
             self.close_dir();
-        }
-
-        if node.is_dir && self.state.is_dragged(&node.id) {
-            self.builder_state.disallow_dir_as_drop_target();
         }
 
         node.is_open
     }
 
-    fn node_internal(&mut self, node: &mut NodeBuilder<NodeIdType>) -> Option<NodeResponse> {
-        if !self.builder_state.parent_dir_is_open() {
-            return None;
+    fn node_structually_visible(&mut self, node: &mut NodeBuilder<NodeIdType>) {
+        let row_range = Rangef::new(
+            self.ui.cursor().min.y,
+            self.ui.cursor().min.y + node.node_height.unwrap(),
+        )
+        .expand(self.ui.spacing().item_spacing.y);
+        let in_clip_rect = self.ui.clip_rect().y_range().intersects(row_range);
+        if in_clip_rect {
+            self.node_visible_in_clip_rect(node);
         }
-        if node.flatten {
-            return None;
-        }
-
-        let node_height = *node.node_height.get_or_insert(
-            self.settings
-                .default_node_height
-                .unwrap_or(self.ui.spacing().interact_size.y),
-        );
-        let row_range = Rangef::new(self.ui.cursor().min.y, self.ui.cursor().min.y + node_height)
-            .expand(self.ui.spacing().item_spacing.y);
-        let is_visible = self.ui.clip_rect().y_range().intersects(row_range);
-        if !is_visible {
-            self.ui
-                .add_space(node_height + self.ui.spacing().item_spacing.y);
-            return Some(NodeResponse {
-                range: row_range,
-                rects: None,
+        if node.is_dir {
+            self.indents.push(IndentState {
+                source_node: node.id.clone(),
+                anchor: row_range,
+                positions: Vec::new(),
             });
         }
+    }
 
+    fn node_visible_in_clip_rect(&mut self, node: &mut NodeBuilder<NodeIdType>) {
         let row_rect = Rect::from_min_max(
             self.ui.cursor().min,
-            pos2(self.ui.cursor().max.x, self.ui.cursor().min.y + node_height),
+            pos2(
+                self.ui.cursor().max.x,
+                self.ui.cursor().min.y + node.node_height.unwrap(),
+            ),
         )
         .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
         let cursor_above_row = self
@@ -299,7 +341,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         // Handle drop position
         if self.state.drag_valid() && cursor_above_row {
-            if self.builder_state.dir_allowed_as_drop_target() && !self.state.is_dragged(&node.id) {
+            if !self.current_branch_dragged() && !self.state.is_dragged(&node.id) {
                 self.ui_data.drop_target = self.get_drop_position(row_rect, node);
             }
         }
@@ -369,15 +411,20 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         }
 
-        Some(NodeResponse {
-            range: row_range,
-            rects: Some(NodeRectangles {
-                row,
-                closer,
-                icon,
-                label,
-            }),
-        })
+        // Save rectangles for later
+        self.ui_data.row_rectangles.insert(
+            node.id.clone(),
+            RowRectangles {
+                row_rect: row,
+                closer_rect: closer,
+            },
+        );
+        // Save position for indent hint
+        if let Some(indent) = self.indents.last_mut() {
+            indent
+                .positions
+                .push(closer.or(icon).unwrap_or(label).left_center());
+        }
     }
 
     fn get_drop_position(
@@ -433,15 +480,28 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
         }
     }
-}
 
-pub(crate) struct NodeResponse {
-    pub range: Rangef,
-    pub rects: Option<NodeRectangles>,
-}
-pub(crate) struct NodeRectangles {
-    pub row: Rect,
-    pub closer: Option<Rect>,
-    pub icon: Option<Rect>,
-    pub label: Rect,
+    fn should_close_current_dir(&self) -> bool {
+        self.stack
+            .last()
+            .and_then(|dir| dir.child_count)
+            .is_some_and(|count| count == 0)
+    }
+    fn decrement_current_dir_child_count(&mut self) {
+        if let Some(dir_state) = self.stack.last_mut() {
+            if let Some(child_count) = &mut dir_state.child_count {
+                *child_count -= 1;
+            }
+        }
+    }
+
+    fn current_branch_expanded(&self) -> bool {
+        self.stack.last().is_none_or(|state| state.branch_expanded)
+    }
+    fn current_branch_dragged(&self) -> bool {
+        let Some(dir_state) = self.stack.last() else {
+            return false;
+        };
+        dir_state.branch_dragged
+    }
 }

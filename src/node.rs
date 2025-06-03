@@ -158,6 +158,9 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) fn set_indent(&mut self, indent: usize) {
         self.indent = indent;
     }
+    pub(crate) fn set_height(&mut self, height: f32) {
+        self.node_height = Some(height)
+    }
 
     pub(crate) fn show_node(
         &mut self,
