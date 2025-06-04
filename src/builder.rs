@@ -2,8 +2,8 @@ use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetTe
 
 use crate::{
     builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, Dragged,
-    DropQuarter, IndentHintStyle, NodeId, PartialTreeViewState, RowRectangles, TreeViewSettings,
-    TreeViewState, UiData,
+    DropQuarter, IndentHintStyle, Input, NodeId, PartialTreeViewState, RowRectangles,
+    TreeViewSettings, TreeViewState, UiData,
 };
 
 #[derive(Clone)]
@@ -113,7 +113,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 .pop_if(|indent| indent.source_node == dir_state.id);
             if let Some(indent) = indent {
                 self.draw_indent_hint(indent.anchor, indent.positions, self.indents.len());
-                self.draw_directory_drop_marker(indent.anchor, &dir_state.id);
+                match self.ui_data.drop_target.as_ref() {
+                    Some((target_id, DirPosition::Last)) if target_id == &dir_state.id => {
+                        self.draw_drop_marker(indent.anchor, &DirPosition::Last);
+                    }
+                    _ => (),
+                };
             }
             if !self.should_close_current_dir() {
                 break;
@@ -167,29 +172,28 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
-    fn draw_directory_drop_marker(&mut self, row_range: Rangef, closed_id: &NodeIdType) {
-        let draw_drop_marker = matches!(
-            self.ui_data.drop_target.as_ref(),
-            Some((id, DirPosition::Last)) if id == closed_id
+    fn draw_drop_marker(&self, row_y_range: Rangef, dir_position: &DirPosition<NodeIdType>) {
+        pub const DROP_LINE_HEIGHT: f32 = 3.0;
+        let x_range = self.ui.available_rect_before_wrap().x_range();
+        let y_range = match dir_position {
+            DirPosition::First => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
+            DirPosition::Last => Rangef::new(row_y_range.min, self.ui.cursor().min.y),
+            DirPosition::After(_) => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
+            DirPosition::Before(_) => Rangef::point(row_y_range.min).expand(DROP_LINE_HEIGHT * 0.5),
+        };
+        self.ui.painter().set(
+            self.ui_data.drop_marker_idx,
+            Shape::rect_filled(
+                Rect::from_x_y_ranges(x_range, y_range),
+                self.ui.visuals().widgets.active.corner_radius,
+                self.ui
+                    .style()
+                    .visuals
+                    .selection
+                    .bg_fill
+                    .linear_multiply(0.6),
+            ),
         );
-        if draw_drop_marker {
-            let rect = Rect::from_min_max(
-                pos2(self.ui.cursor().min.x, row_range.min),
-                pos2(self.ui.cursor().max.x, self.ui.cursor().min.y),
-            );
-            let color = self
-                .ui
-                .style()
-                .visuals
-                .selection
-                .bg_fill
-                .linear_multiply(0.6);
-            let radius = self.ui.visuals().widgets.active.corner_radius;
-            self.ui.painter().set(
-                self.ui_data.drop_marker_idx,
-                Shape::rect_filled(rect, radius, color),
-            );
-        }
     }
 
     /// Add a node to the tree.
@@ -262,44 +266,45 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             ),
         )
         .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
-        let cursor_above_row = self
-            .ui_data
-            .interaction
-            .hover_pos()
-            .is_some_and(|pos| rect_contains_visually(&row_rect, &pos));
-        let pressed_on_this_row = self
-            .ui
-            .input(|i| i.pointer.press_origin())
-            .is_some_and(|pos| rect_contains_visually(&row_rect, &pos));
 
-        // React to secondary clicks
-        // Context menus in egui only show up when the secondary mouse button is pressed.
-        // Since we are handling inputs after the tree has already been build we only know
-        // that we should show a context menu one frame after the click has happened and the
-        // context menu would never show up.
-        // To fix this we handle the secondary click here and return the even in the result.
-        let is_mouse_above_row = self
-            .ui_data
-            .interaction
-            .hover_pos()
-            .is_some_and(|pos| row_rect.contains(pos));
-        if is_mouse_above_row && self.ui_data.interaction.secondary_clicked() {
-            self.ui_data.seconday_click = Some(node.id.clone());
+        // Handle right click
+        if let Input::SecondaryClick(pos) = self.ui_data.input {
+            if rect_contains_visually(&row_rect, &pos) {
+                self.ui_data.new_seconday_click = Some(node.id.clone());
+            }
         }
 
         // Handle drag start
-        if self.ui_data.interaction.drag_started() && pressed_on_this_row {
-            if self.state.is_selected(&node.id) {
-                self.ui_data.new_dragged = Some(Dragged::Selection);
-            } else {
-                self.ui_data.new_dragged = Some(Dragged::One(node.id.clone()));
+        if let Input::DragStarted(pos) = self.ui_data.input {
+            if rect_contains_visually(&row_rect, &pos) {
+                if self.state.is_selected(&node.id) {
+                    self.ui_data.new_dragged = Some(Dragged::Selection);
+                } else {
+                    self.ui_data.new_dragged = Some(Dragged::One(node.id.clone()));
+                }
+            }
+        }
+
+        // Handle drop position
+        if let Input::Dragged(pos) = self.ui_data.input {
+            if rect_contains_visually(&row_rect, &pos)
+                && !self.current_branch_dragged()
+                && !self.state.is_dragged(&node.id)
+            {
+                self.ui_data.drop_target = self.get_drop_position(row_rect, node);
+                match self.ui_data.drop_target.as_ref() {
+                    Some((_, dir_position)) if dir_position != &DirPosition::Last => {
+                        self.draw_drop_marker(row_rect.y_range(), dir_position);
+                    }
+                    _ => (),
+                };
             }
         }
 
         // Show the context menu.
         let was_right_clicked = self
             .ui_data
-            .seconday_click
+            .new_seconday_click
             .as_ref()
             .is_some_and(|id| id == &node.id)
             || self.state.is_secondary_selected(&node.id);
@@ -349,48 +354,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         }
 
-        // Handle drop position
-        if !self.ui_data.interaction.drag_started()
-            && (self.ui_data.interaction.dragged() || self.ui_data.interaction.drag_stopped())
-            && cursor_above_row
-        {
-            if !self.current_branch_dragged() && !self.state.is_dragged(&node.id) {
-                self.ui_data.drop_target = self.get_drop_position(row_rect, node);
-            }
-        }
-
-        // Draw drop marker
-        if cursor_above_row {
-            if let Some((_, position)) = self.ui_data.drop_target.as_ref() {
-                let color = self
-                    .ui
-                    .style()
-                    .visuals
-                    .selection
-                    .bg_fill
-                    .linear_multiply(0.6);
-                let radius = self.ui.visuals().widgets.active.corner_radius;
-                pub const DROP_LINE_HEIGHT: f32 = 3.0;
-                if !matches!(position, DirPosition::Last) {
-                    let y = match position {
-                        DirPosition::First => row_rect.max.y,
-                        DirPosition::After(_) => row_rect.max.y,
-                        DirPosition::Before(_) => row_rect.min.y,
-                        DirPosition::Last => unreachable!(),
-                    };
-                    let rect = Rect::from_x_y_ranges(
-                        row_rect.x_range(),
-                        Rangef::point(y).expand(DROP_LINE_HEIGHT * 0.5),
-                    );
-
-                    self.ui.painter().set(
-                        self.ui_data.drop_marker_idx,
-                        Shape::rect_filled(rect, radius, color),
-                    );
-                }
-            }
-        }
-
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
         // Draw node
@@ -413,8 +376,25 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             })
             .inner;
 
+        // Handle click
+        if let Input::Click(pos) = self.ui_data.input {
+            if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
+                println!("closer clicked");
+            } else if rect_contains_visually(&row_rect, &pos) {
+                println!("row clicked");
+            }
+        }
+        // Handle double click
+        if let Input::DoubleClick(pos) = self.ui_data.input {
+            if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
+                println!("closer double clicked");
+            } else if rect_contains_visually(&row_rect, &pos) {
+                println!("row double clicked");
+            }
+        }
+
         // Draw node dragged
-        if self.ui_data.interaction.dragged() && self.state.is_dragged(&node.id) {
+        if self.state.is_dragged(&node.id) {
             node.show_node_dragged(
                 self.ui,
                 &self.ui_data.interaction,

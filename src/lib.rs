@@ -493,15 +493,17 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         .at_least(settings.min_height),
     );
 
+    let interaction = interact_no_expansion(
+        ui,
+        Rect::from_min_size(ui.cursor().min, size),
+        id,
+        Sense::click_and_drag(),
+    );
     let mut ui_data = UiData {
+        input: get_input(ui, &interaction),
         row_rectangles: HashMap::new(),
-        seconday_click: None,
-        interaction: interact_no_expansion(
-            ui,
-            Rect::from_min_size(ui.cursor().min, size),
-            id,
-            Sense::click_and_drag(),
-        ),
+        new_seconday_click: None,
+        interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
@@ -531,8 +533,8 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         .response;
 
     // Transfer the secondary click
-    if ui_data.seconday_click.is_some() {
-        state.secondary_selection = ui_data.seconday_click.clone();
+    if ui_data.new_seconday_click.is_some() {
+        state.secondary_selection = ui_data.new_seconday_click.clone();
     }
     // Do context menu
     if !ui_data.context_menu_was_open {
@@ -947,7 +949,7 @@ impl DropQuarter {
 
 struct UiData<NodeIdType> {
     row_rectangles: HashMap<NodeIdType, RowRectangles>,
-    seconday_click: Option<NodeIdType>,
+    new_seconday_click: Option<NodeIdType>,
     context_menu_was_open: bool,
     interaction: Response,
     drag_layer: LayerId,
@@ -955,6 +957,7 @@ struct UiData<NodeIdType> {
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     new_dragged: Option<Dragged<NodeIdType>>,
+    input: Input,
 }
 
 #[derive(Debug)]
@@ -973,4 +976,49 @@ struct RowRectangles {
 /// This check if a point is contained exclusive the upper bound.
 fn rect_contains_visually(rect: &Rect, pos: &Pos2) -> bool {
     rect.min.x <= pos.x && pos.x < rect.max.x && rect.min.y <= pos.y && pos.y < rect.max.y
+}
+
+enum Input {
+    DragStarted(Pos2),
+    Dragged(Pos2),
+    SecondaryClick(Pos2),
+    Click(Pos2),
+    DoubleClick(Pos2),
+    None,
+}
+
+fn get_input(ui: &Ui, interaction: &Response) -> Input {
+    let press_origin = ui.input(|i| i.pointer.press_origin());
+    let pointer_pos = ui.input(|i| i.pointer.latest_pos());
+
+    if interaction.context_menu_opened() {
+        return Input::None;
+    }
+
+    if interaction.drag_started() {
+        return Input::DragStarted(
+            press_origin
+                .expect("If a drag has started it must have a position where the press started"),
+        );
+    }
+    if interaction.dragged() || interaction.drag_stopped() {
+        return Input::Dragged(
+            pointer_pos.expect("If the tree view is dragged it must have a pointer position"),
+        );
+    }
+    if interaction.secondary_clicked() {
+        return Input::SecondaryClick(
+            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+        );
+    }
+    if interaction.double_clicked() {
+        return Input::DoubleClick(
+            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+        );
+    } else if interaction.clicked() {
+        return Input::Click(
+            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+        );
+    }
+    Input::None
 }
