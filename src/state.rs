@@ -22,8 +22,6 @@ pub(crate) struct NodeState<NodeIdType> {
     pub visible: bool,
     /// Wether this node is a directory.
     pub dir: bool,
-    /// Wether this node can be activated.
-    pub activatable: bool,
     /// The position of this node in the tree.
     pub position: usize,
     /// The node id of the previous node.

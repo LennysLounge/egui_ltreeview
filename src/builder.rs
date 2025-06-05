@@ -2,8 +2,8 @@ use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetTe
 
 use crate::{
     builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, Dragged,
-    DropQuarter, IndentHintStyle, Input, NodeId, PartialTreeViewState, RowRectangles,
-    TreeViewSettings, TreeViewState, UiData,
+    DropQuarter, IndentHintStyle, Input, InputActivate, NodeId, PartialTreeViewState,
+    RowRectangles, TreeViewSettings, TreeViewState, UiData,
 };
 
 #[derive(Clone)]
@@ -268,19 +268,25 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
 
         // Handle right click
-        if let Input::SecondaryClick(pos) = self.ui_data.input {
+        let mut show_context_menu_this_frame = false;
+        if let Input::SecondaryClick {
+            pos,
+            new_seconday_click,
+        } = &mut self.ui_data.input
+        {
             if rect_contains_visually(&row_rect, &pos) {
-                self.ui_data.new_seconday_click = Some(node.id.clone());
+                *new_seconday_click = Some(node.id.clone());
+                show_context_menu_this_frame = true;
             }
         }
 
         // Handle drag start
-        if let Input::DragStarted(pos) = self.ui_data.input {
+        if let Input::DragStarted { pos, new_dragged } = &mut self.ui_data.input {
             if rect_contains_visually(&row_rect, &pos) {
                 if self.state.is_selected(&node.id) {
-                    self.ui_data.new_dragged = Some(Dragged::Selection);
+                    *new_dragged = Some(Dragged::Selection);
                 } else {
-                    self.ui_data.new_dragged = Some(Dragged::One(node.id.clone()));
+                    *new_dragged = Some(Dragged::One(node.id.clone()));
                 }
             }
         }
@@ -302,12 +308,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Show the context menu.
-        let was_right_clicked = self
-            .ui_data
-            .new_seconday_click
-            .as_ref()
-            .is_some_and(|id| id == &node.id)
-            || self.state.is_secondary_selected(&node.id);
+        let was_right_clicked =
+            show_context_menu_this_frame || self.state.is_secondary_selected(&node.id);
         let was_only_target = !self.state.is_selected(&node.id)
             || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
         if was_right_clicked && was_only_target {
@@ -381,12 +383,18 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             pos,
             double,
             modifiers,
-        } = self.ui_data.input
+            activable_from_selection,
+            should_activate,
+        } = &mut self.ui_data.input
         {
+            if node.activatable && self.state.is_selected(&node.id) {
+                activable_from_selection.push(node.id.clone());
+            }
+
             if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
                 self.builder_state.toggle_open(&node.id);
             } else if rect_contains_visually(&row_rect, &pos) {
-                let double_click = self.state.was_clicked_last(&node.id) && double;
+                let double_click = self.state.was_clicked_last(&node.id) && *double;
                 self.state.set_last_clicked(&node.id);
                 if double_click {
                     // directories should only switch their opened state by double clicking if no modifiers
@@ -394,18 +402,21 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if modifiers.is_none() {
                         self.builder_state.toggle_open(&node.id);
                     }
-                    // TODO:
-                    // if node.activatable {
-                    //     // This has the potential to clash with the previous action.
-                    //     // If a directory is activatable then double clicking it will toggle its
-                    //     // open state and activate the directory. Usually we would want one input
-                    //     // to have one effect but in this case it is impossible for us to know if the
-                    //     // user wants to activate the directory or toggle it.
-                    //     // We could add a configuration option to choose either toggle or activate
-                    //     // but in this case i think that doing both has the biggest chance to achieve
-                    //     // what the user wanted.
-                    //     self.ui_data.activate = Some(node.id.clone());
-                    // }
+                    if node.activatable {
+                        // This has the potential to clash with the previous action.
+                        // If a directory is activatable then double clicking it will toggle its
+                        // open state and activate the directory. Usually we would want one input
+                        // to have one effect but in this case it is impossible for us to know if the
+                        // user wants to activate the directory or toggle it.
+                        // We could add a configuration option to choose either toggle or activate
+                        // but in this case i think that doing both has the biggest chance to achieve
+                        // what the user wanted.
+                        if self.state.is_selected(&node.id) {
+                            *should_activate = Some(InputActivate::FromSelection);
+                        } else {
+                            *should_activate = Some(InputActivate::This(node.id.clone()));
+                        }
+                    }
                 } else {
                     println!("row clicked {}", pos);
                 }
@@ -424,13 +435,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Save rectangles for later
-        self.ui_data.row_rectangles.insert(
-            node.id.clone(),
-            RowRectangles {
-                row_rect: row,
-                closer_rect: closer,
-            },
-        );
+        self.ui_data
+            .row_rectangles
+            .insert(node.id.clone(), RowRectangles { row_rect: row });
         // Save position for indent hint
         if let Some(indent) = self.indents.last_mut() {
             indent

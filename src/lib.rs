@@ -445,18 +445,9 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             actions.push(Action::SetSelected(state.selected().clone()));
         }
 
-        if input_result.should_activate {
+        if let Some(nodes_to_activate) = ui_data.activate {
             actions.push(Action::Activate(Activate {
-                selected: state
-                    .selected()
-                    .iter()
-                    .filter(|node_id| {
-                        state
-                            .node_state_of(node_id)
-                            .is_some_and(|ns| ns.activatable)
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>(),
+                selected: nodes_to_activate.clone(),
                 modifiers: ui.ctx().input(|i| i.modifiers),
             }));
         }
@@ -502,14 +493,13 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     let mut ui_data = UiData {
         input: get_input(ui, &interaction),
         row_rectangles: HashMap::new(),
-        new_seconday_click: None,
         interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
-        new_dragged: None,
+        activate: None,
     };
     // Run the build tree view closure
     let response = ui
@@ -532,10 +522,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         })
         .response;
 
-    // Transfer the secondary click
-    if ui_data.new_seconday_click.is_some() {
-        state.secondary_selection = ui_data.new_seconday_click.clone();
-    }
     // Do context menu
     if !ui_data.context_menu_was_open {
         if let Some(fallback_context_menu) = fall_back_context_menu.take() {
@@ -544,9 +530,37 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             });
         }
     }
-    // Transfer drag
-    if let Some(dragged) = ui_data.new_dragged.take() {
-        state.set_dragged(dragged);
+    // Read out results from inputs
+    match &ui_data.input {
+        // Transfer drag
+        Input::DragStarted { new_dragged, .. } => {
+            if let Some(dragged) = new_dragged {
+                state.set_dragged(dragged.clone());
+            }
+        }
+        Input::Dragged(_) => (),
+        // Transfer the secondary click
+        Input::SecondaryClick {
+            new_seconday_click, ..
+        } => {
+            if new_seconday_click.is_some() {
+                state.secondary_selection = new_seconday_click.clone();
+            }
+        }
+        Input::Click {
+            activable_from_selection,
+            should_activate,
+            ..
+        } => match should_activate {
+            Some(InputActivate::FromSelection) => {
+                ui_data.activate = Some(activable_from_selection.clone());
+            }
+            Some(InputActivate::This(id)) => {
+                ui_data.activate = Some(vec![id.clone()]);
+            }
+            _ => (),
+        },
+        Input::None => (),
     }
 
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
@@ -575,10 +589,7 @@ fn handle_input<NodeIdType: NodeId>(
     let mut should_activate = false;
 
     for (node_id, row) in row_rectangles {
-        let RowRectangles {
-            row_rect,
-            closer_rect,
-        } = row;
+        let RowRectangles { row_rect, .. } = row;
 
         // // Closer interactions
         // let closer_clicked = closer_rect
@@ -602,24 +613,24 @@ fn handle_input<NodeIdType: NodeId>(
                 .is_some_and(|last| last == node_id);
 
             if interaction.double_clicked() && was_last_clicked {
-                let node_state = state.node_state_of_mut(&node_id).unwrap();
+                //let node_state = state.node_state_of_mut(&node_id).unwrap();
                 // // directories should only switch their opened state by double clicking if no modifiers
                 // // are pressed. If any modifier is pressed then the closer should be used.
                 // if node_state.dir && ui.ctx().input(|i| i.modifiers).is_none() {
                 //     node_state.open = !node_state.open;
                 // }
 
-                if node_state.activatable {
-                    // This has the potential to clash with the previous action.
-                    // If a directory is activatable then double clicking it will toggle its
-                    // open state and activate the directory. Usually we would want one input
-                    // to have one effect but in this case it is impossible for us to know if the
-                    // user wants to activate the directory or toggle it.
-                    // We could add a configuration option to choose either toggle or activate
-                    // but in this case i think that doing both has the biggest chance to achieve
-                    // what the user wanted.
-                    should_activate = true;
-                }
+                // if node_state.activatable {
+                //     // This has the potential to clash with the previous action.
+                //     // If a directory is activatable then double clicking it will toggle its
+                //     // open state and activate the directory. Usually we would want one input
+                //     // to have one effect but in this case it is impossible for us to know if the
+                //     // user wants to activate the directory or toggle it.
+                //     // We could add a configuration option to choose either toggle or activate
+                //     // but in this case i think that doing both has the biggest chance to achieve
+                //     // what the user wanted.
+                //     should_activate = true;
+                // }
             } else if interaction.clicked_by(egui::PointerButton::Primary) {
                 // must be handled after double-clicking to prevent the second click of the double-click
                 // performing 'click' actions.
@@ -675,10 +686,7 @@ fn handle_input<NodeIdType: NodeId>(
         });
     }
 
-    InputResult {
-        selection_changed,
-        should_activate,
-    }
+    InputResult { selection_changed }
 }
 
 fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>) {
@@ -918,7 +926,6 @@ fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Respo
 
 struct InputResult {
     selection_changed: bool,
-    should_activate: bool,
 }
 
 enum DropQuarter {
@@ -950,21 +957,19 @@ impl DropQuarter {
 
 struct UiData<NodeIdType> {
     row_rectangles: HashMap<NodeIdType, RowRectangles>,
-    new_seconday_click: Option<NodeIdType>,
     context_menu_was_open: bool,
     interaction: Response,
     drag_layer: LayerId,
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
-    new_dragged: Option<Dragged<NodeIdType>>,
-    input: Input,
+    input: Input<NodeIdType>,
+    activate: Option<Vec<NodeIdType>>,
 }
 
 #[derive(Debug)]
 struct RowRectangles {
     row_rect: Rect,
-    closer_rect: Option<Rect>,
 }
 
 /// When you ast a rectangle if it contains a point it does so inclusive the upper bound.
@@ -979,19 +984,31 @@ fn rect_contains_visually(rect: &Rect, pos: &Pos2) -> bool {
     rect.min.x <= pos.x && pos.x < rect.max.x && rect.min.y <= pos.y && pos.y < rect.max.y
 }
 
-enum Input {
-    DragStarted(Pos2),
+enum Input<NodeIdType> {
+    DragStarted {
+        pos: Pos2,
+        new_dragged: Option<Dragged<NodeIdType>>,
+    },
     Dragged(Pos2),
-    SecondaryClick(Pos2),
+    SecondaryClick {
+        pos: Pos2,
+        new_seconday_click: Option<NodeIdType>,
+    },
     Click {
         pos: Pos2,
         double: bool,
         modifiers: Modifiers,
+        activable_from_selection: Vec<NodeIdType>,
+        should_activate: Option<InputActivate<NodeIdType>>,
     },
     None,
 }
+enum InputActivate<NodeIdType> {
+    FromSelection,
+    This(NodeIdType),
+}
 
-fn get_input(ui: &Ui, interaction: &Response) -> Input {
+fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
     let press_origin = ui.input(|i| i.pointer.press_origin());
     let pointer_pos = ui.input(|i| i.pointer.latest_pos());
 
@@ -1000,10 +1017,11 @@ fn get_input(ui: &Ui, interaction: &Response) -> Input {
     }
 
     if interaction.drag_started() {
-        return Input::DragStarted(
-            press_origin
+        return Input::DragStarted {
+            pos: press_origin
                 .expect("If a drag has started it must have a position where the press started"),
-        );
+            new_dragged: None,
+        };
     }
     if interaction.dragged() || interaction.drag_stopped() {
         return Input::Dragged(
@@ -1011,15 +1029,18 @@ fn get_input(ui: &Ui, interaction: &Response) -> Input {
         );
     }
     if interaction.secondary_clicked() {
-        return Input::SecondaryClick(
-            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
-        );
+        return Input::SecondaryClick {
+            pos: pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+            new_seconday_click: None,
+        };
     }
     if interaction.clicked() {
         return Input::Click {
             pos: pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
             double: interaction.double_clicked(),
             modifiers: ui.input(|i| i.modifiers),
+            activable_from_selection: Vec::new(),
+            should_activate: None,
         };
     }
     Input::None
