@@ -64,4 +64,11 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         self.node_count += 1;
         is_open
     }
+
+    pub fn toggle_open(&mut self, id: &NodeIdType) {
+        let Some(node_state) = self.nodes.get_mut(id) else {
+            return;
+        };
+        node_state.open = !node_state.open;
+    }
 }

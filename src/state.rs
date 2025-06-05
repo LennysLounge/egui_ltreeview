@@ -336,6 +336,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             secondary_selection,
             selection_cursor,
             node_states,
+            last_clicked_node,
             ..
         } = self;
         (
@@ -345,6 +346,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 dragged,
                 secondary_selection,
                 selection_cursor,
+                last_clicked_node,
             },
         )
     }
@@ -354,7 +356,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 ///
 /// This holds which node is selected and the open/close
 /// state of the directories.
-#[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
     /// Id of the node that was selected.
@@ -365,6 +366,8 @@ pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
     secondary_selection: &'a Option<NodeIdType>,
     /// The element where the selection curosr is at the moment.
     selection_cursor: &'a Option<NodeIdType>,
+    /// The last node that was clicked. Used for double click detection.
+    last_clicked_node: &'a mut Option<NodeIdType>,
 }
 impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     /// Is the given id part of a valid drag.
@@ -390,5 +393,13 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
         self.selection_cursor
             .as_ref()
             .is_some_and(|cursor_id| cursor_id == id)
+    }
+    pub(crate) fn was_clicked_last(&self, id: &NodeIdType) -> bool {
+        self.last_clicked_node
+            .as_ref()
+            .is_some_and(|last| last == id)
+    }
+    pub(crate) fn set_last_clicked(&mut self, id: &NodeIdType) {
+        *self.last_clicked_node = Some(id.clone());
     }
 }

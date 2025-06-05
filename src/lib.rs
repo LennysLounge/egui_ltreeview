@@ -580,15 +580,16 @@ fn handle_input<NodeIdType: NodeId>(
             closer_rect,
         } = row;
 
-        // Closer interactions
-        let closer_clicked = closer_rect
-            .zip(interaction.hover_pos())
-            .is_some_and(|(closer_rect, hover_pos)| closer_rect.contains(hover_pos))
-            && interaction.clicked();
-        if closer_clicked {
-            let node_state = state.node_state_of_mut(&node_id).unwrap();
-            node_state.open = !node_state.open;
-        }
+        // // Closer interactions
+        // let closer_clicked = closer_rect
+        //     .zip(interaction.hover_pos())
+        //     .is_some_and(|(closer_rect, hover_pos)| closer_rect.contains(hover_pos))
+        //     && interaction.clicked();
+        // if closer_clicked {
+        //     let node_state = state.node_state_of_mut(&node_id).unwrap();
+        //     node_state.open = !node_state.open;
+        // }
+        let closer_clicked = false;
 
         // Row interaction
         let cursor_above_row = interaction
@@ -602,11 +603,11 @@ fn handle_input<NodeIdType: NodeId>(
 
             if interaction.double_clicked() && was_last_clicked {
                 let node_state = state.node_state_of_mut(&node_id).unwrap();
-                // directories should only switch their opened state by double clicking if no modifiers
-                // are pressed. If any modifier is pressed then the closer should be used.
-                if node_state.dir && ui.ctx().input(|i| i.modifiers).is_none() {
-                    node_state.open = !node_state.open;
-                }
+                // // directories should only switch their opened state by double clicking if no modifiers
+                // // are pressed. If any modifier is pressed then the closer should be used.
+                // if node_state.dir && ui.ctx().input(|i| i.modifiers).is_none() {
+                //     node_state.open = !node_state.open;
+                // }
 
                 if node_state.activatable {
                     // This has the potential to clash with the previous action.
@@ -982,8 +983,11 @@ enum Input {
     DragStarted(Pos2),
     Dragged(Pos2),
     SecondaryClick(Pos2),
-    Click(Pos2),
-    DoubleClick(Pos2),
+    Click {
+        pos: Pos2,
+        double: bool,
+        modifiers: Modifiers,
+    },
     None,
 }
 
@@ -1011,14 +1015,12 @@ fn get_input(ui: &Ui, interaction: &Response) -> Input {
             pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
         );
     }
-    if interaction.double_clicked() {
-        return Input::DoubleClick(
-            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
-        );
-    } else if interaction.clicked() {
-        return Input::Click(
-            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
-        );
+    if interaction.clicked() {
+        return Input::Click {
+            pos: pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+            double: interaction.double_clicked(),
+            modifiers: ui.input(|i| i.modifiers),
+        };
     }
     Input::None
 }

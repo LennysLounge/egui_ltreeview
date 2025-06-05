@@ -377,19 +377,38 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .inner;
 
         // Handle click
-        if let Input::Click(pos) = self.ui_data.input {
+        if let Input::Click {
+            pos,
+            double,
+            modifiers,
+        } = self.ui_data.input
+        {
             if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
-                println!("closer clicked");
+                self.builder_state.toggle_open(&node.id);
             } else if rect_contains_visually(&row_rect, &pos) {
-                println!("row clicked");
-            }
-        }
-        // Handle double click
-        if let Input::DoubleClick(pos) = self.ui_data.input {
-            if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
-                println!("closer double clicked");
-            } else if rect_contains_visually(&row_rect, &pos) {
-                println!("row double clicked");
+                let double_click = self.state.was_clicked_last(&node.id) && double;
+                self.state.set_last_clicked(&node.id);
+                if double_click {
+                    // directories should only switch their opened state by double clicking if no modifiers
+                    // are pressed. If any modifier is pressed then the closer should be used.
+                    if modifiers.is_none() {
+                        self.builder_state.toggle_open(&node.id);
+                    }
+                    // TODO:
+                    // if node.activatable {
+                    //     // This has the potential to clash with the previous action.
+                    //     // If a directory is activatable then double clicking it will toggle its
+                    //     // open state and activate the directory. Usually we would want one input
+                    //     // to have one effect but in this case it is impossible for us to know if the
+                    //     // user wants to activate the directory or toggle it.
+                    //     // We could add a configuration option to choose either toggle or activate
+                    //     // but in this case i think that doing both has the biggest chance to achieve
+                    //     // what the user wanted.
+                    //     self.ui_data.activate = Some(node.id.clone());
+                    // }
+                } else {
+                    println!("row clicked {}", pos);
+                }
             }
         }
 
