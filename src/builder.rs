@@ -1,9 +1,9 @@
-use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
+use egui::{layers::ShapeIdx, pos2, vec2, Color32, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
     builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, Dragged,
-    DropQuarter, IndentHintStyle, Input, InputActivate, NodeId, PartialTreeViewState,
-    RowRectangles, TreeViewSettings, TreeViewState, UiData,
+    DropQuarter, IndentHintStyle, Input, NodeId, Output, PartialTreeViewState, TreeViewSettings,
+    TreeViewState, UiData,
 };
 
 #[derive(Clone)]
@@ -39,6 +39,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     selection_background: Option<(ShapeIdx, Rect)>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
+    output: &'ui mut Output<NodeIdType>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -47,6 +48,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
         ui_data: &'ui mut UiData<NodeIdType>,
+        output: &'ui mut Output<NodeIdType>,
     ) -> Self {
         let (node_states, state) = state.split();
         Self {
@@ -58,6 +60,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             selection_background: None,
             stack: Vec::new(),
             indents: Vec::new(),
+            output,
         }
     }
 
@@ -269,24 +272,20 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         // Handle right click
         let mut show_context_menu_this_frame = false;
-        if let Input::SecondaryClick {
-            pos,
-            new_seconday_click,
-        } = &mut self.ui_data.input
-        {
+        if let Input::SecondaryClick(pos) = &self.ui_data.input {
             if rect_contains_visually(&row_rect, &pos) {
-                *new_seconday_click = Some(node.id.clone());
+                *self.output = Output::SetSecondaryClicked(node.id.clone());
                 show_context_menu_this_frame = true;
             }
         }
 
         // Handle drag start
-        if let Input::DragStarted { pos, new_dragged } = &mut self.ui_data.input {
+        if let Input::DragStarted(pos) = self.ui_data.input {
             if rect_contains_visually(&row_rect, &pos) {
                 if self.state.is_selected(&node.id) {
-                    *new_dragged = Some(Dragged::Selection);
+                    *self.output = Output::SetDragged(Dragged::Selection);
                 } else {
-                    *new_dragged = Some(Dragged::One(node.id.clone()));
+                    *self.output = Output::SetDragged(Dragged::One(node.id.clone()));
                 }
             }
         }
@@ -358,8 +357,19 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
+        if self.state.is_selection_pivot(&node.id) {
+            self.ui
+                .painter()
+                .circle_filled(row_rect.left_center(), 10.0, Color32::BLUE);
+        }
+        if self.state.is_selection_cursor(&node.id) {
+            self.ui
+                .painter()
+                .circle_filled(row_rect.left_center(), 5.0, Color32::RED);
+        }
+
         // Draw node
-        let (row, closer, icon, label) = self
+        let (_row, closer, icon, label) = self
             .ui
             .scope(|ui| {
                 // Set the fg stroke colors here so that the ui added by the user
@@ -378,48 +388,77 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             })
             .inner;
 
-        // Handle click
-        if let Input::Click {
-            pos,
-            double,
-            modifiers,
-            activable_from_selection,
-            should_activate,
-        } = &mut self.ui_data.input
-        {
-            if node.activatable && self.state.is_selected(&node.id) {
-                activable_from_selection.push(node.id.clone());
-            }
+        match &mut self.ui_data.input {
+            Input::Click {
+                pos,
+                double,
+                modifiers,
+                activatable_nodes,
+                shift_click_nodes,
+            } => 'block: {
+                // Closer click
+                if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
+                    self.builder_state.toggle_open(&node.id);
+                    self.ui_data.input = Input::None;
+                    break 'block;
+                }
 
-            if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
-                self.builder_state.toggle_open(&node.id);
-            } else if rect_contains_visually(&row_rect, &pos) {
-                let double_click = self.state.was_clicked_last(&node.id) && *double;
-                self.state.set_last_clicked(&node.id);
+                let row_clicked = rect_contains_visually(&row_rect, &pos);
+                let double_click = row_clicked && *double && self.state.was_clicked_last(&node.id);
+                if row_clicked {
+                    self.state.set_last_clicked(&node.id);
+                }
+
+                // upkeep for the activate action
+                if self.state.is_selected(&node.id) {
+                    activatable_nodes.push(node.id.clone());
+                }
+
+                // Double clicked
                 if double_click {
-                    // directories should only switch their opened state by double clicking if no modifiers
-                    // are pressed. If any modifier is pressed then the closer should be used.
-                    if modifiers.is_none() {
-                        self.builder_state.toggle_open(&node.id);
-                    }
+                    self.builder_state.toggle_open(&node.id);
                     if node.activatable {
-                        // This has the potential to clash with the previous action.
-                        // If a directory is activatable then double clicking it will toggle its
-                        // open state and activate the directory. Usually we would want one input
-                        // to have one effect but in this case it is impossible for us to know if the
-                        // user wants to activate the directory or toggle it.
-                        // We could add a configuration option to choose either toggle or activate
-                        // but in this case i think that doing both has the biggest chance to achieve
-                        // what the user wanted.
                         if self.state.is_selected(&node.id) {
-                            *should_activate = Some(InputActivate::FromSelection);
+                            *self.output = Output::ActivateSelection(activatable_nodes.clone());
                         } else {
-                            *should_activate = Some(InputActivate::This(node.id.clone()));
+                            *self.output = Output::ActivateThis(node.id.clone());
                         }
                     }
-                } else {
-                    println!("row clicked {}", pos);
+                    self.ui_data.input = Input::None;
+                    break 'block;
                 }
+                // Single click
+                if modifiers.shift_only() {
+                    if let Some(shift_click_nodes) = shift_click_nodes {
+                        shift_click_nodes.push(node.id.clone());
+                        if row_clicked || self.state.is_selection_pivot(&node.id) {
+                            *self.output = Output::ShiftSelect(shift_click_nodes.clone());
+                            self.ui_data.input = Input::None;
+                            break 'block;
+                        }
+                    } else if row_clicked || self.state.is_selection_pivot(&node.id) {
+                        *shift_click_nodes = Some(vec![node.id.clone()]);
+                    }
+                } else if modifiers.command_only() {
+                    if row_clicked {
+                        *self.output = Output::ToggleSelection(node.id.clone());
+                        self.ui_data.input = Input::None;
+                        break 'block;
+                    }
+                } else {
+                    if row_clicked {
+                        *self.output = Output::SelectOneNode(node.id.clone());
+                        self.ui_data.input = Input::None;
+                        break 'block;
+                    }
+                }
+            }
+            _ => (),
+        };
+
+        if let Output::ActivateSelection(selection) = self.output {
+            if self.state.is_selected(&node.id) && node.activatable {
+                selection.push(node.id.clone());
             }
         }
 
@@ -434,10 +473,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             );
         }
 
-        // Save rectangles for later
-        self.ui_data
-            .row_rectangles
-            .insert(node.id.clone(), RowRectangles { row_rect: row });
         // Save position for indent hint
         if let Some(indent) = self.indents.last_mut() {
             indent

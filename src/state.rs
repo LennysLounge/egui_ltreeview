@@ -153,40 +153,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         self.node_states.get_mut(id)
     }
 
-    pub(crate) fn handle_click(
-        &mut self,
-        clicked_id: NodeIdType,
-        modifiers: Modifiers,
-        allow_multi_select: bool,
-    ) {
-        if modifiers.command_only() && allow_multi_select {
-            if self.selected.contains(&clicked_id) {
-                self.selected.retain(|id| id != &clicked_id);
-            } else {
-                self.selected.push(clicked_id.clone());
-            }
-            self.selection_pivot = Some(clicked_id);
-            self.selection_cursor = None;
-        } else if modifiers.shift_only() && allow_multi_select {
-            if let Some(selection_pivot) = self.selection_pivot.as_ref() {
-                self.selected.clear();
-                self.node_states
-                    .iter_from_to(&clicked_id, &selection_pivot)
-                    .for_each(|ns| self.selected.push(ns.id.clone()));
-            } else {
-                self.selected.clear();
-                self.selected.push(clicked_id.clone());
-                self.selection_pivot = Some(clicked_id);
-            }
-            self.selection_cursor = None;
-        } else {
-            self.selected.clear();
-            self.selected.push(clicked_id.clone());
-            self.selection_pivot = Some(clicked_id);
-            self.selection_cursor = None;
-        }
-    }
-
     pub(crate) fn handle_key(
         &mut self,
         key: &Key,
@@ -321,6 +287,23 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     pub(crate) fn reset_dragged(&mut self) {
         self.dragged = None;
     }
+    pub(crate) fn set_pivot(&mut self, id: Option<NodeIdType>) {
+        self.selection_pivot = id;
+    }
+    pub(crate) fn set_cursor(&mut self, id: Option<NodeIdType>) {
+        self.selection_cursor = id;
+    }
+    pub(crate) fn toggle_selected(&mut self, id: &NodeIdType) {
+        if self.selected.contains(id) {
+            self.selected.retain(|selected_id| selected_id != id);
+        } else {
+            self.selected.push(id.clone());
+        }
+    }
+    /// Set which nodes are selected in the tree
+    pub(crate) fn set_selected_dont_change_pivot(&mut self, selected: Vec<NodeIdType>) {
+        self.selected = selected;
+    }
 
     pub(crate) fn split<'a>(
         &'a mut self,
@@ -335,6 +318,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             selection_cursor,
             node_states,
             last_clicked_node,
+            selection_pivot,
             ..
         } = self;
         (
@@ -345,6 +329,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
                 secondary_selection,
                 selection_cursor,
                 last_clicked_node,
+                selection_pivot,
             },
         )
     }
@@ -366,6 +351,8 @@ pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
     selection_cursor: &'a Option<NodeIdType>,
     /// The last node that was clicked. Used for double click detection.
     last_clicked_node: &'a mut Option<NodeIdType>,
+    /// The pivot element used for selection.
+    selection_pivot: &'a Option<NodeIdType>,
 }
 impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     /// Is the given id part of a valid drag.
@@ -391,6 +378,11 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
         self.selection_cursor
             .as_ref()
             .is_some_and(|cursor_id| cursor_id == id)
+    }
+    pub(crate) fn is_selection_pivot(&self, id: &NodeIdType) -> bool {
+        self.selection_pivot
+            .as_ref()
+            .is_some_and(|pivot_id| pivot_id == id)
     }
     pub(crate) fn was_clicked_last(&self, id: &NodeIdType) -> bool {
         self.last_clicked_node
