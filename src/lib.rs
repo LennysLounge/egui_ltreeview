@@ -514,8 +514,9 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         id,
         Sense::click_and_drag(),
     );
+    let mut output = Output::None;
+    let mut input = get_input::<NodeIdType>(ui, &interaction, id);
     let mut ui_data = UiData {
-        input: get_input(ui, &interaction, id),
         interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
@@ -524,7 +525,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         drop_target: None,
         activate: None,
     };
-    let mut output = Output::None;
     // Run the build tree view closure
     let response = ui
         .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
@@ -532,7 +532,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             ui.add_space(ui.spacing().item_spacing.y * 0.5);
 
             let mut tree_builder =
-                TreeViewBuilder::new(ui, state, settings, &mut ui_data, &mut output);
+                TreeViewBuilder::new(ui, state, settings, &mut ui_data, &mut input, &mut output);
             build_tree_view(&mut tree_builder);
 
             // Add negative space because the place will add the item spacing on top of this.
@@ -845,7 +845,6 @@ struct UiData<NodeIdType> {
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
-    input: Input<NodeIdType>,
     activate: Option<Vec<NodeIdType>>,
 }
 
