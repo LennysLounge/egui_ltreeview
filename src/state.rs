@@ -98,13 +98,7 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     /// Set the openness state of a node.
     pub fn set_openness(&mut self, id: NodeIdType, open: bool) {
-        self.node_states.insert(id.clone(), open);
-    }
-
-    pub(crate) fn toggle_openness(&mut self, id: &NodeIdType) {
-        if let Some(openness) = self.node_states.get_mut(id) {
-            *openness = !*openness;
-        }
+        self.node_states.insert(id, open);
     }
 
     pub(crate) fn is_open(&self, id: &NodeIdType) -> Option<bool> {
@@ -117,9 +111,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         None
     }
 
-    pub(crate) fn prune_selection_to_known_ids(&mut self) {
-        self.selected.retain(|id| self.node_states.contains_key(id));
-    }
     pub(crate) fn prune_selection_to_single_id(&mut self) {
         if self.selected.len() > 1 {
             let new_selection = self.selected[0].clone();

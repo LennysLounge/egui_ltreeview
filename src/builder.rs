@@ -248,8 +248,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn node_structually_visible<'builder, 'add_ui>(&mut self, mut node: Node<NodeIdType>) -> bool {
-        self.state.set_openness(node.id.clone(), node.is_open);
-
         let row_rect = Rect::from_min_max(
             self.ui.cursor().min,
             pos2(
@@ -428,7 +426,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             } => 'block: {
                 // Closer click
                 if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
-                    self.state.toggle_openness(&node.id);
+                    self.state.set_openness(node.id.clone(), !node.is_open);
                     *self.input = Input::None;
                     break 'block;
                 }
@@ -446,7 +444,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 // Double clicked
                 if double_click {
-                    self.state.toggle_openness(&node.id);
+                    self.state.set_openness(node.id.clone(), !node.is_open);
                     if node.activatable {
                         if self.state.is_selected(&node.id) {
                             *self.output = Output::ActivateSelection(activatable_nodes.clone());
@@ -508,7 +506,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     *self.input = Input::None;
                     if self.state.selected_count() == 1 {
                         if node.is_dir && node.is_open {
-                            self.state.toggle_openness(&node.id);
+                            self.state.set_openness(node.id.clone(), !node.is_open);
                         } else {
                             if let Some(dir_state) = self.stack.last() {
                                 *self.output = Output::SelectOneNode(dir_state.id.clone());
@@ -525,7 +523,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if self.state.is_selected(&node.id) {
                         if self.state.selected_count() == 1 {
                             if node.is_dir && !node.is_open {
-                                self.state.toggle_openness(&node.id);
+                                self.state.set_openness(node.id.clone(), !node.is_open);
                                 *self.input = Input::None;
                             } else {
                                 *select_next = true;

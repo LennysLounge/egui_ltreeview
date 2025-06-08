@@ -398,7 +398,6 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         );
         // Remember the size of the tree for next frame.
         state.size = response.rect.size();
-        state.prune_selection_to_known_ids();
 
         draw_background(ui, &ui_data);
 
