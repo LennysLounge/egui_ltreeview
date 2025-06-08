@@ -211,9 +211,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         let node_is_open = if self.current_branch_expanded() && !config.flatten() {
             let node = Node::from_config(
-                self.state
-                    .is_open(config.id())
-                    .unwrap_or(config.default_open()),
+                if config.is_dir() {
+                    self.state
+                        .is_open(config.id())
+                        .unwrap_or(config.default_open())
+                } else {
+                    true
+                },
                 self.ui.spacing().interact_size.y,
                 self.indents.len(),
                 &mut config,
