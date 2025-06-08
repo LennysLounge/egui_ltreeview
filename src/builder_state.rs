@@ -25,10 +25,8 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         if let Some(last_node_state) = last_node_state {
             is_open = last_node_state.open;
             *last_node_state = NodeState {
-                id: node.id.clone(),
                 parent_id: parent_id,
                 open: is_open,
-                position: self.node_count,
                 next: None,
             };
         } else {
@@ -36,10 +34,8 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
             self.nodes.insert(
                 node.id.clone(),
                 NodeState {
-                    id: node.id.clone(),
                     parent_id: parent_id,
                     open: is_open,
-                    position: self.node_count,
                     next: None,
                 },
             );

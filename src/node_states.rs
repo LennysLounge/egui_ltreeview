@@ -36,22 +36,4 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
         }
         self.states.insert(node_id.clone(), state);
     }
-
-    pub(crate) fn is_child_of(&self, child_id: &NodeIdType, parent_id: &NodeIdType) -> bool {
-        let mut current_id = child_id.clone();
-
-        loop {
-            let Some(current_node) = self.states.get(&current_id) else {
-                return false;
-            };
-            let Some(current_parent_id) = current_node.parent_id.as_ref() else {
-                return false;
-            };
-
-            if current_parent_id == parent_id {
-                return true;
-            }
-            current_id = current_parent_id.clone();
-        }
-    }
 }

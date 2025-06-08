@@ -1,7 +1,7 @@
 use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, Dragged,
+    builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, DragState,
     DropQuarter, IndentHintStyle, Input, NodeId, Output, PartialTreeViewState, TreeViewSettings,
     TreeViewState, UiData,
 };
@@ -224,11 +224,19 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         if node.is_dir {
+            let is_dragged = self.state.is_dragged(&node.id)
+                || match self.output {
+                    Output::SetDragged(drag_state) => drag_state.dragged.contains(&node.id),
+                    Output::SetDraggedSelection(drag_state) => {
+                        drag_state.dragged.contains(&node.id)
+                    }
+                    _ => false,
+                };
             self.stack.push(DirectoryState {
                 id: node.id.clone(),
                 child_count: None,
                 branch_expanded: self.current_branch_expanded() && node.is_open,
-                branch_dragged: self.current_branch_dragged() || self.state.is_dragged(&node.id),
+                branch_dragged: self.current_branch_dragged() || is_dragged,
             });
         }
 
@@ -278,12 +286,26 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Handle drag start
-        if let Input::DragStarted(pos) = self.ui_data.input {
+        let current_branch_dragged = self.current_branch_dragged();
+        if let Input::DragStarted {
+            pos,
+            simplified_dragged,
+        } = &mut self.ui_data.input
+        {
+            if self.state.is_selected(&node.id) && !current_branch_dragged {
+                simplified_dragged.push(node.id.clone());
+            }
             if rect_contains_visually(&row_rect, &pos) {
                 if self.state.is_selected(&node.id) {
-                    *self.output = Output::SetDragged(Dragged::Selection);
+                    *self.output = Output::SetDraggedSelection(DragState {
+                        dragged: self.state.get_selection().clone(),
+                        simplified: simplified_dragged.clone(),
+                    });
                 } else {
-                    *self.output = Output::SetDragged(Dragged::One(node.id.clone()));
+                    *self.output = Output::SetDragged(DragState {
+                        dragged: vec![node.id.clone()],
+                        simplified: vec![node.id.clone()],
+                    });
                 }
             }
         }
@@ -698,10 +720,18 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             _ => (),
         };
 
-        if let Output::ActivateSelection(selection) = self.output {
-            if self.state.is_selected(&node.id) && node.activatable {
-                selection.push(node.id.clone());
+        match self.output {
+            Output::ActivateSelection(selection) => {
+                if self.state.is_selected(&node.id) && node.activatable {
+                    selection.push(node.id.clone());
+                }
             }
+            Output::SetDraggedSelection(drag_state) => {
+                if self.state.is_selected(&node.id) && !current_branch_dragged {
+                    drag_state.simplified.push(node.id.clone());
+                }
+            }
+            _ => (),
         }
 
         // Draw node dragged

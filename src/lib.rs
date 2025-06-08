@@ -409,11 +409,14 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             // to allow navigating throught the tree.
             // In case we gain focus from a drag action we select the dragged node directly.
             if state.selected().is_empty() {
-                let fallback_selection = state.get_dragged().pop();
+                let fallback_selection = state.get_dragged().and_then(|v| v.first());
                 if let Some(fallback_selection) = fallback_selection {
-                    state.set_one_selected(fallback_selection);
+                    state.set_one_selected(fallback_selection.clone());
                 }
             }
+        }
+        if ui_data.interaction.clicked() || ui_data.interaction.drag_started() {
+            ui.memory_mut(|m| m.request_focus(id));
         }
 
         let mut actions = Vec::new();
@@ -421,7 +424,10 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         if ui_data.interaction.dragged() {
             if let Some((drop_id, position)) = &ui_data.drop_target {
                 actions.push(Action::Drag(DragAndDrop {
-                    source: simplify_selection_for_dnd(state, &state.get_dragged()),
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
                     target: drop_id.clone(),
                     position: position.clone(),
                     drop_marker_idx: ui_data.drop_marker_idx,
@@ -430,14 +436,20 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             if let Some(position) = ui.ctx().pointer_latest_pos() {
                 actions.push(Action::DragExternal(DragAndDropExternal {
                     position,
-                    source: state.get_dragged(),
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
                 }));
             }
         }
         if ui_data.interaction.drag_stopped() {
             if let Some((drop_id, position)) = ui_data.drop_target {
                 actions.push(Action::Move(DragAndDrop {
-                    source: simplify_selection_for_dnd(state, &state.get_dragged()),
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
                     target: drop_id,
                     position,
                     drop_marker_idx: ui_data.drop_marker_idx,
@@ -446,7 +458,10 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             if let Some(position) = ui.ctx().pointer_latest_pos() {
                 actions.push(Action::MoveExternal(DragAndDropExternal {
                     position,
-                    source: state.get_dragged(),
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
                 }));
             }
         }
@@ -547,6 +562,9 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         Output::SetDragged(dragged) => {
             state.set_dragged(dragged);
         }
+        Output::SetDraggedSelection(dragged) => {
+            state.set_dragged(dragged);
+        }
         Output::SetSecondaryClicked(id) => {
             state.secondary_selection = Some(id);
         }
@@ -598,34 +616,6 @@ fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>
                 .transform_layer_shapes(ui_data.drag_layer, transform);
         }
     }
-}
-
-fn simplify_selection_for_dnd<NodeIdType: NodeId>(
-    state: &TreeViewState<NodeIdType>,
-    nodes: &[NodeIdType],
-) -> Vec<NodeIdType> {
-    // When multiple nodes are selected it is possible that a folder is selected aswell as a
-    // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.
-    let mut result = Vec::new();
-    let mut node_states = nodes
-        .into_iter()
-        .filter_map(|id| state.node_states().get(id))
-        .collect::<Vec<_>>();
-    node_states.sort_by_key(|ns| ns.position);
-
-    'i: for i in 0..node_states.len() {
-        for j in 0..i {
-            let i_is_child_of_j = state
-                .node_states()
-                .is_child_of(&node_states[i].id, &node_states[j].id);
-            if i_is_child_of_j {
-                continue 'i;
-            }
-        }
-        // is is not a child of any of 0..j
-        result.push(node_states[i].id.clone());
-    }
-    result
 }
 
 /// A position inside a directory node.
@@ -874,7 +864,10 @@ fn rect_contains_visually(rect: &Rect, pos: &Pos2) -> bool {
 }
 
 enum Input<NodeIdType> {
-    DragStarted(Pos2),
+    DragStarted {
+        pos: Pos2,
+        simplified_dragged: Vec<NodeIdType>,
+    },
     Dragged(Pos2),
     SecondaryClick(Pos2),
     Click {
@@ -915,7 +908,8 @@ enum Input<NodeIdType> {
     None,
 }
 enum Output<NodeIdType> {
-    SetDragged(Dragged<NodeIdType>),
+    SetDragged(DragState<NodeIdType>),
+    SetDraggedSelection(DragState<NodeIdType>),
     SetSecondaryClicked(NodeIdType),
     ActivateSelection(Vec<NodeIdType>),
     ActivateThis(NodeIdType),
@@ -941,10 +935,11 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeI
     }
 
     if interaction.drag_started_by(PointerButton::Primary) {
-        return Input::DragStarted(
-            press_origin
+        return Input::DragStarted {
+            pos: press_origin
                 .expect("If a drag has started it must have a position where the press started"),
-        );
+            simplified_dragged: Vec::new(),
+        };
     }
     if interaction.dragged_by(PointerButton::Primary)
         || interaction.drag_stopped_by(PointerButton::Primary)

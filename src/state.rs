@@ -3,23 +3,19 @@ use egui::{Id, Ui, Vec2};
 use crate::{node_states::NodeStates, NodeId};
 
 #[derive(Clone, Debug)]
-pub(crate) enum Dragged<NodeIdType> {
-    One(NodeIdType),
-    Selection,
+pub(crate) struct DragState<NodeIdType> {
+    pub dragged: Vec<NodeIdType>,
+    pub simplified: Vec<NodeIdType>,
 }
 
 /// State of each node in the tree.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct NodeState<NodeIdType> {
-    /// Id of this node.
-    pub id: NodeIdType,
     /// The parent node of this node.
     pub parent_id: Option<NodeIdType>,
     /// Wether the node is open or not.
     pub open: bool,
-    /// The position of this node in the tree.
-    pub position: usize,
     /// The node id of the next node.
     pub next: Option<NodeIdType>,
 }
@@ -48,7 +44,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The last node that was clicked. Used for double click detection.
     pub(crate) last_clicked_node: Option<NodeIdType>,
     /// If and what is being dragged.
-    dragged: Option<Dragged<NodeIdType>>,
+    dragged: Option<DragState<NodeIdType>>,
 }
 
 impl<NodeIdType> Default for TreeViewState<NodeIdType> {
@@ -132,9 +128,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             .and_then(|node_state| node_state.parent_id.as_ref())
     }
 
-    pub(crate) fn node_states(&self) -> &NodeStates<NodeIdType> {
-        &self.node_states
-    }
     /// Get the node state for an id.
     pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
         self.node_states.get(id)
@@ -156,14 +149,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
             self.set_one_selected(new_selection);
         }
     }
-    pub(crate) fn get_dragged(&self) -> Vec<NodeIdType> {
-        match &self.dragged {
-            Some(Dragged::One(id)) => vec![id.clone()],
-            Some(Dragged::Selection) => self.selected.clone(),
-            None => Vec::new(),
-        }
+    pub(crate) fn get_simplified_dragged(&self) -> Option<&Vec<NodeIdType>> {
+        self.dragged.as_ref().map(|state| &state.simplified)
     }
-    pub(crate) fn set_dragged(&mut self, dragged: Dragged<NodeIdType>) {
+
+    pub(crate) fn set_dragged(&mut self, dragged: DragState<NodeIdType>) {
         self.dragged = Some(dragged);
     }
     pub(crate) fn reset_dragged(&mut self) {
@@ -185,6 +175,10 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     /// Set which nodes are selected in the tree
     pub(crate) fn set_selected_dont_change_pivot(&mut self, selected: Vec<NodeIdType>) {
         self.selected = selected;
+    }
+
+    pub(crate) fn get_dragged(&self) -> Option<&Vec<NodeIdType>> {
+        self.dragged.as_ref().map(|state| &state.dragged)
     }
 
     pub(crate) fn split<'a>(
@@ -226,7 +220,7 @@ pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
     /// Id of the node that was selected.
     selected: &'a Vec<NodeIdType>,
     /// Information about the dragged node.
-    dragged: &'a Option<Dragged<NodeIdType>>,
+    dragged: &'a Option<DragState<NodeIdType>>,
     /// Id of the node that was right clicked.
     secondary_selection: &'a Option<NodeIdType>,
     /// The element where the selection curosr is at the moment.
@@ -239,11 +233,9 @@ pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
 impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     /// Is the given id part of a valid drag.
     pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
-        match self.dragged {
-            Some(Dragged::One(dragged_id)) => dragged_id == id,
-            Some(Dragged::Selection) => self.selected.contains(id),
-            None => false,
-        }
+        self.dragged
+            .as_ref()
+            .is_some_and(|state| state.dragged.contains(id))
     }
 
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
@@ -279,5 +271,8 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     }
     pub(crate) fn get_selection_pivot(&self) -> Option<&NodeIdType> {
         self.selection_pivot.as_ref()
+    }
+    pub(crate) fn get_selection(&self) -> &Vec<NodeIdType> {
+        self.selected
     }
 }
