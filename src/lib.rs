@@ -169,8 +169,8 @@ mod node_states;
 mod state;
 
 use egui::{
-    self, emath, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout, Modifiers,
-    NumExt, Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, Vec2,
+    self, emath, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
+    Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, Vec2,
 };
 use std::hash::Hash;
 
@@ -404,7 +404,17 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 
         draw_background(ui, &ui_data);
 
-        let input_result = handle_input(ui, id, &settings, &ui_data, state);
+        if ui.memory(|m| m.has_focus(id)) {
+            // If the widget is focused but no node is selected we want to select any node
+            // to allow navigating throught the tree.
+            // In case we gain focus from a drag action we select the dragged node directly.
+            if state.selected().is_empty() {
+                let fallback_selection = state.get_dragged().pop();
+                if let Some(fallback_selection) = fallback_selection {
+                    state.set_one_selected(fallback_selection);
+                }
+            }
+        }
 
         let mut actions = Vec::new();
         // Create a drag or move action.
@@ -441,7 +451,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             }
         }
         // Create a selection action.
-        if input_result.selection_changed {
+        // TODO:
+        if false {
             actions.push(Action::SetSelected(state.selected().clone()));
         }
 
@@ -491,7 +502,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         Sense::click_and_drag(),
     );
     let mut ui_data = UiData {
-        input: get_input(ui, &interaction),
+        input: get_input(ui, &interaction, id),
         interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
@@ -575,61 +586,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
 
     (ui_data, response)
-}
-
-fn handle_input<NodeIdType: NodeId>(
-    ui: &mut Ui,
-    id: Id,
-    settings: &TreeViewSettings,
-    tree_view_result: &UiData<NodeIdType>,
-    state: &mut TreeViewState<NodeIdType>,
-) -> InputResult {
-    let UiData { interaction, .. } = tree_view_result;
-
-    if interaction.clicked() || interaction.drag_started() {
-        ui.memory_mut(|m| m.request_focus(id));
-    }
-
-    let mut selection_changed = false;
-    let mut should_activate = false;
-
-    if ui.memory(|m| m.has_focus(id)) {
-        // If the widget is focused but no node is selected we want to select any node
-        // to allow navigating throught the tree.
-        // In case we gain focus from a drag action we select the dragged node directly.
-        if state.selected().is_empty() {
-            let fallback_selection = state.get_dragged().pop();
-            if let Some(fallback_selection) = fallback_selection {
-                state.set_one_selected(fallback_selection);
-                selection_changed = true;
-            }
-        }
-        ui.input(|i| {
-            for event in i.events.iter() {
-                match event {
-                    Event::Key {
-                        key: Key::Enter,
-                        pressed: true,
-                        ..
-                    } => {
-                        should_activate = true;
-                    }
-                    // Event::Key {
-                    //     key,
-                    //     pressed: true,
-                    //     modifiers,
-                    //     ..
-                    // } => {
-                    //     state.handle_key(key, modifiers, settings.allow_multi_select);
-                    //     selection_changed = true;
-                    // }
-                    _ => (),
-                }
-            }
-        });
-    }
-
-    InputResult { selection_changed }
 }
 
 fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>) {
@@ -867,10 +823,6 @@ fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Respo
     res
 }
 
-struct InputResult {
-    selection_changed: bool,
-}
-
 enum DropQuarter {
     Top,
     MiddleTop,
@@ -957,6 +909,9 @@ enum Input<NodeIdType> {
         is_next: bool,
     },
     KeySpace,
+    KeyEnter {
+        activatable_nodes: Vec<NodeIdType>,
+    },
     None,
 }
 enum Output<NodeIdType> {
@@ -976,7 +931,7 @@ enum Output<NodeIdType> {
     None,
 }
 
-fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
+fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeIdType> {
     let press_origin = ui.input(|i| i.pointer.press_origin());
     let pointer_pos = ui.input(|i| i.pointer.latest_pos());
     let modifiers = ui.input(|i| i.modifiers);
@@ -1011,6 +966,9 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
             activatable_nodes: Vec::new(),
             shift_click_nodes: None,
         };
+    }
+    if !ui.memory(|m| m.has_focus(id)) {
+        return Input::None;
     }
     if ui.input(|i| i.key_pressed(Key::ArrowLeft)) {
         return Input::KeyLeft;
@@ -1050,6 +1008,11 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
     }
     if ui.input(|i| i.key_pressed(Key::Space)) {
         return Input::KeySpace;
+    }
+    if ui.input(|i| i.key_pressed(Key::Enter)) {
+        return Input::KeyEnter {
+            activatable_nodes: Vec::new(),
+        };
     }
     Input::None
 }

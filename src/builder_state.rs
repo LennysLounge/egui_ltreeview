@@ -19,7 +19,6 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
         &mut self,
         node: &NodeBuilder<'ui, NodeIdType>,
         parent_id: Option<NodeIdType>,
-        parent_dir_is_open: bool,
     ) -> bool {
         let is_open;
         let last_node_state = self.nodes.get_mut(&node.id);
@@ -29,10 +28,7 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
                 id: node.id.clone(),
                 parent_id: parent_id,
                 open: is_open,
-                visible: parent_dir_is_open && !node.flatten,
-                dir: node.is_dir,
                 position: self.node_count,
-                previous: self.last_node_id_added.clone(),
                 next: None,
             };
         } else {
@@ -43,10 +39,7 @@ impl<'a, NodeIdType: NodeId> BuilderState<'a, NodeIdType> {
                     id: node.id.clone(),
                     parent_id: parent_id,
                     open: is_open,
-                    visible: parent_dir_is_open && !node.flatten,
-                    dir: node.is_dir,
                     position: self.node_count,
-                    previous: self.last_node_id_added.clone(),
                     next: None,
                 },
             );

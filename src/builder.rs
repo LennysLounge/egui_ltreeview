@@ -1,4 +1,4 @@
-use egui::{layers::ShapeIdx, pos2, vec2, Color32, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
+use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
     builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, Dragged,
@@ -209,11 +209,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
         self.decrement_current_dir_child_count();
 
-        let is_open = self.builder_state.update_and_insert_node(
-            &node,
-            self.parent_id().cloned(),
-            self.current_branch_expanded(),
-        );
+        let is_open = self
+            .builder_state
+            .update_and_insert_node(&node, self.parent_id().cloned());
         node.set_is_open(is_open);
         node.set_indent(self.indents.len());
         node.set_height(
@@ -357,16 +355,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         let drag_overlay_rect = self.ui.available_rect_before_wrap();
 
-        if self.state.is_selection_pivot(&node.id) {
-            self.ui
-                .painter()
-                .circle_filled(row_rect.left_center(), 10.0, Color32::BLUE);
-        }
-        if self.state.is_selection_cursor(&node.id) {
-            self.ui
-                .painter()
-                .circle_filled(row_rect.left_center(), 5.0, Color32::RED);
-        }
+        // Draw pivot and cursor for debugging
+        // if self.state.is_selection_pivot(&node.id) {
+        //     self.ui
+        //         .painter()
+        //         .circle_filled(row_rect.left_center(), 10.0, egui::Color32::BLUE);
+        // }
+        // if self.state.is_selection_cursor(&node.id) {
+        //     self.ui
+        //         .painter()
+        //         .circle_filled(row_rect.left_center(), 5.0, egui::Color32::RED);
+        // }
 
         // Draw node
         let (_row, closer, icon, label) = self
@@ -410,7 +409,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 }
 
                 // upkeep for the activate action
-                if self.state.is_selected(&node.id) {
+                if self.state.is_selected(&node.id) && node.activatable {
                     activatable_nodes.push(node.id.clone());
                 }
 
@@ -451,6 +450,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         self.ui_data.input = Input::None;
                         break 'block;
                     }
+                }
+            }
+            Input::KeyEnter { activatable_nodes } => {
+                if self.state.is_selected(&node.id) && node.activatable {
+                    activatable_nodes.push(node.id.clone());
+                }
+                if self.state.is_selected(&node.id) && node.activatable {
+                    *self.output = Output::ActivateSelection(activatable_nodes.clone());
+                    self.ui_data.input = Input::None;
                 }
             }
             Input::KeySpace => {
