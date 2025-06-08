@@ -453,6 +453,240 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     }
                 }
             }
+            Input::KeySpace => {
+                if self.state.is_selection_cursor(&node.id) {
+                    *self.output = Output::ToggleSelection(node.id.clone());
+                    self.ui_data.input = Input::None;
+                }
+            }
+            Input::KeyLeft => {
+                if self.state.is_selected(&node.id) {
+                    self.ui_data.input = Input::None;
+                    if self.state.selected_count() == 1 {
+                        if node.is_dir && node.is_open {
+                            self.builder_state.toggle_open(&node.id);
+                        } else {
+                            if let Some(dir_state) = self.stack.last() {
+                                *self.output = Output::SelectOneNode(dir_state.id.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            Input::KeyRight { select_next } => {
+                if *select_next {
+                    *self.output = Output::SelectOneNode(node.id.clone());
+                    self.ui_data.input = Input::None;
+                } else {
+                    if self.state.is_selected(&node.id) {
+                        if self.state.selected_count() == 1 {
+                            if node.is_dir && !node.is_open {
+                                self.builder_state.toggle_open(&node.id);
+                                self.ui_data.input = Input::None;
+                            } else {
+                                *select_next = true;
+                            }
+                        } else {
+                            self.ui_data.input = Input::None;
+                        }
+                    }
+                }
+            }
+            Input::KeyUp { previous_node } => 'arm: {
+                let current_node_is_cursor = self
+                    .state
+                    .get_selection_cursor()
+                    .or(self.state.get_selection_pivot())
+                    .is_some_and(|cursor_id| cursor_id == &node.id);
+
+                if current_node_is_cursor {
+                    if let Some(previous_node) = previous_node {
+                        *self.output = Output::SelectOneNode(previous_node.clone());
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    } else {
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    }
+                }
+
+                *previous_node = Some(node.id.clone());
+            }
+            Input::KeyUpAndCommand { previous_node } => 'arm: {
+                let current_node_is_cursor = self
+                    .state
+                    .get_selection_cursor()
+                    .or(self.state.get_selection_pivot())
+                    .is_some_and(|cursor_id| cursor_id == &node.id);
+                if current_node_is_cursor {
+                    if let Some(previous_node) = previous_node {
+                        *self.output = Output::SetCursor(previous_node.clone());
+                    }
+                    self.ui_data.input = Input::None;
+                    break 'arm;
+                }
+                *previous_node = Some(node.id.clone());
+            }
+            Input::KeyUpAndShift {
+                previous_node,
+                nodes_to_select,
+                next_cursor,
+            } => 'arm: {
+                let Some(pivot) = self.state.get_selection_pivot() else {
+                    self.ui_data.input = Input::None;
+                    break 'arm;
+                };
+                let previous_node = {
+                    let mut current_node = Some(node.id.clone());
+                    std::mem::swap(&mut current_node, previous_node);
+                    current_node
+                };
+
+                let Some(previous_node) = previous_node else {
+                    let current_node_is_cursor = self
+                        .state
+                        .get_selection_cursor()
+                        .or(self.state.get_selection_pivot())
+                        .is_some_and(|cursor_id| cursor_id == &node.id);
+                    if current_node_is_cursor {
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    }
+                    if pivot == &node.id {
+                        *nodes_to_select = Some(vec![node.id.clone()]);
+                    }
+                    break 'arm;
+                };
+
+                let Some(cursor) = self.state.get_selection_cursor() else {
+                    if self.state.is_selection_pivot(&node.id) {
+                        *self.output = Output::Select {
+                            selection: vec![previous_node.clone(), node.id.clone()],
+                            pivot: pivot.clone(),
+                            cursor: previous_node.clone(),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    };
+                    break 'arm;
+                };
+
+                if let Some(nodes_to_select) = nodes_to_select {
+                    if cursor == &node.id {
+                        *self.output = Output::Select {
+                            selection: nodes_to_select.clone(),
+                            pivot: pivot.clone(),
+                            cursor: previous_node.clone(),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    } else if pivot == &node.id {
+                        nodes_to_select.push(node.id.clone());
+                        *self.output = Output::Select {
+                            selection: nodes_to_select.clone(),
+                            pivot: pivot.clone(),
+                            cursor: next_cursor.clone().expect("The selection should have started on the cursor which would have se this value"),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    } else {
+                        nodes_to_select.push(node.id.clone());
+                    }
+                } else {
+                    if cursor == &node.id && pivot == &node.id {
+                        *self.output = Output::Select {
+                            selection: vec![previous_node.clone(), node.id.clone()],
+                            pivot: pivot.clone(),
+                            cursor: previous_node.clone(),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    }
+                    if cursor == &node.id {
+                        *nodes_to_select = Some(vec![previous_node.clone(), node.id.clone()]);
+                        *next_cursor = Some(previous_node.clone());
+                    } else if pivot == &node.id {
+                        *nodes_to_select = Some(vec![node.id.clone()]);
+                    }
+                }
+            }
+            Input::KeyDown(is_next) => 'arm: {
+                if *is_next {
+                    *self.output = Output::SelectOneNode(node.id.clone());
+                    self.ui_data.input = Input::None;
+                    break 'arm;
+                }
+                *is_next = self
+                    .state
+                    .get_selection_cursor()
+                    .or(self.state.get_selection_pivot())
+                    .is_some_and(|cursor_id| cursor_id == &node.id);
+            }
+            Input::KeyDownAndCommand { is_next } => 'arm: {
+                if *is_next {
+                    *self.output = Output::SetCursor(node.id.clone());
+                    self.ui_data.input = Input::None;
+                    break 'arm;
+                }
+                *is_next = self
+                    .state
+                    .get_selection_cursor()
+                    .or(self.state.get_selection_pivot())
+                    .is_some_and(|cursor_id| cursor_id == &node.id);
+            }
+            Input::KeyDownAndShift {
+                nodes_to_select,
+                next_cursor,
+                is_next,
+            } => 'arm: {
+                let Some(pivot) = self.state.get_selection_pivot() else {
+                    self.ui_data.input = Input::None;
+                    break 'arm;
+                };
+
+                if let Some(nodes_to_select) = nodes_to_select {
+                    nodes_to_select.push(node.id.clone());
+                    if *is_next {
+                        *self.output = Output::Select {
+                            selection: nodes_to_select.clone(),
+                            pivot: pivot.clone(),
+                            cursor: node.id.clone(),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    } else if pivot == &node.id {
+                        *self.output = Output::Select {
+                            selection: nodes_to_select.clone(),
+                            pivot: pivot.clone(),
+                            cursor: next_cursor.clone().expect("The selection should have started on the cursor which would have se this value"),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    }
+                } else {
+                    if *is_next && pivot == &node.id {
+                        *self.output = Output::Select {
+                            selection: vec![node.id.clone()],
+                            pivot: pivot.clone(),
+                            cursor: node.id.clone(),
+                        };
+                        self.ui_data.input = Input::None;
+                        break 'arm;
+                    }
+                    if *is_next {
+                        *nodes_to_select = Some(vec![node.id.clone()]);
+                        *next_cursor = Some(node.id.clone());
+                    } else if pivot == &node.id {
+                        *nodes_to_select = Some(vec![node.id.clone()]);
+                    }
+                }
+
+                *is_next = self
+                    .state
+                    .get_selection_cursor()
+                    .or(self.state.get_selection_pivot())
+                    .is_some_and(|cursor_id| cursor_id == &node.id);
+            }
             _ => (),
         };
 

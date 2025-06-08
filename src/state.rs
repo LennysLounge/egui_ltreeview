@@ -392,4 +392,10 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     pub(crate) fn set_last_clicked(&mut self, id: &NodeIdType) {
         *self.last_clicked_node = Some(id.clone());
     }
+    pub(crate) fn get_selection_cursor(&self) -> Option<&NodeIdType> {
+        self.selection_cursor.as_ref()
+    }
+    pub(crate) fn get_selection_pivot(&self) -> Option<&NodeIdType> {
+        self.selection_pivot.as_ref()
+    }
 }

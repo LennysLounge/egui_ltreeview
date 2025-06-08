@@ -170,7 +170,7 @@ mod state;
 
 use egui::{
     self, emath, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout, Modifiers,
-    NumExt, Order, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, Vec2,
+    NumExt, Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, Vec2,
 };
 use std::hash::Hash;
 
@@ -557,6 +557,18 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         Output::ShiftSelect(ids) => {
             state.set_selected_dont_change_pivot(ids);
         }
+        Output::Select {
+            selection,
+            pivot,
+            cursor,
+        } => {
+            state.set_selected(selection);
+            state.set_pivot(Some(pivot));
+            state.set_cursor(Some(cursor));
+        }
+        Output::SetCursor(id) => {
+            state.set_cursor(Some(id));
+        }
         Output::None => (),
     }
 
@@ -602,15 +614,15 @@ fn handle_input<NodeIdType: NodeId>(
                     } => {
                         should_activate = true;
                     }
-                    Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } => {
-                        state.handle_key(key, modifiers, settings.allow_multi_select);
-                        selection_changed = true;
-                    }
+                    // Event::Key {
+                    //     key,
+                    //     pressed: true,
+                    //     modifiers,
+                    //     ..
+                    // } => {
+                    //     state.handle_key(key, modifiers, settings.allow_multi_select);
+                    //     selection_changed = true;
+                    // }
                     _ => (),
                 }
             }
@@ -913,7 +925,6 @@ enum Input<NodeIdType> {
     DragStarted(Pos2),
     Dragged(Pos2),
     SecondaryClick(Pos2),
-    /// Ambiguous between a double click, activation and two single clicks on different nodes.
     Click {
         pos: Pos2,
         double: bool,
@@ -921,6 +932,31 @@ enum Input<NodeIdType> {
         activatable_nodes: Vec<NodeIdType>,
         shift_click_nodes: Option<Vec<NodeIdType>>,
     },
+    KeyLeft,
+    KeyRight {
+        select_next: bool,
+    },
+    KeyUp {
+        previous_node: Option<NodeIdType>,
+    },
+    KeyUpAndCommand {
+        previous_node: Option<NodeIdType>,
+    },
+    KeyUpAndShift {
+        previous_node: Option<NodeIdType>,
+        nodes_to_select: Option<Vec<NodeIdType>>,
+        next_cursor: Option<NodeIdType>,
+    },
+    KeyDown(bool),
+    KeyDownAndCommand {
+        is_next: bool,
+    },
+    KeyDownAndShift {
+        nodes_to_select: Option<Vec<NodeIdType>>,
+        next_cursor: Option<NodeIdType>,
+        is_next: bool,
+    },
+    KeySpace,
     None,
 }
 enum Output<NodeIdType> {
@@ -931,6 +967,12 @@ enum Output<NodeIdType> {
     SelectOneNode(NodeIdType),
     ShiftSelect(Vec<NodeIdType>),
     ToggleSelection(NodeIdType),
+    Select {
+        selection: Vec<NodeIdType>,
+        pivot: NodeIdType,
+        cursor: NodeIdType,
+    },
+    SetCursor(NodeIdType),
     None,
 }
 
@@ -943,13 +985,15 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
         return Input::None;
     }
 
-    if interaction.drag_started() {
+    if interaction.drag_started_by(PointerButton::Primary) {
         return Input::DragStarted(
             press_origin
                 .expect("If a drag has started it must have a position where the press started"),
         );
     }
-    if interaction.dragged() || interaction.drag_stopped() {
+    if interaction.dragged_by(PointerButton::Primary)
+        || interaction.drag_stopped_by(PointerButton::Primary)
+    {
         return Input::Dragged(
             pointer_pos.expect("If the tree view is dragged it must have a pointer position"),
         );
@@ -959,7 +1003,7 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
             pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
         );
     }
-    if interaction.clicked() {
+    if interaction.clicked_by(PointerButton::Primary) {
         return Input::Click {
             pos: pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
             double: interaction.double_clicked(),
@@ -967,6 +1011,45 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response) -> Input<NodeIdType> {
             activatable_nodes: Vec::new(),
             shift_click_nodes: None,
         };
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowLeft)) {
+        return Input::KeyLeft;
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowRight)) {
+        return Input::KeyRight { select_next: false };
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowUp)) {
+        if modifiers.shift_only() {
+            return Input::KeyUpAndShift {
+                previous_node: None,
+                nodes_to_select: None,
+                next_cursor: None,
+            };
+        }
+        if modifiers.command_only() {
+            return Input::KeyUpAndCommand {
+                previous_node: None,
+            };
+        }
+        return Input::KeyUp {
+            previous_node: None,
+        };
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
+        if modifiers.shift_only() {
+            return Input::KeyDownAndShift {
+                nodes_to_select: None,
+                next_cursor: None,
+                is_next: false,
+            };
+        }
+        if modifiers.command_only() {
+            return Input::KeyDownAndCommand { is_next: false };
+        }
+        return Input::KeyDown(false);
+    }
+    if ui.input(|i| i.key_pressed(Key::Space)) {
+        return Input::KeySpace;
     }
     Input::None
 }
