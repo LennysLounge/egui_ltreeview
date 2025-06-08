@@ -209,9 +209,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
         self.decrement_current_dir_child_count();
 
-        let is_open = self
-            .builder_state
-            .update_and_insert_node(&node, self.parent_id().cloned());
+        let is_open = self.builder_state.update_and_insert_node(&node);
         node.set_is_open(is_open);
         node.set_indent(self.indents.len());
         node.set_height(

@@ -4,7 +4,7 @@ use crate::{NodeId, NodeState};
 
 #[derive(Clone)]
 pub(crate) struct NodeStates<NodeIdType> {
-    states: IndexMap<NodeIdType, NodeState<NodeIdType>>,
+    states: IndexMap<NodeIdType, NodeState>,
     first: Option<NodeIdType>,
 }
 
@@ -23,14 +23,10 @@ impl<NodeIdType: NodeId> NodeStates<NodeIdType> {
     }
 
     /// Get the node state for an id.
-    pub(crate) fn get(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        self.states.get(id)
-    }
-    /// Get the node state for an id.
-    pub(crate) fn get_mut(&mut self, id: &NodeIdType) -> Option<&mut NodeState<NodeIdType>> {
+    pub(crate) fn get_mut(&mut self, id: &NodeIdType) -> Option<&mut NodeState> {
         self.states.get_mut(id)
     }
-    pub(crate) fn insert(&mut self, node_id: NodeIdType, state: NodeState<NodeIdType>) {
+    pub(crate) fn insert(&mut self, node_id: NodeIdType, state: NodeState) {
         if self.first.is_none() {
             self.first = Some(node_id.clone());
         }

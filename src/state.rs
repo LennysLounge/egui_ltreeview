@@ -11,13 +11,9 @@ pub(crate) struct DragState<NodeIdType> {
 /// State of each node in the tree.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct NodeState<NodeIdType> {
-    /// The parent node of this node.
-    pub parent_id: Option<NodeIdType>,
+pub(crate) struct NodeState {
     /// Wether the node is open or not.
     pub open: bool,
-    /// The node id of the next node.
-    pub next: Option<NodeIdType>,
 }
 
 /// Represents the state of the tree view.
@@ -96,23 +92,14 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Expand all parent nodes of the node with the given id.
-    pub fn expand_parents_of(&mut self, id: &NodeIdType) {
-        if let Some(parent_id) = self.parent_id_of(id) {
-            self.expand_node(&parent_id.clone());
-        }
+    pub fn expand_parents_of(&mut self, _id: &NodeIdType) {
+        println!("TreeViewState::expand_parents_of not yet implemented");
     }
 
     /// Expand the node and all its parent nodes.
     /// Effectively this makes the node visible in the tree.
-    pub fn expand_node(&mut self, id: &NodeIdType) {
-        let mut current_id = id.clone();
-        while let Some(node_state) = self.node_state_of_mut(&current_id) {
-            node_state.open = true;
-            current_id = match node_state.parent_id.as_ref() {
-                Some(id) => id.clone(),
-                None => break,
-            }
-        }
+    pub fn expand_node(&mut self, _id: &NodeIdType) {
+        println!("TreeViewState::expand_node not yet implemented");
     }
 
     /// Set the openness state of a node.
@@ -123,20 +110,16 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Get the parent id of a node.
-    pub fn parent_id_of(&self, id: &NodeIdType) -> Option<&NodeIdType> {
-        self.node_state_of(id)
-            .and_then(|node_state| node_state.parent_id.as_ref())
+    #[deprecated = "The TreeViewState no longer carries this information. Refer to your own data source"]
+    pub fn parent_id_of(&self, _id: &NodeIdType) -> Option<&NodeIdType> {
+        None
     }
 
-    /// Get the node state for an id.
-    pub(crate) fn node_state_of(&self, id: &NodeIdType) -> Option<&NodeState<NodeIdType>> {
-        self.node_states.get(id)
-    }
     /// Get the node state for an id.
     pub(crate) fn node_state_of_mut(
         &mut self,
         id: &NodeIdType,
-    ) -> Option<&mut NodeState<NodeIdType>> {
+    ) -> Option<&mut NodeState> {
         self.node_states.get_mut(id)
     }
 
