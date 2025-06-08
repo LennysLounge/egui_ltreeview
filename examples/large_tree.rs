@@ -29,11 +29,24 @@ struct MyApp {
 }
 impl MyApp {
     fn new() -> Self {
+        let tree = build_tree(200_000, 11);
+        let mut state = TreeViewState::default();
+        init_state(&mut state, &tree);
         MyApp {
-            tree: build_tree(200_000, 11),
-            state: TreeViewState::default(),
+            tree,
+            state,
             measurer: Measurer::new(None),
         }
+    }
+}
+
+fn init_state(state: &mut TreeViewState<Uuid>, node: &Node) {
+    let Node::Directory { id, children, .. } = node else {
+        return;
+    };
+    state.set_openness(*id, true);
+    for child in children {
+        init_state(state, child);
     }
 }
 
