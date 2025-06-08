@@ -259,6 +259,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         if self.ui.clip_rect().intersects(row_rect) {
             self.node_visible_in_clip_rect(node, row_rect);
+        } else {
+            self.ui.add_space(node.node_height.unwrap());
         }
         if node.is_dir {
             self.indents.push(IndentState {
