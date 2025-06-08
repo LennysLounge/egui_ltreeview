@@ -1,4 +1,6 @@
-use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
+use egui::{
+    layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Sense, Shape, Ui, UiBuilder, WidgetText,
+};
 
 use crate::{
     node::NodeBuilder, rect_contains_visually, DirPosition, DragState, DropQuarter,
@@ -40,6 +42,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     indents: Vec<IndentState<NodeIdType>>,
     input: &'ui mut Input<NodeIdType>,
     output: &'ui mut Output<NodeIdType>,
+    cursor: Pos2,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -52,6 +55,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         output: &'ui mut Output<NodeIdType>,
     ) -> Self {
         Self {
+            cursor: ui.cursor().min,
             ui_data,
             state,
             settings,
@@ -252,20 +256,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn node_structually_visible<'builder, 'add_ui>(&mut self, mut node: Node<NodeIdType>) -> bool {
-        let row_rect = Rect::from_min_max(
-            self.ui.cursor().min,
-            pos2(
-                self.ui.cursor().max.x,
-                self.ui.cursor().min.y + node.node_height,
-            ),
-        )
-        .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
+        let row_rect = Rect::from_min_size(self.cursor, vec2(self.state.size.x, node.node_height))
+            .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
 
         if self.ui.clip_rect().intersects(row_rect) {
             self.node_visible_in_clip_rect(&mut node, row_rect);
-        } else {
-            self.ui.add_space(node.node_height);
         }
+        self.cursor.y += row_rect.height();
         if node.is_dir {
             self.indents.push(IndentState {
                 source_node: node.id.clone(),
@@ -314,23 +311,24 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Draw node
         let (_row, closer, icon, label) = self
             .ui
-            .scope(|ui| {
+            .allocate_new_ui(UiBuilder::new().max_rect(row_rect), |node_ui| {
                 // Set the fg stroke colors here so that the ui added by the user
                 // has the correct colors when selected or focused.
                 let fg_stroke = if self.state.is_selected(&node.id) && self.ui_data.has_focus {
-                    ui.visuals().selection.stroke
+                    node_ui.visuals().selection.stroke
                 } else if self.state.is_selected(&node.id) {
-                    ui.visuals().widgets.inactive.fg_stroke
+                    node_ui.visuals().widgets.inactive.fg_stroke
                 } else {
-                    ui.visuals().widgets.noninteractive.fg_stroke
+                    node_ui.visuals().widgets.noninteractive.fg_stroke
                 };
-                ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
-                ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
+                node_ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
+                node_ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
 
-                node.show_node(ui, &self.ui_data.interaction, self.settings)
+                node.show_node(node_ui, &self.ui_data.interaction, self.settings)
             })
             .inner;
 
+        // Do input
         self.do_input_output(node, &row_rect, closer.as_ref());
 
         // Draw node dragged
@@ -827,5 +825,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             return false;
         };
         dir_state.branch_dragged
+    }
+
+    pub(crate) fn allocate_remaining_space(&mut self) {
+        self.ui.allocate_rect(
+            Rect::from_min_max(
+                self.ui.cursor().min,
+                pos2(self.ui.cursor().max.x, self.cursor.y),
+            ),
+            Sense::hover(),
+        );
     }
 }

@@ -533,6 +533,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             let mut tree_builder =
                 TreeViewBuilder::new(ui, state, settings, &mut ui_data, &mut input, &mut output);
             build_tree_view(&mut tree_builder);
+            tree_builder.allocate_remaining_space();
 
             // Add negative space because the place will add the item spacing on top of this.
             ui.add_space(-ui.spacing().item_spacing.y * 0.5);
