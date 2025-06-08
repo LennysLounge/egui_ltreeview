@@ -1,9 +1,8 @@
 use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetText};
 
 use crate::{
-    builder_state::BuilderState, node::NodeBuilder, rect_contains_visually, DirPosition, DragState,
-    DropQuarter, IndentHintStyle, Input, NodeId, Output, PartialTreeViewState, TreeViewSettings,
-    TreeViewState, UiData,
+    node::NodeBuilder, rect_contains_visually, DirPosition, DragState, DropQuarter,
+    IndentHintStyle, Input, NodeId, Output, TreeViewSettings, TreeViewState, UiData,
 };
 
 #[derive(Clone)]
@@ -32,10 +31,9 @@ struct IndentState<NodeIdType> {
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, NodeIdType> {
     ui: &'ui mut Ui,
-    state: PartialTreeViewState<'ui, NodeIdType>,
+    state: &'ui mut TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
     ui_data: &'ui mut UiData<NodeIdType>,
-    builder_state: BuilderState<'ui, NodeIdType>,
     selection_background: Option<(ShapeIdx, Rect)>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
@@ -50,13 +48,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         ui_data: &'ui mut UiData<NodeIdType>,
         output: &'ui mut Output<NodeIdType>,
     ) -> Self {
-        let (node_states, state) = state.split();
         Self {
             ui_data,
             state,
             settings,
             ui,
-            builder_state: BuilderState::new(node_states),
             selection_background: None,
             stack: Vec::new(),
             indents: Vec::new(),
@@ -209,13 +205,14 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
         self.decrement_current_dir_child_count();
 
-        let is_open = self.builder_state.update_and_insert_node(&node);
+        let is_open = self.state.is_open(&node.id).unwrap_or(node.default_open);
         node.set_is_open(is_open);
         node.set_indent(self.indents.len());
         node.set_height(
             node.node_height
                 .unwrap_or(self.ui.spacing().interact_size.y),
         );
+        self.state.set_openness(node.id.clone(), is_open);
 
         if self.current_branch_expanded() && !node.flatten {
             self.node_structually_visible(&mut node);
@@ -417,7 +414,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             } => 'block: {
                 // Closer click
                 if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
-                    self.builder_state.toggle_open(&node.id);
+                    self.state.toggle_openness(&node.id);
                     self.ui_data.input = Input::None;
                     break 'block;
                 }
@@ -435,7 +432,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 // Double clicked
                 if double_click {
-                    self.builder_state.toggle_open(&node.id);
+                    self.state.toggle_openness(&node.id);
                     if node.activatable {
                         if self.state.is_selected(&node.id) {
                             *self.output = Output::ActivateSelection(activatable_nodes.clone());
@@ -492,7 +489,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     self.ui_data.input = Input::None;
                     if self.state.selected_count() == 1 {
                         if node.is_dir && node.is_open {
-                            self.builder_state.toggle_open(&node.id);
+                            self.state.toggle_openness(&node.id);
                         } else {
                             if let Some(dir_state) = self.stack.last() {
                                 *self.output = Output::SelectOneNode(dir_state.id.clone());
@@ -509,7 +506,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if self.state.is_selected(&node.id) {
                         if self.state.selected_count() == 1 {
                             if node.is_dir && !node.is_open {
-                                self.builder_state.toggle_open(&node.id);
+                                self.state.toggle_openness(&node.id);
                                 self.ui_data.input = Input::None;
                             } else {
                                 *select_next = true;

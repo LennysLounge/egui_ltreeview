@@ -163,9 +163,7 @@
 //! property of a node.
 
 mod builder;
-mod builder_state;
 mod node;
-mod node_states;
 mod state;
 
 use egui::{

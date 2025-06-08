@@ -1,19 +1,13 @@
+use std::collections::HashMap;
+
 use egui::{Id, Ui, Vec2};
 
-use crate::{node_states::NodeStates, NodeId};
+use crate::NodeId;
 
 #[derive(Clone, Debug)]
 pub(crate) struct DragState<NodeIdType> {
     pub dragged: Vec<NodeIdType>,
     pub simplified: Vec<NodeIdType>,
-}
-
-/// State of each node in the tree.
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct NodeState {
-    /// Wether the node is open or not.
-    pub open: bool,
 }
 
 /// Represents the state of the tree view.
@@ -34,7 +28,7 @@ pub struct TreeViewState<NodeIdType> {
     /// The rectangle the tree view occupied.
     pub(crate) size: Vec2,
     /// Open states of the dirs in this tree.
-    node_states: NodeStates<NodeIdType>,
+    node_states: HashMap<NodeIdType, bool>,
     /// Wether or not the context menu was open last frame.
     pub(crate) context_menu_was_open: bool,
     /// The last node that was clicked. Used for double click detection.
@@ -52,7 +46,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             dragged: Default::default(),
             secondary_selection: Default::default(),
             size: Vec2::default(),
-            node_states: NodeStates::new(),
+            node_states: HashMap::new(),
             context_menu_was_open: false,
             last_clicked_node: None,
         }
@@ -103,24 +97,24 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     }
 
     /// Set the openness state of a node.
-    pub fn set_openness(&mut self, id: &NodeIdType, open: bool) {
-        if let Some(node_state) = self.node_state_of_mut(id) {
-            node_state.open = open;
+    pub fn set_openness(&mut self, id: NodeIdType, open: bool) {
+        self.node_states.insert(id.clone(), open);
+    }
+
+    pub(crate) fn toggle_openness(&mut self, id: &NodeIdType) {
+        if let Some(openness) = self.node_states.get_mut(id) {
+            *openness = !*openness;
         }
+    }
+
+    pub(crate) fn is_open(&self, id: &NodeIdType) -> Option<bool> {
+        self.node_states.get(id).cloned()
     }
 
     /// Get the parent id of a node.
     #[deprecated = "The TreeViewState no longer carries this information. Refer to your own data source"]
     pub fn parent_id_of(&self, _id: &NodeIdType) -> Option<&NodeIdType> {
         None
-    }
-
-    /// Get the node state for an id.
-    pub(crate) fn node_state_of_mut(
-        &mut self,
-        id: &NodeIdType,
-    ) -> Option<&mut NodeState> {
-        self.node_states.get_mut(id)
     }
 
     pub(crate) fn prune_selection_to_known_ids(&mut self) {
@@ -164,56 +158,6 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         self.dragged.as_ref().map(|state| &state.dragged)
     }
 
-    pub(crate) fn split<'a>(
-        &'a mut self,
-    ) -> (
-        &'a mut NodeStates<NodeIdType>,
-        PartialTreeViewState<'a, NodeIdType>,
-    ) {
-        let TreeViewState {
-            selected,
-            dragged,
-            secondary_selection,
-            selection_cursor,
-            node_states,
-            last_clicked_node,
-            selection_pivot,
-            ..
-        } = self;
-        (
-            node_states,
-            PartialTreeViewState {
-                selected,
-                dragged,
-                secondary_selection,
-                selection_cursor,
-                last_clicked_node,
-                selection_pivot,
-            },
-        )
-    }
-}
-
-/// Represents the state of the tree view.
-///
-/// This holds which node is selected and the open/close
-/// state of the directories.
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct PartialTreeViewState<'a, NodeIdType> {
-    /// Id of the node that was selected.
-    selected: &'a Vec<NodeIdType>,
-    /// Information about the dragged node.
-    dragged: &'a Option<DragState<NodeIdType>>,
-    /// Id of the node that was right clicked.
-    secondary_selection: &'a Option<NodeIdType>,
-    /// The element where the selection curosr is at the moment.
-    selection_cursor: &'a Option<NodeIdType>,
-    /// The last node that was clicked. Used for double click detection.
-    last_clicked_node: &'a mut Option<NodeIdType>,
-    /// The pivot element used for selection.
-    selection_pivot: &'a Option<NodeIdType>,
-}
-impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
     /// Is the given id part of a valid drag.
     pub(crate) fn is_dragged(&self, id: &NodeIdType) -> bool {
         self.dragged
@@ -247,7 +191,7 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
             .is_some_and(|last| last == id)
     }
     pub(crate) fn set_last_clicked(&mut self, id: &NodeIdType) {
-        *self.last_clicked_node = Some(id.clone());
+        self.last_clicked_node = Some(id.clone());
     }
     pub(crate) fn get_selection_cursor(&self) -> Option<&NodeIdType> {
         self.selection_cursor.as_ref()
@@ -256,6 +200,6 @@ impl<NodeIdType: NodeId> PartialTreeViewState<'_, NodeIdType> {
         self.selection_pivot.as_ref()
     }
     pub(crate) fn get_selection(&self) -> &Vec<NodeIdType> {
-        self.selected
+        &self.selected
     }
 }
