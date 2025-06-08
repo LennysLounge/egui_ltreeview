@@ -205,6 +205,37 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
         self.decrement_current_dir_child_count();
 
+        let node_is_open = if self.current_branch_expanded() && !node.flatten {
+            self.node_structually_visible(&mut node)
+        } else {
+            false
+        };
+
+        if node.is_dir {
+            self.stack.push(DirectoryState {
+                id: node.id.clone(),
+                child_count: None,
+                branch_expanded: self.current_branch_expanded() && node_is_open,
+                branch_dragged: self.current_branch_dragged()
+                    || self.state.is_dragged(&node.id)
+                    || match self.output {
+                        Output::SetDragged(drag_state)
+                        | Output::SetDraggedSelection(drag_state) => {
+                            drag_state.dragged.contains(&node.id)
+                        }
+                        _ => false,
+                    },
+            });
+        }
+
+        if self.should_close_current_dir() {
+            self.close_dir();
+        }
+
+        node_is_open
+    }
+
+    fn node_structually_visible(&mut self, node: &mut NodeBuilder<NodeIdType>) -> bool {
         let is_open = self.state.is_open(&node.id).unwrap_or(node.default_open);
         node.set_is_open(is_open);
         node.set_indent(self.indents.len());
@@ -214,35 +245,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         );
         self.state.set_openness(node.id.clone(), is_open);
 
-        if self.current_branch_expanded() && !node.flatten {
-            self.node_structually_visible(&mut node);
-        }
-
-        if node.is_dir {
-            let is_dragged = self.state.is_dragged(&node.id)
-                || match self.output {
-                    Output::SetDragged(drag_state) => drag_state.dragged.contains(&node.id),
-                    Output::SetDraggedSelection(drag_state) => {
-                        drag_state.dragged.contains(&node.id)
-                    }
-                    _ => false,
-                };
-            self.stack.push(DirectoryState {
-                id: node.id.clone(),
-                child_count: None,
-                branch_expanded: self.current_branch_expanded() && node.is_open,
-                branch_dragged: self.current_branch_dragged() || is_dragged,
-            });
-        }
-
-        if self.should_close_current_dir() {
-            self.close_dir();
-        }
-
-        node.is_open
-    }
-
-    fn node_structually_visible(&mut self, node: &mut NodeBuilder<NodeIdType>) {
         let row_range = Rangef::new(
             self.ui.cursor().min.y,
             self.ui.cursor().min.y + node.node_height.unwrap(),
@@ -259,6 +261,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 positions: Vec::new(),
             });
         }
+        is_open
     }
 
     fn node_visible_in_clip_rect(&mut self, node: &mut NodeBuilder<NodeIdType>) {
