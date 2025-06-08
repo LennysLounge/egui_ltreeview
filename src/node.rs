@@ -5,17 +5,37 @@ use egui::{
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
 
+pub trait NodeConfig<NodeIdType> {
+    fn id(&self) -> &NodeIdType;
+    fn is_dir(&self) -> bool;
+    fn flatten(&self) -> bool;
+    fn default_open(&self) -> bool;
+    fn drop_allowed(&self) -> bool;
+    fn activatable(&self) -> bool;
+    fn node_height(&self) -> Option<f32>;
+
+    fn has_custom_icon(&self) -> bool;
+    fn icon(&mut self, ui: &mut Ui);
+
+    fn has_custom_closer(&self) -> bool;
+    fn closer(&mut self, ui: &mut Ui, closer_state: CloserState);
+
+    fn has_custom_lable(&self) -> bool;
+    fn lable(&mut self, ui: &mut Ui);
+
+    fn has_custom_context_menu(&self) -> bool;
+    fn context_menu(&mut self, ui: &mut Ui);
+}
+
 /// A builder to build a node.
 pub struct NodeBuilder<'add_ui, NodeIdType> {
     pub(crate) id: NodeIdType,
     pub(crate) is_dir: bool,
     pub(crate) flatten: bool,
-    pub(crate) is_open: bool,
     pub(crate) default_open: bool,
     pub(crate) drop_allowed: bool,
     pub(crate) activatable: bool,
     pub(crate) node_height: Option<f32>,
-    indent: usize,
     #[allow(clippy::type_complexity)]
     icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
     #[allow(clippy::type_complexity)]
@@ -39,9 +59,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             closer: None,
             label: None,
             context_menu: None,
-            is_open: false,
             default_open: true,
-            indent: 0,
         }
     }
 
@@ -58,9 +76,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             closer: None,
             label: None,
             context_menu: None,
-            is_open: false,
             default_open: true,
-            indent: 0,
         }
     }
 
@@ -150,19 +166,107 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         self.context_menu = Some(Box::new(add_context_menu));
         self
     }
-
-    pub(crate) fn set_is_open(&mut self, open: bool) {
-        self.is_open = open;
+}
+impl<NodeIdType: NodeId> NodeConfig<NodeIdType> for NodeBuilder<'_, NodeIdType> {
+    fn id(&self) -> &NodeIdType {
+        &self.id
     }
 
-    pub(crate) fn set_indent(&mut self, indent: usize) {
-        self.indent = indent;
-    }
-    pub(crate) fn set_height(&mut self, height: f32) {
-        self.node_height = Some(height)
+    fn is_dir(&self) -> bool {
+        self.is_dir
     }
 
-    pub(crate) fn show_node(
+    fn flatten(&self) -> bool {
+        self.flatten
+    }
+
+    fn default_open(&self) -> bool {
+        self.default_open
+    }
+
+    fn drop_allowed(&self) -> bool {
+        self.drop_allowed
+    }
+
+    fn activatable(&self) -> bool {
+        self.activatable
+    }
+
+    fn node_height(&self) -> Option<f32> {
+        self.node_height
+    }
+
+    fn has_custom_icon(&self) -> bool {
+        self.icon.is_some()
+    }
+
+    fn icon(&mut self, ui: &mut Ui) {
+        if let Some(icon) = &mut self.icon {
+            (icon)(ui);
+        }
+    }
+
+    fn has_custom_closer(&self) -> bool {
+        self.closer.is_some()
+    }
+
+    fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {
+        if let Some(closer) = &mut self.closer {
+            (closer)(ui, closer_state);
+        }
+    }
+
+    fn has_custom_lable(&self) -> bool {
+        self.label.is_some()
+    }
+
+    fn lable(&mut self, ui: &mut Ui) {
+        if let Some(label) = &mut self.label {
+            (label)(ui);
+        }
+    }
+
+    fn has_custom_context_menu(&self) -> bool {
+        self.context_menu.is_some()
+    }
+
+    fn context_menu(&mut self, ui: &mut Ui) {
+        if let Some(context_menu) = &mut self.context_menu {
+            (context_menu)(ui);
+        }
+    }
+}
+
+pub(crate) struct Node<'config, NodeIdType> {
+    pub id: NodeIdType,
+    pub is_dir: bool,
+    pub is_open: bool,
+    pub drop_allowed: bool,
+    pub activatable: bool,
+    pub node_height: f32,
+    pub indent: usize,
+    config: &'config mut dyn NodeConfig<NodeIdType>,
+}
+impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
+    pub fn from_config(
+        is_open: bool,
+        default_node_height: f32,
+        indent: usize,
+        config: &'config mut dyn NodeConfig<NodeIdType>,
+    ) -> Self {
+        Self {
+            id: config.id().clone(),
+            is_dir: config.is_dir(),
+            is_open,
+            drop_allowed: config.drop_allowed(),
+            activatable: config.activatable(),
+            node_height: config.node_height().unwrap_or(default_node_height),
+            indent,
+            config,
+        }
+    }
+
+    pub fn show_node(
         &mut self,
         ui: &mut Ui,
         interaction: &Response,
@@ -174,21 +278,22 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
                 self.is_dir,
                 self.is_dir,
                 !self.is_dir,
-                !self.is_dir && self.icon.is_some(),
+                !self.is_dir && self.config.has_custom_icon(),
             ),
-            RowLayout::AlignedIcons => {
-                (true, self.is_dir, self.icon.is_some(), self.icon.is_some())
+            RowLayout::AlignedIcons => (
+                true,
+                self.is_dir,
+                self.config.has_custom_icon(),
+                self.config.has_custom_icon(),
+            ),
+            RowLayout::AlignedIconsAndLabels => {
+                (true, self.is_dir, true, self.config.has_custom_icon())
             }
-            RowLayout::AlignedIconsAndLabels => (true, self.is_dir, true, self.icon.is_some()),
         };
 
         let row_rect = Rect::from_min_size(
             ui.cursor().min,
-            vec2(
-                ui.available_width(),
-                self.node_height
-                    .expect("Node height should have been set by now"),
-            ),
+            vec2(ui.available_width(), self.node_height),
         );
         let mut row_ui = ui.new_child(
             UiBuilder::new()
@@ -197,10 +302,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         );
 
         let (closer, icon, label) = (|ui: &mut Ui| {
-            ui.set_height(
-                self.node_height
-                    .expect("Node height should have been set by now"),
-            );
+            ui.set_height(self.node_height);
             // The layouting in the row has to be pretty tight so we tunr of the item spacing here.
             let original_item_spacing = ui.spacing().item_spacing;
             ui.spacing_mut().item_spacing = Vec2::ZERO;
@@ -227,8 +329,8 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
                     if is_hovered {
                         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
                     }
-                    if let Some(add_closer) = self.closer.as_mut() {
-                        (add_closer)(
+                    if self.config.has_custom_closer() {
+                        self.config.closer(
                             ui,
                             CloserState {
                                 is_open: self.is_open,
@@ -249,21 +351,21 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             }
 
             // Draw icon
-            let icon = draw_icon
-                .then(|| {
-                    self.icon.as_mut().map(|add_icon| {
-                        let (_, big_rect) = ui
-                            .spacing()
-                            .icon_rectangles(ui.available_rect_before_wrap());
-                        ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
-                            ui.set_min_size(big_rect.size());
-                            add_icon(ui);
-                        })
-                        .response
-                        .rect
+            let icon = if draw_icon && self.config.has_custom_icon() {
+                let (_, big_rect) = ui
+                    .spacing()
+                    .icon_rectangles(ui.available_rect_before_wrap());
+                Some(
+                    ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
+                        ui.set_min_size(big_rect.size());
+                        self.config.icon(ui);
                     })
-                })
-                .flatten();
+                    .response
+                    .rect,
+                )
+            } else {
+                None
+            };
             if icon.is_none() && reserve_icon {
                 ui.add_space(ui.spacing().icon_width);
             }
@@ -273,8 +375,8 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             let label = ui
                 .scope(|ui| {
                     ui.spacing_mut().item_spacing = original_item_spacing;
-                    if let Some(add_label) = self.label.as_mut() {
-                        add_label(ui);
+                    if self.config.has_custom_lable() {
+                        self.config.lable(ui);
                     }
                 })
                 .response
@@ -299,7 +401,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Draw the content as a drag overlay if it is beeing dragged.
-    pub(crate) fn show_node_dragged(
+    pub fn show_node_dragged(
         &mut self,
         ui: &mut Ui,
         interaction: &Response,
@@ -326,12 +428,11 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
                 row
             });
     }
-
     pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
-        if let Some(context_menu) = self.context_menu.as_mut() {
+        if self.config.has_custom_context_menu() {
             let mut was_open = false;
             response.context_menu(|ui| {
-                context_menu(ui);
+                self.config.context_menu(ui);
                 was_open = true;
             });
             was_open
@@ -340,6 +441,10 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         }
     }
 }
+
+// fn default_closer(ui: &mut Ui, closer_state: CloserState) {}
+
+// fn default_label(ui: &mut Ui) {}
 
 /// Paint the arrow icon that indicated if the region is open or not
 pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, is_hovered: bool) {

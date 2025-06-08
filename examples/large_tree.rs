@@ -1,5 +1,5 @@
-use egui::ThemePreference;
-use egui_ltreeview::{NodeBuilder, TreeView, TreeViewBuilder, TreeViewState};
+use egui::{Label, ThemePreference};
+use egui_ltreeview::{NodeConfig, TreeView, TreeViewBuilder, TreeViewState};
 use performance_measure::performance_measure::Measurer;
 use uuid::Uuid;
 
@@ -87,18 +87,33 @@ fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     while let Some(elem) = stack.pop() {
         match elem {
             Node::Directory { id, children, name } => {
-                let open = builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
-                if open {
-                    builder.close_dir_in(children.len());
-                    for child in children {
-                        stack.push(child)
-                    }
-                } else {
-                    builder.close_dir();
+                //builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+                builder.node(DefaultNode {
+                    id,
+                    name,
+                    is_dir: true,
+                });
+                builder.close_dir_in(children.len());
+                for child in children {
+                    stack.push(child)
                 }
+                // let open = builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
+                // if open {
+                //     builder.close_dir_in(children.len());
+                //     for child in children {
+                //         stack.push(child)
+                //     }
+                // } else {
+                //     builder.close_dir();
+                // }
             }
             Node::Leaf { id, name } => {
-                builder.node(NodeBuilder::leaf(*id).label(name));
+                //builder.node(NodeBuilder::leaf(*id).label(name));
+                builder.node(DefaultNode {
+                    id,
+                    name,
+                    is_dir: false,
+                });
             }
         }
     }
@@ -193,4 +208,66 @@ fn count_nodes(node: &Node) -> (i32, i32) {
         }
         Node::Leaf { .. } => (0, 1),
     }
+}
+
+struct DefaultNode<'a> {
+    id: &'a Uuid,
+    name: &'a str,
+    is_dir: bool,
+}
+impl<'a> NodeConfig<Uuid> for DefaultNode<'a> {
+    fn id(&self) -> &Uuid {
+        self.id
+    }
+
+    fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+
+    fn flatten(&self) -> bool {
+        false
+    }
+
+    fn default_open(&self) -> bool {
+        true
+    }
+
+    fn drop_allowed(&self) -> bool {
+        true
+    }
+
+    fn activatable(&self) -> bool {
+        false
+    }
+
+    fn node_height(&self) -> Option<f32> {
+        None
+    }
+
+    fn has_custom_icon(&self) -> bool {
+        false
+    }
+
+    fn icon(&mut self, _ui: &mut egui::Ui) {}
+
+    fn has_custom_closer(&self) -> bool {
+        false
+    }
+
+    fn closer(&mut self, _ui: &mut egui::Ui, _closer_state: egui_ltreeview::CloserState) {}
+
+    fn has_custom_lable(&self) -> bool {
+        true
+    }
+
+    fn lable(&mut self, ui: &mut egui::Ui) {
+        ui.add(Label::new(self.name).selectable(false));
+        ui.label(self.name);
+    }
+
+    fn has_custom_context_menu(&self) -> bool {
+        false
+    }
+
+    fn context_menu(&mut self, _ui: &mut egui::Ui) {}
 }

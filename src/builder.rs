@@ -2,7 +2,8 @@ use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, WidgetTe
 
 use crate::{
     node::NodeBuilder, rect_contains_visually, DirPosition, DragState, DropQuarter,
-    IndentHintStyle, Input, NodeId, Output, TreeViewSettings, TreeViewState, UiData,
+    IndentHintStyle, Input, Node, NodeConfig, NodeId, Output, TreeViewSettings, TreeViewState,
+    UiData,
 };
 
 #[derive(Clone)]
@@ -205,26 +206,34 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// Returns `false` if the directory is closed.
     ///
     /// If the node is a directory, you must call [`TreeViewBuilder::close_dir`] to close the directory.
-    pub fn node(&mut self, mut node: NodeBuilder<NodeIdType>) -> bool {
+    pub fn node(&mut self, mut config: impl NodeConfig<NodeIdType>) -> bool {
         self.decrement_current_dir_child_count();
 
-        let node_is_open = if self.current_branch_expanded() && !node.flatten {
-            self.node_structually_visible(&mut node)
+        let node_is_open = if self.current_branch_expanded() && !config.flatten() {
+            let node = Node::from_config(
+                self.state
+                    .is_open(config.id())
+                    .unwrap_or(config.default_open()),
+                self.ui.spacing().interact_size.y,
+                self.indents.len(),
+                &mut config,
+            );
+            self.node_structually_visible(node)
         } else {
             false
         };
 
-        if node.is_dir {
+        if config.is_dir() {
             self.stack.push(DirectoryState {
-                id: node.id.clone(),
+                id: config.id().clone(),
                 child_count: None,
                 branch_expanded: self.current_branch_expanded() && node_is_open,
                 branch_dragged: self.current_branch_dragged()
-                    || self.state.is_dragged(&node.id)
+                    || self.state.is_dragged(config.id())
                     || match self.output {
                         Output::SetDragged(drag_state)
                         | Output::SetDraggedSelection(drag_state) => {
-                            drag_state.dragged.contains(&node.id)
+                            drag_state.dragged.contains(config.id())
                         }
                         _ => false,
                     },
@@ -238,29 +247,22 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         node_is_open
     }
 
-    fn node_structually_visible(&mut self, node: &mut NodeBuilder<NodeIdType>) -> bool {
-        let is_open = self.state.is_open(&node.id).unwrap_or(node.default_open);
-        node.set_is_open(is_open);
-        node.set_indent(self.indents.len());
-        node.set_height(
-            node.node_height
-                .unwrap_or(self.ui.spacing().interact_size.y),
-        );
-        self.state.set_openness(node.id.clone(), is_open);
+    fn node_structually_visible<'builder, 'add_ui>(&mut self, mut node: Node<NodeIdType>) -> bool {
+        self.state.set_openness(node.id.clone(), node.is_open);
 
         let row_rect = Rect::from_min_max(
             self.ui.cursor().min,
             pos2(
                 self.ui.cursor().max.x,
-                self.ui.cursor().min.y + node.node_height.unwrap(),
+                self.ui.cursor().min.y + node.node_height,
             ),
         )
         .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
 
         if self.ui.clip_rect().intersects(row_rect) {
-            self.node_visible_in_clip_rect(node, row_rect);
+            self.node_visible_in_clip_rect(&mut node, row_rect);
         } else {
-            self.ui.add_space(node.node_height.unwrap());
+            self.ui.add_space(node.node_height);
         }
         if node.is_dir {
             self.indents.push(IndentState {
@@ -269,10 +271,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 positions: Vec::new(),
             });
         }
-        is_open
+        node.is_open
     }
 
-    fn node_visible_in_clip_rect(&mut self, node: &mut NodeBuilder<NodeIdType>, row_rect: Rect) {
+    fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, row_rect: Rect) {
         // Draw background
         if self.state.is_selected(&node.id) {
             let (shape_idx, rect) = self
@@ -377,12 +379,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
-    fn do_input_output(
-        &mut self,
-        node: &NodeBuilder<NodeIdType>,
-        row_rect: &Rect,
-        closer: Option<&Rect>,
-    ) {
+    fn do_input_output(&mut self, node: &Node<NodeIdType>, row_rect: &Rect, closer: Option<&Rect>) {
         // Handle inputs
         let current_branch_dragged = self.current_branch_dragged();
         match &mut self.input {
@@ -755,7 +752,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     fn get_drop_position(
         &self,
         row: &Rect,
-        node: &NodeBuilder<NodeIdType>,
+        node: &Node<NodeIdType>,
     ) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
         let drop_quarter = self
             .ui_data
