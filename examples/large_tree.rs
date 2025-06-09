@@ -243,6 +243,5 @@ impl<'a> NodeConfig<Uuid> for DefaultNode<'a> {
 
     fn label(&mut self, ui: &mut egui::Ui) {
         ui.add(Label::new(self.name).selectable(false));
-        ui.label(self.name);
     }
 }

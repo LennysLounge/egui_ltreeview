@@ -273,13 +273,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         node.is_open
     }
 
-    fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, row_rect: Rect) {
+    fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, outer_rect: Rect) {
         // Draw background
         if self.state.is_selected(&node.id) {
             let (shape_idx, rect) = self
                 .selection_background
                 .get_or_insert_with(|| (self.ui.painter().add(Shape::Noop), Rect::NOTHING));
-            *rect = Rect::from_min_max(rect.min.min(row_rect.min), rect.max.max(row_rect.max));
+            *rect = Rect::from_min_max(rect.min.min(outer_rect.min), rect.max.max(outer_rect.max));
             let visuals = self.ui.visuals();
             let color = if self.ui_data.has_focus {
                 visuals.selection.bg_fill
@@ -294,8 +294,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             self.selection_background = None;
         }
 
-        let drag_overlay_rect = self.ui.available_rect_before_wrap();
-
         // Draw pivot and cursor for debugging
         // if self.state.is_selection_pivot(&node.id) {
         //     self.ui
@@ -309,37 +307,38 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // }
 
         // Draw node
-        let (_row, closer, icon, label) = self
-            .ui
-            .allocate_new_ui(UiBuilder::new().max_rect(row_rect), |node_ui| {
-                // Set the fg stroke colors here so that the ui added by the user
-                // has the correct colors when selected or focused.
-                let fg_stroke = if self.state.is_selected(&node.id) && self.ui_data.has_focus {
-                    node_ui.visuals().selection.stroke
-                } else if self.state.is_selected(&node.id) {
-                    node_ui.visuals().widgets.inactive.fg_stroke
-                } else {
-                    node_ui.visuals().widgets.noninteractive.fg_stroke
-                };
-                node_ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
-                node_ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
-
-                node.show_node(node_ui, &self.ui_data.interaction, self.settings)
-            })
-            .inner;
+        let (closer, icon, label) = node.show_node(
+            self.ui,
+            &self.ui_data.interaction,
+            self.settings,
+            outer_rect,
+            self.state.is_selected(&node.id),
+            self.ui_data.has_focus,
+        );
 
         // Do input
-        self.do_input_output(node, &row_rect, closer.as_ref());
+        self.do_input_output(node, &outer_rect, closer.as_ref());
 
         // Draw node dragged
         if self.state.is_dragged(&node.id) {
-            node.show_node_dragged(
-                self.ui,
-                &self.ui_data.interaction,
-                self.settings,
-                self.ui_data.drag_layer,
-                drag_overlay_rect,
-            );
+            self.ui
+                .scope_builder(UiBuilder::new().layer_id(self.ui_data.drag_layer), |ui| {
+                    if self.state.is_selected(&node.id) {
+                        ui.painter().rect_filled(
+                            outer_rect,
+                            ui.visuals().widgets.active.corner_radius,
+                            ui.visuals().selection.bg_fill.linear_multiply(0.4),
+                        );
+                    }
+                    node.show_node(
+                        ui,
+                        &self.ui_data.interaction,
+                        self.settings,
+                        outer_rect,
+                        false,
+                        true,
+                    );
+                });
         }
 
         // Show the context menu.
@@ -354,7 +353,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Draw context menu marker
         if self.state.is_secondary_selected(&node.id) && self.ui_data.context_menu_was_open {
             self.ui.painter().rect_stroke(
-                row_rect,
+                outer_rect,
                 self.ui.visuals().widgets.active.corner_radius,
                 self.ui.visuals().widgets.inactive.fg_stroke,
                 egui::StrokeKind::Inside,
@@ -364,7 +363,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Draw selection cursor
         if self.state.is_selection_cursor(&node.id) {
             self.ui.painter().rect_stroke(
-                row_rect,
+                outer_rect,
                 self.ui.visuals().widgets.active.corner_radius,
                 self.ui.visuals().widgets.inactive.fg_stroke,
                 egui::StrokeKind::Inside,
