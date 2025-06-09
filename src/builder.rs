@@ -184,7 +184,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let x_range = self.ui.available_rect_before_wrap().x_range();
         let y_range = match dir_position {
             DirPosition::First => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
-            DirPosition::Last => Rangef::new(row_y_range.min, self.ui.cursor().min.y),
+            DirPosition::Last => Rangef::new(row_y_range.min, self.cursor.y),
             DirPosition::After(_) => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
             DirPosition::Before(_) => Rangef::point(row_y_range.min).expand(DROP_LINE_HEIGHT * 0.5),
         };
