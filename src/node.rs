@@ -5,37 +5,102 @@ use egui::{
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
 
+/// Used to configure the appearance and behavior of a node in the tree.
+///
+/// Implementing this trait is not necessary most of the time. The `NodeBuilder`
+/// implements this trait and can be used for most purposes.
 pub trait NodeConfig<NodeIdType> {
+    /// Returns the id of this node
     fn id(&self) -> &NodeIdType;
+    /// Returns whether or not this node is a directory.
     fn is_dir(&self) -> bool;
-    fn flatten(&self) -> bool;
-    fn default_open(&self) -> bool;
-    fn drop_allowed(&self) -> bool;
-    fn activatable(&self) -> bool;
-    fn node_height(&self) -> Option<f32>;
+    /// Renders the label of this node
+    fn label(&mut self, ui: &mut Ui);
+    /// Whether or not the directory should be flattened into the parent directiron.
+    ///
+    /// A directory that is flattened is not visible in the tree and cannot be navigated to.
+    /// Its children appear like the children of the grand parent directory.
+    ///
+    /// This node will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
+    /// multi selection process.
+    /// This node will still be the target of any [`drag and drop action`](crate::Action) as if it was visible.
+    ///
+    /// Default value is false. Override to customize.
+    fn flatten(&self) -> bool {
+        false
+    }
+    /// Whether or not a directory should be open by default or closed.
+    ///
+    /// Default is true. Override to customize.
+    fn default_open(&self) -> bool {
+        true
+    }
+    /// Whether or not dropping onto this node is allowed.
+    ///
+    /// Default is true for directories and false otherwise. Override to customize.
+    fn drop_allowed(&self) -> bool {
+        self.is_dir()
+    }
+    /// Whether or not this node can be activated.
+    ///
+    /// Default is false for directories and true otherwise. Override to customize.
+    fn activatable(&self) -> bool {
+        !self.is_dir()
+    }
+    /// The height of this node. If `None` the default height of the `TreeViewSettings` is used.
+    ///
+    /// Default is `None`. Override to customize.
+    fn node_height(&self) -> Option<f32> {
+        None
+    }
+    /// Whether or not this node has a custom icon.
+    ///
+    /// Default is false. Override to customize.
+    fn has_custom_icon(&self) -> bool {
+        false
+    }
+    /// If `has_custom_icon` returns true, this method is used to render the custom icon.
+    ///
+    /// Custom icons are disabled by default in the `has_custom_icon` method.
+    /// Default does nothing. Override to customize.
+    #[allow(unused)]
+    fn icon(&mut self, ui: &mut Ui) {}
+    /// Whether or not this node has a custom closer.
+    ///
+    /// Default is false. Override to customize.
+    fn has_custom_closer(&self) -> bool {
+        false
+    }
+    /// If `has_custom_closer` returns true, this method is used to render the custom closer.
+    ///
+    /// Custom closers are disabled by default in the `has_custom_closer` method.
+    /// Default does nothing. Override to customize.
+    #[allow(unused)]
+    fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {}
 
-    fn has_custom_icon(&self) -> bool;
-    fn icon(&mut self, ui: &mut Ui);
-
-    fn has_custom_closer(&self) -> bool;
-    fn closer(&mut self, ui: &mut Ui, closer_state: CloserState);
-
-    fn has_custom_lable(&self) -> bool;
-    fn lable(&mut self, ui: &mut Ui);
-
-    fn has_custom_context_menu(&self) -> bool;
-    fn context_menu(&mut self, ui: &mut Ui);
+    /// Whether or not this node has a context menu.
+    ///
+    /// Default is false. Override to customize.
+    fn has_context_menu(&self) -> bool {
+        false
+    }
+    /// If `has_context_menu` returns true, this method is used to render the context menu.
+    ///
+    /// Context menus are disabled by default in the `has_context_menu` method.
+    /// Default does nothing. Override to customize.
+    #[allow(unused)]
+    fn context_menu(&mut self, ui: &mut Ui) {}
 }
 
 /// A builder to build a node.
 pub struct NodeBuilder<'add_ui, NodeIdType> {
-    pub(crate) id: NodeIdType,
-    pub(crate) is_dir: bool,
-    pub(crate) flatten: bool,
-    pub(crate) default_open: bool,
-    pub(crate) drop_allowed: bool,
-    pub(crate) activatable: bool,
-    pub(crate) node_height: Option<f32>,
+    id: NodeIdType,
+    is_dir: bool,
+    flatten: bool,
+    default_open: bool,
+    drop_allowed: bool,
+    activatable: bool,
+    node_height: Option<f32>,
     #[allow(clippy::type_complexity)]
     icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
     #[allow(clippy::type_complexity)]
@@ -216,17 +281,13 @@ impl<NodeIdType: NodeId> NodeConfig<NodeIdType> for NodeBuilder<'_, NodeIdType> 
         }
     }
 
-    fn has_custom_lable(&self) -> bool {
-        self.label.is_some()
-    }
-
-    fn lable(&mut self, ui: &mut Ui) {
+    fn label(&mut self, ui: &mut Ui) {
         if let Some(label) = &mut self.label {
             (label)(ui);
         }
     }
 
-    fn has_custom_context_menu(&self) -> bool {
+    fn has_context_menu(&self) -> bool {
         self.context_menu.is_some()
     }
 
@@ -375,9 +436,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
             let label = ui
                 .scope(|ui| {
                     ui.spacing_mut().item_spacing = original_item_spacing;
-                    if self.config.has_custom_lable() {
-                        self.config.lable(ui);
-                    }
+                    self.config.label(ui);
                 })
                 .response
                 .rect;
@@ -429,7 +488,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
             });
     }
     pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
-        if self.config.has_custom_context_menu() {
+        if self.config.has_context_menu() {
             let mut was_open = false;
             response.context_menu(|ui| {
                 self.config.context_menu(ui);
@@ -441,10 +500,6 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
         }
     }
 }
-
-// fn default_closer(ui: &mut Ui, closer_state: CloserState) {}
-
-// fn default_label(ui: &mut Ui) {}
 
 /// Paint the arrow icon that indicated if the region is open or not
 pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, is_hovered: bool) {

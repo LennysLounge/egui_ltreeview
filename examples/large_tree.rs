@@ -237,50 +237,12 @@ impl<'a> NodeConfig<Uuid> for DefaultNode<'a> {
         self.is_dir
     }
 
-    fn flatten(&self) -> bool {
-        false
-    }
-
     fn default_open(&self) -> bool {
         true
     }
 
-    fn drop_allowed(&self) -> bool {
-        true
-    }
-
-    fn activatable(&self) -> bool {
-        false
-    }
-
-    fn node_height(&self) -> Option<f32> {
-        None
-    }
-
-    fn has_custom_icon(&self) -> bool {
-        false
-    }
-
-    fn icon(&mut self, _ui: &mut egui::Ui) {}
-
-    fn has_custom_closer(&self) -> bool {
-        false
-    }
-
-    fn closer(&mut self, _ui: &mut egui::Ui, _closer_state: egui_ltreeview::CloserState) {}
-
-    fn has_custom_lable(&self) -> bool {
-        true
-    }
-
-    fn lable(&mut self, ui: &mut egui::Ui) {
+    fn label(&mut self, ui: &mut egui::Ui) {
         ui.add(Label::new(self.name).selectable(false));
         ui.label(self.name);
     }
-
-    fn has_custom_context_menu(&self) -> bool {
-        false
-    }
-
-    fn context_menu(&mut self, _ui: &mut egui::Ui) {}
 }
