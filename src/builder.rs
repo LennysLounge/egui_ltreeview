@@ -256,8 +256,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn node_structually_visible<'builder, 'add_ui>(&mut self, mut node: Node<NodeIdType>) -> bool {
-        let row_rect = Rect::from_min_size(self.cursor, vec2(self.state.size.x, node.node_height))
-            .expand2(vec2(0.0, self.ui.spacing().item_spacing.y * 0.5));
+        let row_rect = Rect::from_min_size(
+            self.cursor,
+            vec2(
+                self.state.size.x,
+                node.node_height + self.ui.spacing().item_spacing.y,
+            ),
+        );
 
         if self.ui.clip_rect().intersects(row_rect) {
             self.node_visible_in_clip_rect(&mut node, row_rect);

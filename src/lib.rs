@@ -528,15 +528,11 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     let response = ui
         .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
             ui.set_min_size(vec2(settings.min_width, settings.min_height));
-            ui.add_space(ui.spacing().item_spacing.y * 0.5);
 
             let mut tree_builder =
                 TreeViewBuilder::new(ui, state, settings, &mut ui_data, &mut input, &mut output);
             build_tree_view(&mut tree_builder);
             tree_builder.allocate_remaining_space();
-
-            // Add negative space because the place will add the item spacing on top of this.
-            ui.add_space(-ui.spacing().item_spacing.y * 0.5);
 
             if settings.fill_space_horizontal {
                 ui.set_min_width(ui.available_width());
