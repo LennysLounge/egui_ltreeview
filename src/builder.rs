@@ -27,6 +27,10 @@ struct IndentState<NodeIdType> {
     anchor: Rangef,
     /// Positions of child nodes for the indent hint.
     positions: Vec<Pos2>,
+    /// How far the hint should be indented.
+    indent: usize,
+    /// If true, this indent hint extends bellow the bottom edge of the clip rect.
+    extends_below_clip_rect: bool,
 }
 
 /// The builder used to construct the tree.
@@ -119,7 +123,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 .indents
                 .pop_if(|indent| indent.source_node == dir_state.id);
             if let Some(indent) = indent {
-                self.draw_indent_hint(indent.anchor, indent.positions, self.indents.len());
+                self.draw_indent_hint(&indent);
                 match self.ui_data.drop_target.as_ref() {
                     Some((target_id, DirPosition::Last)) if target_id == &dir_state.id => {
                         self.draw_drop_marker(indent.anchor, &DirPosition::Last);
@@ -133,42 +137,43 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
     }
 
-    fn draw_indent_hint(&mut self, anchor: Rangef, positions: Vec<Pos2>, level: usize) {
-        let top = pos2(
+    fn draw_indent_hint(&mut self, indent: &IndentState<NodeIdType>) {
+        let top = self.ui.clip_rect().clamp(pos2(
             self.ui.cursor().min.x
                 + self.ui.spacing().item_spacing.x
                 + self.ui.spacing().icon_width * 0.5
-                + level as f32
+                + indent.indent as f32
                     * self
                         .settings
                         .override_indent
                         .unwrap_or(self.ui.spacing().indent),
-            anchor.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
-        );
+            indent.anchor.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
+        ));
+        let bottom = self.ui.clip_rect().clamp(pos2(top.x, self.cursor.y));
 
         match self.settings.indent_hint_style {
             IndentHintStyle::None => return,
             IndentHintStyle::Line => {
-                let bottom = pos2(
-                    top.x,
-                    self.ui.cursor().min.y - self.ui.spacing().item_spacing.y,
-                );
                 self.ui.painter().line_segment(
                     [top, bottom],
                     self.ui.visuals().widgets.noninteractive.bg_stroke,
                 );
             }
             IndentHintStyle::Hook => {
-                let Some(last_child) = positions.last() else {
-                    // this dir doesnt have children so we just return
-                    return;
+                let bottom = if indent.extends_below_clip_rect {
+                    bottom
+                } else {
+                    let Some(last_child) = indent.positions.last() else {
+                        // this dir doesnt have children so we just return
+                        return;
+                    };
+                    self.ui.clip_rect().clamp(pos2(top.x, last_child.y))
                 };
-                let bottom = pos2(top.x, last_child.y);
                 self.ui.painter().line_segment(
                     [top, bottom],
                     self.ui.visuals().widgets.noninteractive.bg_stroke,
                 );
-                for child_pos in positions.iter() {
+                for child_pos in indent.positions.iter() {
                     let p1 = pos2(top.x, child_pos.y);
                     let p2 = *child_pos + vec2(-2.0, 0.0);
                     self.ui
@@ -266,14 +271,28 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         if self.ui.clip_rect().intersects(row_rect) {
             self.node_visible_in_clip_rect(&mut node, row_rect);
+        } else {
+            if self.cursor.y > self.ui.clip_rect().bottom() {
+                if let Some(indent) = self.indents.last_mut() {
+                    indent.extends_below_clip_rect = true;
+                }
+            }
         }
         self.cursor.y += row_rect.height();
         if node.is_dir {
-            self.indents.push(IndentState {
-                source_node: node.id.clone(),
-                anchor: row_rect.y_range(),
-                positions: Vec::new(),
-            });
+            // If the directory is opened below the clip rect its indent hint is never
+            // going to be visible anyways so we dont bother.
+            // Therfore we only add the indent hint if the cursor after the node was added
+            // is still in the clip rect.
+            if self.cursor.y < self.ui.clip_rect().bottom() {
+                self.indents.push(IndentState {
+                    source_node: node.id.clone(),
+                    anchor: row_rect.y_range(),
+                    positions: Vec::new(),
+                    indent: self.indents.len(),
+                    extends_below_clip_rect: false,
+                });
+            }
         }
         node.is_open
     }
