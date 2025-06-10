@@ -698,8 +698,28 @@ pub enum IndentHintStyle {
     /// No indent hint is shown.
     None,
     /// A single vertical line is show for the full height of the directory.
+    /// ```text
+    /// v Foo
+    /// │  Alice
+    /// │  v Bar
+    /// │  │ Bob
+    /// │  │  v Baz
+    /// │  │  │ Clair
+    /// │  │  │ Denis
+    /// │  Emil
+    /// ```
     Line,
     /// A vertical line is show with horizontal hooks to the child nodes of the directory.
+    /// ```text
+    /// v Foo
+    /// ├─ Alice
+    /// ├─ v Bar
+    /// │  ├─ Bob
+    /// │  └─ v Baz
+    /// │     ├─ Clair
+    /// │     └─ Denis
+    /// └─ Emil
+    /// ```
     #[default]
     Hook,
 }

@@ -7,7 +7,7 @@ use crate::{NodeId, RowLayout, TreeViewSettings};
 
 /// Used to configure the appearance and behavior of a node in the tree.
 ///
-/// Implementing this trait is not necessary most of the time. The `NodeBuilder`
+/// Implementing this trait is not necessary most of the time. The [`NodeBuilder`]
 /// implements this trait and can be used for most purposes.
 pub trait NodeConfig<NodeIdType> {
     /// Returns the id of this node
@@ -21,7 +21,25 @@ pub trait NodeConfig<NodeIdType> {
     /// A directory that is flattened is not visible in the tree and cannot be navigated to.
     /// Its children appear like the children of the grand parent directory.
     ///
-    /// This node will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
+    /// For example, this file structure:
+    /// ```text
+    /// Foo
+    /// ├─ Alice
+    /// ├─ Bar
+    /// │  ├─ Bob
+    /// │  └─ Clair
+    /// └─ Denis
+    /// ```
+    /// looks like this when the `Bar` directory is flattened:
+    /// ```text
+    /// Foo
+    /// ├─ Alice
+    /// ├─ Bob
+    /// ├─ Clair
+    /// └─ Denis
+    /// ```
+    ///
+    /// This node (`Bar` in the example) will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
     /// multi selection process.
     /// This node will still be the target of any [`drag and drop action`](crate::Action) as if it was visible.
     ///
@@ -47,7 +65,8 @@ pub trait NodeConfig<NodeIdType> {
     fn activatable(&self) -> bool {
         !self.is_dir()
     }
-    /// The height of this node. If `None` the default height of the `TreeViewSettings` is used.
+    /// The height of this node. If `None` the default height of the
+    /// [`TreeViewSettings`](`TreeViewSettings::default_node_height`) is used.
     ///
     /// Default is `None`. Override to customize.
     fn node_height(&self) -> Option<f32> {
@@ -59,9 +78,8 @@ pub trait NodeConfig<NodeIdType> {
     fn has_custom_icon(&self) -> bool {
         false
     }
-    /// If `has_custom_icon` returns true, this method is used to render the custom icon.
+    /// If [`has_custom_icon`](`NodeConfig::has_custom_icon`) returns true, this method is used to render the custom icon.
     ///
-    /// Custom icons are disabled by default in the `has_custom_icon` method.
     /// Default does nothing. Override to customize.
     #[allow(unused)]
     fn icon(&mut self, ui: &mut Ui) {}
@@ -71,9 +89,8 @@ pub trait NodeConfig<NodeIdType> {
     fn has_custom_closer(&self) -> bool {
         false
     }
-    /// If `has_custom_closer` returns true, this method is used to render the custom closer.
+    /// If [`has_custom_closer`](`NodeConfig::has_custom_closer`) returns true, this method is used to render the custom closer.
     ///
-    /// Custom closers are disabled by default in the `has_custom_closer` method.
     /// Default does nothing. Override to customize.
     #[allow(unused)]
     fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {}
@@ -84,9 +101,8 @@ pub trait NodeConfig<NodeIdType> {
     fn has_context_menu(&self) -> bool {
         false
     }
-    /// If `has_context_menu` returns true, this method is used to render the context menu.
+    /// If [`has_context_menu`](`NodeConfig::has_context_menu`) returns true, this method is used to render the context menu.
     ///
-    /// Context menus are disabled by default in the `has_context_menu` method.
     /// Default does nothing. Override to customize.
     #[allow(unused)]
     fn context_menu(&mut self, ui: &mut Ui) {}
