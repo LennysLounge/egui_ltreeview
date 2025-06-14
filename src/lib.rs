@@ -168,7 +168,7 @@ mod state;
 
 use egui::{
     self, emath, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
-    Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, Vec2,
+    Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
 };
 use std::hash::Hash;
 
@@ -242,46 +242,6 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// Set the row layout for this tree.
     pub fn row_layout(mut self, layout: RowLayout) -> Self {
         self.settings.row_layout = layout;
-        self
-    }
-
-    /// Controls whether the tree should fill all available horizontal space.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no
-    /// effect and the tree will always fill horizontal space.
-    ///
-    /// Default is `true`.
-    pub fn fill_space_horizontal(mut self, fill_space_horizontal: bool) -> Self {
-        self.settings.fill_space_horizontal = fill_space_horizontal;
-        self
-    }
-
-    /// Controls whether the tree should fill all available vertical space.
-    ///
-    /// If the tree is part of a vertically justified layout, this property has no
-    /// effect and the tree will always fill vertical space.
-    ///
-    /// Default is `false`.
-    pub fn fill_space_vertical(mut self, fill_space_vertical: bool) -> Self {
-        self.settings.fill_space_vertical = fill_space_vertical;
-        self
-    }
-
-    /// Set the maximum width the tree can have.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no
-    /// effect and the tree will always fill the available horizontal space.
-    pub fn max_width(mut self, width: f32) -> Self {
-        self.settings.max_width = width;
-        self
-    }
-
-    /// Set the maximum height the tree can have.
-    ///
-    /// If the tree is part of a vertical justified layout, this property has no
-    /// effect and the tree will always fill the available vertical space.
-    pub fn max_height(mut self, height: f32) -> Self {
-        self.settings.max_height = height;
         self
     }
 
@@ -388,7 +348,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             state.prune_selection_to_single_id();
         }
 
-        let (ui_data, response) = draw_foreground(
+        let (ui_data, tree_view_rect) = draw_foreground(
             ui,
             id,
             &settings,
@@ -397,7 +357,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             &mut fallback_context_menu,
         );
         // Remember the size of the tree for next frame.
-        state.size = response.rect.size();
+        //state.size = response.rect.size();
 
         draw_background(ui, &ui_data);
 
@@ -479,7 +439,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             state.reset_dragged();
         }
 
-        (ui_data.interaction, actions)
+        (ui_data.interaction.with_new_rect(tree_view_rect), actions)
     }
 }
 
@@ -490,29 +450,16 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state: &mut TreeViewState<NodeIdType>,
     build_tree_view: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
     fall_back_context_menu: &mut Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>)>>,
-) -> (UiData<NodeIdType>, Response) {
+) -> (UiData<NodeIdType>, Rect) {
     // Calculate the desired size of the tree view widget.
-    let size = vec2(
-        if settings.fill_space_horizontal || ui.layout().horizontal_justify() {
-            ui.available_width()
-        } else {
-            state.size.x.at_most(settings.max_width)
-        }
-        .at_least(settings.min_width),
-        if settings.fill_space_vertical || ui.layout().vertical_justify() {
-            ui.available_height()
-        } else {
-            state.size.y.at_most(settings.max_height)
-        }
-        .at_least(settings.min_height),
+    let interaction_rect = Rect::from_min_size(
+        ui.cursor().min,
+        ui.available_size()
+            .at_least(vec2(settings.min_width, settings.min_height))
+            .at_least(vec2(state.min_width, 0.0)),
     );
 
-    let interaction = interact_no_expansion(
-        ui,
-        Rect::from_min_size(ui.cursor().min, size),
-        id,
-        Sense::click_and_drag(),
-    );
+    let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
     let mut output = Output::None;
     let mut input = get_input::<NodeIdType>(ui, &interaction, id);
     let mut ui_data = UiData {
@@ -523,25 +470,30 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
         activate: None,
+        space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
     };
     // Run the build tree view closure
-    let response = ui
-        .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
-            ui.set_min_size(vec2(settings.min_width, settings.min_height));
 
-            let mut tree_builder =
-                TreeViewBuilder::new(ui, state, settings, &mut ui_data, &mut input, &mut output);
-            build_tree_view(&mut tree_builder);
-            tree_builder.allocate_remaining_space();
+    let mut builder_ui = ui.new_child(
+        UiBuilder::new()
+            .layout(Layout::top_down(egui::Align::Min))
+            .max_rect(interaction_rect),
+    );
+    let mut tree_builder = TreeViewBuilder::new(
+        &mut builder_ui,
+        state,
+        settings,
+        &mut ui_data,
+        &mut input,
+        &mut output,
+    );
+    build_tree_view(&mut tree_builder);
 
-            if settings.fill_space_horizontal {
-                ui.set_min_width(ui.available_width());
-            }
-            if settings.fill_space_vertical {
-                ui.set_min_height(ui.available_height());
-            }
-        })
-        .response;
+    let tree_view_rect = ui_data.space_used.union(interaction_rect);
+    ui.allocate_rect(tree_view_rect, Sense::hover());
+
+    // Remember width of the tree view for next frame
+    state.min_width = state.min_width.at_least(ui_data.space_used.width());
 
     // Do context menu
     if !ui_data.context_menu_was_open {
@@ -597,7 +549,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
 
-    (ui_data, response)
+    (ui_data, tree_view_rect)
 }
 
 fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>) {
@@ -640,28 +592,10 @@ pub struct TreeViewSettings {
     pub indent_hint_style: IndentHintStyle,
     /// The row layout for this tree.
     pub row_layout: RowLayout,
-    /// The maximum width the tree can have.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill the available horizontal space.
-    pub max_width: f32,
-    /// The maximum height the tree can have.
-    ///
-    /// If the tree is part of a vertical justified layout, this property has no effect and the tree will always fill the available vertical space.
-    pub max_height: f32,
     /// The minimum width the tree can have.
     pub min_width: f32,
     /// The minimum height the tree can have.
     pub min_height: f32,
-    /// Whether the tree should fill all available horizontal space.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill horizontal space.
-    /// Default is true.
-    pub fill_space_horizontal: bool,
-    /// Whether the tree should fill all available vertical space.
-    ///
-    /// If the tree is part of a vertically justified layout, this property has no effect and the tree will always fill vertical space.
-    /// Default is false.
-    pub fill_space_vertical: bool,
     /// If the tree view is allowed to select multiple nodes at once.
     /// Default is true.
     pub allow_multi_select: bool,
@@ -679,12 +613,8 @@ impl Default for TreeViewSettings {
             override_indent: None,
             indent_hint_style: Default::default(),
             row_layout: Default::default(),
-            max_width: f32::INFINITY,
-            max_height: f32::INFINITY,
             min_width: 0.0,
             min_height: 0.0,
-            fill_space_horizontal: true,
-            fill_space_vertical: false,
             allow_multi_select: true,
             allow_drag_and_drop: true,
             default_node_height: None,
@@ -862,6 +792,7 @@ struct UiData<NodeIdType> {
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     activate: Option<Vec<NodeIdType>>,
+    space_used: Rect,
 }
 
 /// When you ast a rectangle if it contains a point it does so inclusive the upper bound.

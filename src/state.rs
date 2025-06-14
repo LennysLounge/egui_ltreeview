@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use egui::{Id, Ui, Vec2};
+use egui::{Id, Ui};
 
 use crate::NodeId;
 
@@ -25,8 +25,8 @@ pub struct TreeViewState<NodeIdType> {
     selection_cursor: Option<NodeIdType>,
     /// Id of the node that was right clicked.
     pub(crate) secondary_selection: Option<NodeIdType>,
-    /// The rectangle the tree view occupied.
-    pub(crate) size: Vec2,
+    /// The minimum width of the tree view.
+    pub(crate) min_width: f32,
     /// Open states of the dirs in this tree.
     node_states: HashMap<NodeIdType, bool>,
     /// Wether or not the context menu was open last frame.
@@ -45,7 +45,7 @@ impl<NodeIdType> Default for TreeViewState<NodeIdType> {
             selection_cursor: None,
             dragged: Default::default(),
             secondary_selection: Default::default(),
-            size: Vec2::default(),
+            min_width: 0.0,
             node_states: HashMap::new(),
             context_menu_was_open: false,
             last_clicked_node: None,

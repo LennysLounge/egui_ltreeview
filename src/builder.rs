@@ -1,6 +1,4 @@
-use egui::{
-    layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Sense, Shape, Ui, UiBuilder, WidgetText,
-};
+use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, UiBuilder, WidgetText};
 
 use crate::{
     node::NodeBuilder, rect_contains_visually, DirPosition, DragState, DropQuarter,
@@ -46,7 +44,6 @@ pub struct TreeViewBuilder<'ui, NodeIdType> {
     indents: Vec<IndentState<NodeIdType>>,
     input: &'ui mut Input<NodeIdType>,
     output: &'ui mut Output<NodeIdType>,
-    cursor: Pos2,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -59,7 +56,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         output: &'ui mut Output<NodeIdType>,
     ) -> Self {
         Self {
-            cursor: ui.cursor().min,
             ui_data,
             state,
             settings,
@@ -149,7 +145,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         .unwrap_or(self.ui.spacing().indent),
             indent.anchor.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
         ));
-        let bottom = self.ui.clip_rect().clamp(pos2(top.x, self.cursor.y));
+        let bottom = self
+            .ui
+            .clip_rect()
+            .clamp(pos2(top.x, self.ui_data.space_used.bottom()));
 
         match self.settings.indent_hint_style {
             IndentHintStyle::None => return,
@@ -189,7 +188,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let x_range = self.ui.available_rect_before_wrap().x_range();
         let y_range = match dir_position {
             DirPosition::First => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
-            DirPosition::Last => Rangef::new(row_y_range.min, self.cursor.y),
+            DirPosition::Last => Rangef::new(row_y_range.min, self.ui_data.space_used.bottom()),
             DirPosition::After(_) => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
             DirPosition::Before(_) => Rangef::point(row_y_range.min).expand(DROP_LINE_HEIGHT * 0.5),
         };
@@ -262,29 +261,32 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
     fn node_structually_visible<'builder, 'add_ui>(&mut self, mut node: Node<NodeIdType>) -> bool {
         let row_rect = Rect::from_min_size(
-            self.cursor,
+            self.ui_data.space_used.left_bottom(),
             vec2(
-                self.state.size.x,
+                self.ui_data.interaction.rect.width(),
                 node.node_height + self.ui.spacing().item_spacing.y,
             ),
         );
 
         if self.ui.clip_rect().intersects(row_rect) {
-            self.node_visible_in_clip_rect(&mut node, row_rect);
+            let node_width = self.node_visible_in_clip_rect(&mut node, row_rect);
+            if node_width > self.ui_data.space_used.width() {
+                self.ui_data.space_used.set_width(node_width);
+            }
         } else {
-            if self.cursor.y > self.ui.clip_rect().bottom() {
+            if self.ui_data.space_used.bottom() > self.ui.clip_rect().bottom() {
                 if let Some(indent) = self.indents.last_mut() {
                     indent.extends_below_clip_rect = true;
                 }
             }
         }
-        self.cursor.y += row_rect.height();
+        *self.ui_data.space_used.bottom_mut() += row_rect.height();
         if node.is_dir {
             // If the directory is opened below the clip rect its indent hint is never
             // going to be visible anyways so we dont bother.
             // Therfore we only add the indent hint if the cursor after the node was added
             // is still in the clip rect.
-            if self.cursor.y < self.ui.clip_rect().bottom() {
+            if self.ui_data.space_used.bottom() < self.ui.clip_rect().bottom() {
                 self.indents.push(IndentState {
                     source_node: node.id.clone(),
                     anchor: row_rect.y_range(),
@@ -297,7 +299,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         node.is_open
     }
 
-    fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, outer_rect: Rect) {
+    fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, outer_rect: Rect) -> f32 {
         // Draw background
         if self.state.is_selected(&node.id) {
             let (shape_idx, rect) = self
@@ -400,6 +402,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 .positions
                 .push(closer.or(icon).unwrap_or(label).left_center());
         }
+
+        let node_width = label.right() - outer_rect.left();
+        node_width
     }
 
     fn do_input_output(&mut self, node: &Node<NodeIdType>, row_rect: &Rect, closer: Option<&Rect>) {
@@ -848,15 +853,5 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             return false;
         };
         dir_state.branch_dragged
-    }
-
-    pub(crate) fn allocate_remaining_space(&mut self) {
-        self.ui.allocate_rect(
-            Rect::from_min_max(
-                self.ui.cursor().min,
-                pos2(self.ui.cursor().max.x, self.cursor.y),
-            ),
-            Sense::hover(),
-        );
     }
 }
