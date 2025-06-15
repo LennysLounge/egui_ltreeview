@@ -1,6 +1,10 @@
+use std::{
+    time::{Duration, Instant},
+    u64,
+};
+
 use egui::{Label, ThemePreference};
 use egui_ltreeview::{NodeConfig, TreeView, TreeViewBuilder, TreeViewState};
-use performance_measure::performance_measure::Measurer;
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -25,7 +29,11 @@ fn main() -> Result<(), eframe::Error> {
 struct MyApp {
     tree: Node,
     state: TreeViewState<Uuid>,
-    measurer: Measurer,
+    min: Duration,
+    max: Duration,
+    avg: Duration,
+    times: Vec<Duration>,
+    index: usize,
 }
 impl MyApp {
     fn new() -> Self {
@@ -35,7 +43,11 @@ impl MyApp {
         MyApp {
             tree,
             state,
-            measurer: Measurer::new(None),
+            min: Duration::from_secs(u64::MAX),
+            max: Duration::ZERO,
+            avg: Duration::ZERO,
+            times: Vec::with_capacity(1000),
+            index: 0,
         }
     }
 }
@@ -54,7 +66,7 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
-                self.measurer.start_measure();
+                let start = Instant::now();
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                     ui,
                     &mut self.state,
@@ -62,34 +74,39 @@ impl eframe::App for MyApp {
                         build_node_once(&self.tree, builder);
                     },
                 );
-                //build_node_label(&self.tree, ui);
-
-                self.measurer.stop_measure();
-                // println!(
-                //     "avg: {:?}\tlow: {:?}\thigh: {:?}",
-                //     self.measurer.get_average(),
-                //     self.measurer.get_min(),
-                //     self.measurer.get_max()
-                // );
+                let duration = start.elapsed();
+                if self.times.len() < self.times.capacity() {
+                    self.times.push(duration);
+                } else {
+                    self.times.insert(self.index, duration);
+                    self.index = (self.index + 1) % self.times.len();
+                }
+                if duration > self.max {
+                    self.max = duration
+                }
+                if duration < self.min {
+                    self.min = duration;
+                }
+                self.avg = self.times.iter().sum::<Duration>() / self.times.len() as u32;
             })
         });
         egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
             let dt = ui.input(|i| i.stable_dt);
             ui.label(format!(
-                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:?}ms, min: {:?}ms, max: {:?}ms",
+                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:.3}ms, min: {:.3}ms, max: {:.3}ms",
                 dt * 1000.0,
                 (1.0 / dt).floor() as i32,
-                self.measurer.get_average().as_millis(),
-                self.measurer.get_min().as_millis(),
-                self.measurer.get_max().as_millis()
+                self.avg.as_secs_f64() * 1000.0,
+                self.min.as_secs_f64() * 1000.0,
+                self.max.as_secs_f64() * 1000.0
             ));
         });
         if ctx.input(|i| i.viewport().close_requested()) {
             println!(
-                "avg: {:?}\tlow: {:?}\thigh: {:?}",
-                self.measurer.get_average(),
-                self.measurer.get_min(),
-                self.measurer.get_max()
+                "avg: {:.3}ms\tlow: {:.3}ms\thigh: {:.3}ms",
+                self.avg.as_secs_f64() * 1000.0,
+                self.min.as_secs_f64() * 1000.0,
+                self.max.as_secs_f64() * 1000.0
             );
         }
     }
