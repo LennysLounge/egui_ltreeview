@@ -1,21 +1,122 @@
 use egui::{
-    emath, epaint, remap, vec2, CursorIcon, Id, Label, LayerId, Layout, Rect, Response, Sense,
-    Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
+    emath, remap, vec2, CursorIcon, Id, Label, Layout, Rect, Response, Shape, Stroke, Ui,
+    UiBuilder, Vec2, WidgetText,
 };
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
 
+/// Used to configure the appearance and behavior of a node in the tree.
+///
+/// Implementing this trait is not necessary most of the time. The [`NodeBuilder`]
+/// implements this trait and can be used for most purposes.
+pub trait NodeConfig<NodeIdType> {
+    /// Returns the id of this node
+    fn id(&self) -> &NodeIdType;
+    /// Returns whether or not this node is a directory.
+    fn is_dir(&self) -> bool;
+    /// Renders the label of this node
+    fn label(&mut self, ui: &mut Ui);
+    /// Whether or not the directory should be flattened into the parent directiron.
+    ///
+    /// A directory that is flattened is not visible in the tree and cannot be navigated to.
+    /// Its children appear like the children of the grand parent directory.
+    ///
+    /// For example, this file structure:
+    /// ```text
+    /// Foo
+    /// ├─ Alice
+    /// ├─ Bar
+    /// │  ├─ Bob
+    /// │  └─ Clair
+    /// └─ Denis
+    /// ```
+    /// looks like this when the `Bar` directory is flattened:
+    /// ```text
+    /// Foo
+    /// ├─ Alice
+    /// ├─ Bob
+    /// ├─ Clair
+    /// └─ Denis
+    /// ```
+    ///
+    /// This node (`Bar` in the example) will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
+    /// multi selection process.
+    /// This node will still be the target of any [`drag and drop action`](crate::Action) as if it was visible.
+    ///
+    /// Default value is false. Override to customize.
+    fn flatten(&self) -> bool {
+        false
+    }
+    /// Whether or not a directory should be open by default or closed.
+    ///
+    /// Default is true. Override to customize.
+    fn default_open(&self) -> bool {
+        true
+    }
+    /// Whether or not dropping onto this node is allowed.
+    ///
+    /// Default is true for directories and false otherwise. Override to customize.
+    fn drop_allowed(&self) -> bool {
+        self.is_dir()
+    }
+    /// Whether or not this node can be activated.
+    ///
+    /// Default is false for directories and true otherwise. Override to customize.
+    fn activatable(&self) -> bool {
+        !self.is_dir()
+    }
+    /// The height of this node. If `None` the default height of the
+    /// [`TreeViewSettings`](`TreeViewSettings::default_node_height`) is used.
+    ///
+    /// Default is `None`. Override to customize.
+    fn node_height(&self) -> Option<f32> {
+        None
+    }
+    /// Whether or not this node has a custom icon.
+    ///
+    /// Default is false. Override to customize.
+    fn has_custom_icon(&self) -> bool {
+        false
+    }
+    /// If [`has_custom_icon`](`NodeConfig::has_custom_icon`) returns true, this method is used to render the custom icon.
+    ///
+    /// Default does nothing. Override to customize.
+    #[allow(unused)]
+    fn icon(&mut self, ui: &mut Ui) {}
+    /// Whether or not this node has a custom closer.
+    ///
+    /// Default is false. Override to customize.
+    fn has_custom_closer(&self) -> bool {
+        false
+    }
+    /// If [`has_custom_closer`](`NodeConfig::has_custom_closer`) returns true, this method is used to render the custom closer.
+    ///
+    /// Default does nothing. Override to customize.
+    #[allow(unused)]
+    fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {}
+
+    /// Whether or not this node has a context menu.
+    ///
+    /// Default is false. Override to customize.
+    fn has_context_menu(&self) -> bool {
+        false
+    }
+    /// If [`has_context_menu`](`NodeConfig::has_context_menu`) returns true, this method is used to render the context menu.
+    ///
+    /// Default does nothing. Override to customize.
+    #[allow(unused)]
+    fn context_menu(&mut self, ui: &mut Ui) {}
+}
+
 /// A builder to build a node.
 pub struct NodeBuilder<'add_ui, NodeIdType> {
-    pub(crate) id: NodeIdType,
-    pub(crate) is_dir: bool,
-    pub(crate) flatten: bool,
-    pub(crate) is_open: bool,
-    pub(crate) default_open: bool,
-    pub(crate) drop_allowed: bool,
-    pub(crate) activatable: bool,
-    pub(crate) node_height: Option<f32>,
-    indent: usize,
+    id: NodeIdType,
+    is_dir: bool,
+    flatten: bool,
+    default_open: bool,
+    drop_allowed: bool,
+    activatable: bool,
+    node_height: Option<f32>,
     #[allow(clippy::type_complexity)]
     icon: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
     #[allow(clippy::type_complexity)]
@@ -39,9 +140,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             closer: None,
             label: None,
             context_menu: None,
-            is_open: false,
             default_open: true,
-            indent: 0,
         }
     }
 
@@ -58,9 +157,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             closer: None,
             label: None,
             context_menu: None,
-            is_open: false,
             default_open: true,
-            indent: 0,
         }
     }
 
@@ -150,185 +247,234 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         self.context_menu = Some(Box::new(add_context_menu));
         self
     }
-
-    pub(crate) fn set_is_open(&mut self, open: bool) {
-        self.is_open = open;
+}
+impl<NodeIdType: NodeId> NodeConfig<NodeIdType> for NodeBuilder<'_, NodeIdType> {
+    fn id(&self) -> &NodeIdType {
+        &self.id
     }
 
-    pub(crate) fn set_indent(&mut self, indent: usize) {
-        self.indent = indent;
+    fn is_dir(&self) -> bool {
+        self.is_dir
     }
 
-    pub(crate) fn show_node(
+    fn flatten(&self) -> bool {
+        self.flatten
+    }
+
+    fn default_open(&self) -> bool {
+        self.default_open
+    }
+
+    fn drop_allowed(&self) -> bool {
+        self.drop_allowed
+    }
+
+    fn activatable(&self) -> bool {
+        self.activatable
+    }
+
+    fn node_height(&self) -> Option<f32> {
+        self.node_height
+    }
+
+    fn has_custom_icon(&self) -> bool {
+        self.icon.is_some()
+    }
+
+    fn icon(&mut self, ui: &mut Ui) {
+        if let Some(icon) = &mut self.icon {
+            (icon)(ui);
+        }
+    }
+
+    fn has_custom_closer(&self) -> bool {
+        self.closer.is_some()
+    }
+
+    fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {
+        if let Some(closer) = &mut self.closer {
+            (closer)(ui, closer_state);
+        }
+    }
+
+    fn label(&mut self, ui: &mut Ui) {
+        if let Some(label) = &mut self.label {
+            (label)(ui);
+        }
+    }
+
+    fn has_context_menu(&self) -> bool {
+        self.context_menu.is_some()
+    }
+
+    fn context_menu(&mut self, ui: &mut Ui) {
+        if let Some(context_menu) = &mut self.context_menu {
+            (context_menu)(ui);
+        }
+    }
+}
+
+pub(crate) struct Node<'config, NodeIdType> {
+    pub id: NodeIdType,
+    pub is_dir: bool,
+    pub is_open: bool,
+    pub drop_allowed: bool,
+    pub activatable: bool,
+    pub node_height: f32,
+    pub indent: usize,
+    config: &'config mut dyn NodeConfig<NodeIdType>,
+}
+impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
+    pub fn from_config(
+        is_open: bool,
+        default_node_height: f32,
+        indent: usize,
+        config: &'config mut dyn NodeConfig<NodeIdType>,
+    ) -> Self {
+        Self {
+            id: config.id().clone(),
+            is_dir: config.is_dir(),
+            is_open,
+            drop_allowed: config.drop_allowed(),
+            activatable: config.activatable(),
+            node_height: config.node_height().unwrap_or(default_node_height),
+            indent,
+            config,
+        }
+    }
+
+    pub fn show_node(
         &mut self,
         ui: &mut Ui,
         interaction: &Response,
         settings: &TreeViewSettings,
-    ) -> (Rect, Option<Rect>, Option<Rect>, Rect) {
+        row_rect: Rect,
+        selected: bool,
+        has_focus: bool,
+    ) -> (Option<Rect>, Option<Rect>, Rect) {
+        let mut ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(row_rect)
+                .layout(Layout::left_to_right(egui::Align::Center)),
+        );
+
+        // Set the fg stroke colors here so that the ui added by the user
+        // has the correct colors when selected or focused.
+        let fg_stroke = if selected && has_focus {
+            ui.visuals().selection.stroke
+        } else if selected {
+            ui.visuals().widgets.inactive.fg_stroke
+        } else {
+            ui.visuals().widgets.noninteractive.fg_stroke
+        };
+        ui.visuals_mut().widgets.noninteractive.fg_stroke = fg_stroke;
+        ui.visuals_mut().widgets.inactive.fg_stroke = fg_stroke;
+
+        // The layouting in the row has to be pretty tight so we tunr of the item spacing here.
+        let original_item_spacing = ui.spacing().item_spacing;
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+
         let (reserve_closer, draw_closer, reserve_icon, draw_icon) = match settings.row_layout {
             RowLayout::Compact => (self.is_dir, self.is_dir, false, false),
             RowLayout::CompactAlignedLabels => (
                 self.is_dir,
                 self.is_dir,
                 !self.is_dir,
-                !self.is_dir && self.icon.is_some(),
+                !self.is_dir && self.config.has_custom_icon(),
             ),
-            RowLayout::AlignedIcons => {
-                (true, self.is_dir, self.icon.is_some(), self.icon.is_some())
+            RowLayout::AlignedIcons => (
+                true,
+                self.is_dir,
+                self.config.has_custom_icon(),
+                self.config.has_custom_icon(),
+            ),
+            RowLayout::AlignedIconsAndLabels => {
+                (true, self.is_dir, true, self.config.has_custom_icon())
             }
-            RowLayout::AlignedIconsAndLabels => (true, self.is_dir, true, self.icon.is_some()),
         };
 
-        let row_rect = Rect::from_min_size(
-            ui.cursor().min,
-            vec2(
-                ui.available_width(),
-                self.node_height
-                    .expect("Node height should have been set by now"),
-            ),
-        );
-        let mut row_ui = ui.new_child(
-            UiBuilder::new()
-                .max_rect(row_rect)
-                .layout(Layout::left_to_right(egui::Align::Center)),
-        );
+        ui.set_height(self.node_height);
+        ui.add_space(original_item_spacing.x);
 
-        let (closer, icon, label) = (|ui: &mut Ui| {
-            ui.set_height(
-                self.node_height
-                    .expect("Node height should have been set by now"),
-            );
-            // The layouting in the row has to be pretty tight so we tunr of the item spacing here.
-            let original_item_spacing = ui.spacing().item_spacing;
-            ui.spacing_mut().item_spacing = Vec2::ZERO;
+        // Add a little space so the closer/icon/label doesnt touch the left side
+        // and add the indentation space.
+        ui.add_space(ui.spacing().item_spacing.x);
+        ui.add_space(self.indent as f32 * settings.override_indent.unwrap_or(ui.spacing().indent));
 
-            ui.add_space(original_item_spacing.x);
+        // Draw the closer
+        let closer = draw_closer.then(|| {
+            let (small_rect, big_rect) = ui
+                .spacing()
+                .icon_rectangles(ui.available_rect_before_wrap());
 
-            // Add a little space so the closer/icon/label doesnt touch the left side
-            // and add the indentation space.
-            ui.add_space(ui.spacing().item_spacing.x);
-            ui.add_space(
-                self.indent as f32 * settings.override_indent.unwrap_or(ui.spacing().indent),
-            );
-
-            // Draw the closer
-            let closer = draw_closer.then(|| {
-                let (small_rect, big_rect) = ui
-                    .spacing()
-                    .icon_rectangles(ui.available_rect_before_wrap());
-
-                let res = ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
-                    let is_hovered = interaction
-                        .hover_pos()
-                        .is_some_and(|pos| ui.max_rect().contains(pos));
-                    if is_hovered {
-                        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-                    }
-                    if let Some(add_closer) = self.closer.as_mut() {
-                        (add_closer)(
-                            ui,
-                            CloserState {
-                                is_open: self.is_open,
-                                is_hovered,
-                            },
-                        );
-                    } else {
-                        let icon_id = Id::new(&self.id).with("tree view closer icon");
-                        let openness = ui.ctx().animate_bool(icon_id, self.is_open);
-                        paint_default_icon(ui, openness, &small_rect, is_hovered);
-                    }
-                    ui.allocate_space(ui.available_size_before_wrap());
-                });
-                res.response.rect
+            let res = ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
+                let is_hovered = interaction
+                    .hover_pos()
+                    .is_some_and(|pos| ui.max_rect().contains(pos));
+                if is_hovered {
+                    ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+                }
+                if self.config.has_custom_closer() {
+                    self.config.closer(
+                        ui,
+                        CloserState {
+                            is_open: self.is_open,
+                            is_hovered,
+                        },
+                    );
+                } else {
+                    let icon_id = Id::new(&self.id).with("tree view closer icon");
+                    let openness = ui.ctx().animate_bool(icon_id, self.is_open);
+                    paint_default_icon(ui, openness, &small_rect, is_hovered);
+                }
+                ui.allocate_space(ui.available_size_before_wrap());
             });
-            if closer.is_none() && reserve_closer {
-                ui.add_space(ui.spacing().icon_width);
-            }
+            res.response.rect
+        });
+        if closer.is_none() && reserve_closer {
+            ui.add_space(ui.spacing().icon_width);
+        }
 
-            // Draw icon
-            let icon = draw_icon
-                .then(|| {
-                    self.icon.as_mut().map(|add_icon| {
-                        let (_, big_rect) = ui
-                            .spacing()
-                            .icon_rectangles(ui.available_rect_before_wrap());
-                        ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
-                            ui.set_min_size(big_rect.size());
-                            add_icon(ui);
-                        })
-                        .response
-                        .rect
-                    })
-                })
-                .flatten();
-            if icon.is_none() && reserve_icon {
-                ui.add_space(ui.spacing().icon_width);
-            }
-
-            ui.add_space(2.0);
-            // Draw label
-            let label = ui
-                .scope(|ui| {
-                    ui.spacing_mut().item_spacing = original_item_spacing;
-                    if let Some(add_label) = self.label.as_mut() {
-                        add_label(ui);
-                    }
+        // Draw icon
+        let icon = if draw_icon && self.config.has_custom_icon() {
+            let (_, big_rect) = ui
+                .spacing()
+                .icon_rectangles(ui.available_rect_before_wrap());
+            Some(
+                ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
+                    ui.set_min_size(big_rect.size());
+                    self.config.icon(ui);
                 })
                 .response
-                .rect;
+                .rect,
+            )
+        } else {
+            None
+        };
+        if icon.is_none() && reserve_icon {
+            ui.add_space(ui.spacing().icon_width);
+        }
 
-            ui.add_space(original_item_spacing.x);
+        ui.add_space(2.0);
+        // Draw label
+        let label = ui
+            .scope(|ui| {
+                ui.spacing_mut().item_spacing = original_item_spacing;
+                self.config.label(ui);
+            })
+            .response
+            .rect;
 
-            (closer, icon, label)
-        })(&mut row_ui);
+        ui.add_space(original_item_spacing.x);
 
-        // Allocate exactly as much as was requested.
-        // If the node height is to small this will cause the row to overflow its bounds.
-        // This is correct to keep the node position correct even if it is not rendered.
-        ui.allocate_rect(row_rect, Sense::hover());
-
-        let mut row = row_ui
-            .min_rect()
-            .expand2(vec2(0.0, ui.spacing().item_spacing.y * 0.5));
-        row.set_width(ui.available_width());
-
-        (row, closer, icon, label)
-    }
-
-    /// Draw the content as a drag overlay if it is beeing dragged.
-    pub(crate) fn show_node_dragged(
-        &mut self,
-        ui: &mut Ui,
-        interaction: &Response,
-        settings: &TreeViewSettings,
-        drag_layer: LayerId,
-        target_rect: Rect,
-    ) {
-        ui.new_child(UiBuilder::new().max_rect(target_rect).layout(*ui.layout()))
-            .scope_builder(UiBuilder::new().layer_id(drag_layer), |ui| {
-                let background_position = ui.painter().add(Shape::Noop);
-
-                let (row, _, _, _) = self.show_node(ui, interaction, settings);
-
-                ui.painter().set(
-                    background_position,
-                    epaint::RectShape::new(
-                        row,
-                        ui.visuals().widgets.active.corner_radius,
-                        ui.visuals().selection.bg_fill.linear_multiply(0.4),
-                        Stroke::NONE,
-                        egui::StrokeKind::Inside,
-                    ),
-                );
-                row
-            });
+        (closer, icon, label)
     }
 
     pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
-        if let Some(context_menu) = self.context_menu.as_mut() {
+        if self.config.has_context_menu() {
             let mut was_open = false;
             response.context_menu(|ui| {
-                context_menu(ui);
+                self.config.context_menu(ui);
                 was_open = true;
             });
             was_open

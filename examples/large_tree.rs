@@ -1,6 +1,10 @@
-use egui::ThemePreference;
-use egui_ltreeview::{NodeBuilder, TreeView, TreeViewBuilder, TreeViewState};
-use performance_measure::performance_measure::Measurer;
+use std::{
+    time::{Duration, Instant},
+    u64,
+};
+
+use egui::{Label, ThemePreference};
+use egui_ltreeview::{NodeConfig, TreeView, TreeViewBuilder, TreeViewState};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -25,15 +29,36 @@ fn main() -> Result<(), eframe::Error> {
 struct MyApp {
     tree: Node,
     state: TreeViewState<Uuid>,
-    measurer: Measurer,
+    min: Duration,
+    max: Duration,
+    avg: Duration,
+    times: Vec<Duration>,
+    index: usize,
 }
 impl MyApp {
     fn new() -> Self {
+        let tree = build_tree(200_000, 11);
+        let mut state = TreeViewState::default();
+        init_state(&mut state, &tree);
         MyApp {
-            tree: build_tree(200_000, 11),
-            state: TreeViewState::default(),
-            measurer: Measurer::new(None),
+            tree,
+            state,
+            min: Duration::from_secs(u64::MAX),
+            max: Duration::ZERO,
+            avg: Duration::ZERO,
+            times: Vec::with_capacity(1000),
+            index: 0,
         }
+    }
+}
+
+fn init_state(state: &mut TreeViewState<Uuid>, node: &Node) {
+    let Node::Directory { id, children, .. } = node else {
+        return;
+    };
+    state.set_openness(*id, true);
+    for child in children {
+        init_state(state, child);
     }
 }
 
@@ -41,7 +66,7 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
-                self.measurer.start_measure();
+                let start = Instant::now();
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                     ui,
                     &mut self.state,
@@ -49,34 +74,39 @@ impl eframe::App for MyApp {
                         build_node_once(&self.tree, builder);
                     },
                 );
-                //build_node_label(&self.tree, ui);
-
-                self.measurer.stop_measure();
-                // println!(
-                //     "avg: {:?}\tlow: {:?}\thigh: {:?}",
-                //     self.measurer.get_average(),
-                //     self.measurer.get_min(),
-                //     self.measurer.get_max()
-                // );
+                let duration = start.elapsed();
+                if self.times.len() < self.times.capacity() {
+                    self.times.push(duration);
+                } else {
+                    self.times.insert(self.index, duration);
+                    self.index = (self.index + 1) % self.times.len();
+                }
+                if duration > self.max {
+                    self.max = duration
+                }
+                if duration < self.min {
+                    self.min = duration;
+                }
+                self.avg = self.times.iter().sum::<Duration>() / self.times.len() as u32;
             })
         });
         egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
             let dt = ui.input(|i| i.stable_dt);
             ui.label(format!(
-                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:?}ms, min: {:?}ms, max: {:?}ms",
+                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:.3}ms, min: {:.3}ms, max: {:.3}ms",
                 dt * 1000.0,
                 (1.0 / dt).floor() as i32,
-                self.measurer.get_average().as_millis(),
-                self.measurer.get_min().as_millis(),
-                self.measurer.get_max().as_millis()
+                self.avg.as_secs_f64() * 1000.0,
+                self.min.as_secs_f64() * 1000.0,
+                self.max.as_secs_f64() * 1000.0
             ));
         });
         if ctx.input(|i| i.viewport().close_requested()) {
             println!(
-                "avg: {:?}\tlow: {:?}\thigh: {:?}",
-                self.measurer.get_average(),
-                self.measurer.get_min(),
-                self.measurer.get_max()
+                "avg: {:.3}ms\tlow: {:.3}ms\thigh: {:.3}ms",
+                self.avg.as_secs_f64() * 1000.0,
+                self.min.as_secs_f64() * 1000.0,
+                self.max.as_secs_f64() * 1000.0
             );
         }
     }
@@ -87,18 +117,33 @@ fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
     while let Some(elem) = stack.pop() {
         match elem {
             Node::Directory { id, children, name } => {
-                let open = builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
-                if open {
-                    builder.close_dir_in(children.len());
-                    for child in children {
-                        stack.push(child)
-                    }
-                } else {
-                    builder.close_dir();
+                //builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
+                builder.node(DefaultNode {
+                    id,
+                    name,
+                    is_dir: true,
+                });
+                builder.close_dir_in(children.len());
+                for child in children {
+                    stack.push(child)
                 }
+                // let open = builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
+                // if open {
+                //     builder.close_dir_in(children.len());
+                //     for child in children {
+                //         stack.push(child)
+                //     }
+                // } else {
+                //     builder.close_dir();
+                // }
             }
             Node::Leaf { id, name } => {
-                builder.node(NodeBuilder::leaf(*id).label(name));
+                //builder.node(NodeBuilder::leaf(*id).label(name));
+                builder.node(DefaultNode {
+                    id,
+                    name,
+                    is_dir: false,
+                });
             }
         }
     }
@@ -192,5 +237,28 @@ fn count_nodes(node: &Node) -> (i32, i32) {
             (dirs, leafs)
         }
         Node::Leaf { .. } => (0, 1),
+    }
+}
+
+struct DefaultNode<'a> {
+    id: &'a Uuid,
+    name: &'a str,
+    is_dir: bool,
+}
+impl<'a> NodeConfig<Uuid> for DefaultNode<'a> {
+    fn id(&self) -> &Uuid {
+        self.id
+    }
+
+    fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+
+    fn default_open(&self) -> bool {
+        true
+    }
+
+    fn label(&mut self, ui: &mut egui::Ui) {
+        ui.add(Label::new(self.name).selectable(false));
     }
 }

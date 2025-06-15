@@ -163,16 +163,14 @@
 //! property of a node.
 
 mod builder;
-mod builder_state;
 mod node;
-mod node_states;
 mod state;
 
 use egui::{
-    self, emath, epaint, layers::ShapeIdx, vec2, Event, EventFilter, Id, Key, LayerId, Layout,
-    Modifiers, NumExt, Order, Rangef, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    self, emath, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
+    Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
 };
-use std::{cmp::Ordering, collections::HashMap, hash::Hash};
+use std::hash::Hash;
 
 pub use builder::*;
 pub use node::*;
@@ -209,6 +207,71 @@ pub struct TreeView<NodeIdType> {
     #[allow(clippy::type_complexity)]
     fallback_context_menu: Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>)>>,
 }
+
+/// Im just here to fix the alignment
+///
+/// # Controlling the size of the tree view
+///
+/// The tree view deliberately does not offer many options to control its size, instead the size is mostly
+/// determined automatically.  
+/// The width of the tree view is the largest of either:
+/// * the remaining width of the ui using [`ui.available_size().x`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
+/// * the minimum width via [`TreeViewSettings::min_width`] or [`TreeView::min_width`]
+/// * the largest width of any node in the tree[^1]
+///
+/// The height of the tree view is the largest of either:
+/// * the remaining height of the ui using [`ui.available_size().y`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
+/// * the minimum height via [`TreeViewSettings::min_height`] or [`TreeView::min_height`]
+/// * the combined hight of all nodes in the tree
+///
+/// # Suggestion: Wrap the tree view in a scroll area in a side panel
+/// In most cases a tree view is placed in a scroll area in a left hand side panel.
+/// ```
+/// egui::SidePanel::left(Id::new("tree view panel"))
+///     .resizable(true)
+///     .show(ctx, |ui| {
+///         ScrollArea::both().show(ui, |ui| {
+///             TreeView::new(Id::new("tree view"))::show(ui, |builder|{
+///                 // build your tree here
+///             })
+///         });
+///     });
+/// ```
+///
+/// # Sugestion: Control the maximum size of the tree view using a scrol panel and a group
+/// If you want to have the tree as a smaller part of a more complicated panel you can
+/// control the size using the scroll area and wrap it inside a group for better seperateion.
+/// ```
+/// ui.group(|ui| {
+///     ScrollArea::both()
+///         .max_height(200.0)
+///         .max_width(200.0)
+///         .show(ui, |ui| {
+///             TreeView::new(Id::new("tree view")).show(ui, |builder| {
+///                     // build your tree here
+///                 },
+///             );
+///         });
+/// });
+/// ```
+///
+/// [^1]: The tree view stores the width of the largest node it had to render in the [`TreeViewState`].
+/// The consequence of this is that the tree view might expand to a larget width than necessary
+/// even if all nodes in the tree are shorter.
+impl<NodeIdType: NodeId> TreeView<NodeIdType> {
+    /// Set the minimum width the tree can have.
+    pub fn min_width(mut self, width: f32) -> Self {
+        self.settings.min_width = width;
+        self
+    }
+
+    /// Set the minimum height the tree can have.
+    pub fn min_height(mut self, height: f32) -> Self {
+        self.settings.min_height = height;
+        self
+    }
+}
+
 impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// Create a tree view from an unique id.
     pub fn new(id: Id) -> Self {
@@ -244,58 +307,6 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// Set the row layout for this tree.
     pub fn row_layout(mut self, layout: RowLayout) -> Self {
         self.settings.row_layout = layout;
-        self
-    }
-
-    /// Controls whether the tree should fill all available horizontal space.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no
-    /// effect and the tree will always fill horizontal space.
-    ///
-    /// Default is `true`.
-    pub fn fill_space_horizontal(mut self, fill_space_horizontal: bool) -> Self {
-        self.settings.fill_space_horizontal = fill_space_horizontal;
-        self
-    }
-
-    /// Controls whether the tree should fill all available vertical space.
-    ///
-    /// If the tree is part of a vertically justified layout, this property has no
-    /// effect and the tree will always fill vertical space.
-    ///
-    /// Default is `false`.
-    pub fn fill_space_vertical(mut self, fill_space_vertical: bool) -> Self {
-        self.settings.fill_space_vertical = fill_space_vertical;
-        self
-    }
-
-    /// Set the maximum width the tree can have.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no
-    /// effect and the tree will always fill the available horizontal space.
-    pub fn max_width(mut self, width: f32) -> Self {
-        self.settings.max_width = width;
-        self
-    }
-
-    /// Set the maximum height the tree can have.
-    ///
-    /// If the tree is part of a vertical justified layout, this property has no
-    /// effect and the tree will always fill the available vertical space.
-    pub fn max_height(mut self, height: f32) -> Self {
-        self.settings.max_height = height;
-        self
-    }
-
-    /// Set the minimum width the tree can have.
-    pub fn min_width(mut self, width: f32) -> Self {
-        self.settings.min_width = width;
-        self
-    }
-
-    /// Set the minimum height the tree can have.
-    pub fn min_height(mut self, height: f32) -> Self {
-        self.settings.min_height = height;
         self
     }
 
@@ -390,7 +401,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             state.prune_selection_to_single_id();
         }
 
-        let (ui_data, response) = draw_foreground(
+        let (ui_data, tree_view_rect) = draw_foreground(
             ui,
             id,
             &settings,
@@ -399,84 +410,89 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             &mut fallback_context_menu,
         );
         // Remember the size of the tree for next frame.
-        state.size = response.rect.size();
-        state.prune_selection_to_known_ids();
+        //state.size = response.rect.size();
 
-        draw_background(ui, state, &ui_data);
+        draw_background(ui, &ui_data);
 
-        let input_result = handle_input(ui, id, &settings, &ui_data, state);
-
-        let mut actions = Vec::new();
-        // Create a drag or move action.
-        if state.drag_valid() {
-            let drag_and_drop_position = get_drop_position(&ui_data, state);
-            draw_drop(ui, &ui_data, state, drag_and_drop_position.as_ref());
-
-            if let Some((drag_state, (drop_id, position))) =
-                state.dragged.as_ref().zip(drag_and_drop_position)
-            {
-                if ui.ctx().input(|i| i.pointer.primary_released()) {
-                    actions.push(Action::Move(DragAndDrop {
-                        source: simplify_selection_for_dnd(state, &drag_state.node_ids),
-                        target: drop_id,
-                        position,
-                        drop_marker_idx: ui_data.drop_marker_idx,
-                    }))
-                } else {
-                    actions.push(Action::Drag(DragAndDrop {
-                        source: simplify_selection_for_dnd(state, &drag_state.node_ids),
-                        target: drop_id,
-                        position,
-                        drop_marker_idx: ui_data.drop_marker_idx,
-                    }))
-                }
-            } else {
-                if let Some(cursor_pos) = ui.ctx().pointer_latest_pos() {
-                    if !response.rect.contains(cursor_pos) {
-                        if let Some(dragged) = &state.dragged {
-                            if ui.ctx().input(|i| i.pointer.primary_released()) {
-                                actions.push(Action::MoveExternal(DragAndDropExternal {
-                                    position: cursor_pos,
-                                    source: dragged.node_ids.clone(),
-                                }));
-                            } else {
-                                actions.push(Action::DragExternal(DragAndDropExternal {
-                                    position: cursor_pos,
-                                    source: dragged.node_ids.clone(),
-                                }));
-                            }
-                        }
-                    }
+        if ui.memory(|m| m.has_focus(id)) {
+            // If the widget is focused but no node is selected we want to select any node
+            // to allow navigating throught the tree.
+            // In case we gain focus from a drag action we select the dragged node directly.
+            if state.selected().is_empty() {
+                let fallback_selection = state.get_dragged().and_then(|v| v.first());
+                if let Some(fallback_selection) = fallback_selection {
+                    state.set_one_selected(fallback_selection.clone());
                 }
             }
         }
+        if ui_data.interaction.clicked() || ui_data.interaction.drag_started() {
+            ui.memory_mut(|m| m.request_focus(id));
+        }
+
+        let mut actions = Vec::new();
+        // Create a drag or move action.
+        if ui_data.interaction.dragged() {
+            if let Some((drop_id, position)) = &ui_data.drop_target {
+                actions.push(Action::Drag(DragAndDrop {
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
+                    target: drop_id.clone(),
+                    position: position.clone(),
+                    drop_marker_idx: ui_data.drop_marker_idx,
+                }))
+            }
+            if let Some(position) = ui.ctx().pointer_latest_pos() {
+                actions.push(Action::DragExternal(DragAndDropExternal {
+                    position,
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
+                }));
+            }
+        }
+        if ui_data.interaction.drag_stopped() {
+            if let Some((drop_id, position)) = ui_data.drop_target {
+                actions.push(Action::Move(DragAndDrop {
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
+                    target: drop_id,
+                    position,
+                    drop_marker_idx: ui_data.drop_marker_idx,
+                }))
+            }
+            if let Some(position) = ui.ctx().pointer_latest_pos() {
+                actions.push(Action::MoveExternal(DragAndDropExternal {
+                    position,
+                    source: state
+                        .get_simplified_dragged()
+                        .map(|o| o.clone())
+                        .unwrap_or(Vec::new()),
+                }));
+            }
+        }
         // Create a selection action.
-        if input_result.selection_changed {
+        // TODO:
+        if false {
             actions.push(Action::SetSelected(state.selected().clone()));
         }
 
-        if input_result.should_activate {
+        if let Some(nodes_to_activate) = ui_data.activate {
             actions.push(Action::Activate(Activate {
-                selected: state
-                    .selected()
-                    .iter()
-                    .filter(|node_id| {
-                        state
-                            .node_state_of(node_id)
-                            .is_some_and(|ns| ns.activatable)
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>(),
+                selected: nodes_to_activate.clone(),
                 modifiers: ui.ctx().input(|i| i.modifiers),
             }));
         }
 
-        // Reset the drag state.
-        if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
-            state.dragged = None;
+        if ui_data.interaction.drag_stopped() {
+            state.reset_dragged();
         }
 
-        (ui_data.interaction, actions)
+        (ui_data.interaction.with_new_rect(tree_view_rect), actions)
     }
 }
 
@@ -487,68 +503,51 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state: &mut TreeViewState<NodeIdType>,
     build_tree_view: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
     fall_back_context_menu: &mut Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>)>>,
-) -> (UiData<NodeIdType>, Response) {
+) -> (UiData<NodeIdType>, Rect) {
     // Calculate the desired size of the tree view widget.
-    let size = vec2(
-        if settings.fill_space_horizontal || ui.layout().horizontal_justify() {
-            ui.available_width()
-        } else {
-            state.size.x.at_most(settings.max_width)
-        }
-        .at_least(settings.min_width),
-        if settings.fill_space_vertical || ui.layout().vertical_justify() {
-            ui.available_height()
-        } else {
-            state.size.y.at_most(settings.max_height)
-        }
-        .at_least(settings.min_height),
+    let interaction_rect = Rect::from_min_size(
+        ui.cursor().min,
+        ui.available_size()
+            .at_least(vec2(settings.min_width, settings.min_height))
+            .at_least(vec2(state.min_width, 0.0)),
     );
 
+    let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
+    let mut output = Output::None;
+    let mut input = get_input::<NodeIdType>(ui, &interaction, id);
     let mut ui_data = UiData {
-        row_rectangles: HashMap::new(),
-        seconday_click: None,
-        interaction: interact_no_expansion(
-            ui,
-            Rect::from_min_size(ui.cursor().min, size),
-            id,
-            Sense::click_and_drag(),
-        ),
+        interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
-        background_idx: (0..(state.selected().len() + 1))
-            .map(|_| ui.painter().add(Shape::Noop))
-            .collect(),
-        secondary_selection_idx: ui.painter().add(Shape::Noop),
-        selection_cursor_idx: ui.painter().add(Shape::Noop),
         drop_marker_idx: ui.painter().add(Shape::Noop),
+        drop_target: None,
+        activate: None,
+        space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
     };
-
     // Run the build tree view closure
-    let response = ui
-        .allocate_ui_with_layout(size, Layout::top_down(egui::Align::Min), |ui| {
-            ui.set_min_size(vec2(settings.min_width, settings.min_height));
-            ui.add_space(ui.spacing().item_spacing.y * 0.5);
 
-            let mut tree_builder = TreeViewBuilder::new(ui, state, settings, &mut ui_data);
-            build_tree_view(&mut tree_builder);
+    let mut builder_ui = ui.new_child(
+        UiBuilder::new()
+            .layout(Layout::top_down(egui::Align::Min))
+            .max_rect(interaction_rect),
+    );
+    let mut tree_builder = TreeViewBuilder::new(
+        &mut builder_ui,
+        state,
+        settings,
+        &mut ui_data,
+        &mut input,
+        &mut output,
+    );
+    build_tree_view(&mut tree_builder);
 
-            // Add negative space because the place will add the item spacing on top of this.
-            ui.add_space(-ui.spacing().item_spacing.y * 0.5);
+    let tree_view_rect = ui_data.space_used.union(interaction_rect);
+    ui.allocate_rect(tree_view_rect, Sense::hover());
 
-            if settings.fill_space_horizontal {
-                ui.set_min_width(ui.available_width());
-            }
-            if settings.fill_space_vertical {
-                ui.set_min_height(ui.available_height());
-            }
-        })
-        .response;
+    // Remember width of the tree view for next frame
+    state.min_width = state.min_width.at_least(ui_data.space_used.width());
 
-    // Transfer the secondary click
-    if ui_data.seconday_click.is_some() {
-        state.secondary_selection = ui_data.seconday_click.clone();
-    }
     // Do context menu
     if !ui_data.context_menu_was_open {
         if let Some(fallback_context_menu) = fall_back_context_menu.take() {
@@ -557,468 +556,63 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             });
         }
     }
+    // Read out results from inputs
+    match output {
+        Output::SetDragged(dragged) => {
+            state.set_dragged(dragged);
+        }
+        Output::SetDraggedSelection(dragged) => {
+            state.set_dragged(dragged);
+        }
+        Output::SetSecondaryClicked(id) => {
+            state.secondary_selection = Some(id);
+        }
+        Output::ActivateSelection(selection) => {
+            ui_data.activate = Some(selection);
+        }
+        Output::ActivateThis(id) => {
+            ui_data.activate = Some(vec![id]);
+        }
+        Output::SelectOneNode(id) => {
+            state.set_one_selected(id.clone());
+            state.set_pivot(Some(id));
+            state.set_cursor(None);
+        }
+        Output::ToggleSelection(id) => {
+            state.toggle_selected(&id);
+            state.set_pivot(Some(id));
+        }
+        Output::ShiftSelect(ids) => {
+            state.set_selected_dont_change_pivot(ids);
+        }
+        Output::Select {
+            selection,
+            pivot,
+            cursor,
+        } => {
+            state.set_selected(selection);
+            state.set_pivot(Some(pivot));
+            state.set_cursor(Some(cursor));
+        }
+        Output::SetCursor(id) => {
+            state.set_cursor(Some(id));
+        }
+        Output::None => (),
+    }
 
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
 
-    (ui_data, response)
+    (ui_data, tree_view_rect)
 }
 
-fn handle_input<NodeIdType: NodeId>(
-    ui: &mut Ui,
-    id: Id,
-    settings: &TreeViewSettings,
-    tree_view_result: &UiData<NodeIdType>,
-    state: &mut TreeViewState<NodeIdType>,
-) -> InputResult {
-    let UiData {
-        row_rectangles,
-        interaction,
-        ..
-    } = tree_view_result;
-
-    if interaction.clicked() || interaction.drag_started() {
-        ui.memory_mut(|m| m.request_focus(id));
-    }
-
-    let mut selection_changed = false;
-    let mut should_activate = false;
-
-    for (node_id, row) in row_rectangles {
-        let RowRectangles {
-            row_rect,
-            closer_rect,
-        } = row;
-
-        // Closer interactions
-        let closer_clicked = closer_rect
-            .zip(interaction.hover_pos())
-            .is_some_and(|(closer_rect, hover_pos)| closer_rect.contains(hover_pos))
-            && interaction.clicked();
-        if closer_clicked {
-            let node_state = state.node_state_of_mut(&node_id).unwrap();
-            node_state.open = !node_state.open;
-        }
-
-        // Row interaction
-        let cursor_above_row = interaction
-            .hover_pos()
-            .is_some_and(|pos| row_rect.contains(pos));
-        if cursor_above_row && !closer_clicked {
-            let was_last_clicked = state
-                .last_clicked_node
-                .as_ref()
-                .is_some_and(|last| last == node_id);
-
-            if interaction.double_clicked() && was_last_clicked {
-                let node_state = state.node_state_of_mut(&node_id).unwrap();
-                // directories should only switch their opened state by double clicking if no modifiers
-                // are pressed. If any modifier is pressed then the closer should be used.
-                if node_state.dir && ui.ctx().input(|i| i.modifiers).is_none() {
-                    node_state.open = !node_state.open;
-                }
-
-                if node_state.activatable {
-                    // This has the potential to clash with the previous action.
-                    // If a directory is activatable then double clicking it will toggle its
-                    // open state and activate the directory. Usually we would want one input
-                    // to have one effect but in this case it is impossible for us to know if the
-                    // user wants to activate the directory or toggle it.
-                    // We could add a configuration option to choose either toggle or activate
-                    // but in this case i think that doing both has the biggest chance to achieve
-                    // what the user wanted.
-                    should_activate = true;
-                }
-            } else if interaction.clicked_by(egui::PointerButton::Primary) {
-                // must be handled after double-clicking to prevent the second click of the double-click
-                // performing 'click' actions.
-
-                // React to primary clicking
-                selection_changed = true;
-                state.handle_click(
-                    node_id.clone(),
-                    ui.ctx().input(|i| i.modifiers),
-                    settings.allow_multi_select,
-                );
-            }
-
-            if interaction.clicked() {
-                state.last_clicked_node = Some(node_id.clone());
-            }
-
-            // React to a dragging
-            // An egui drag only starts after the pointer has moved but with that first movement
-            // the pointer may have moved to a different node. Instead we want to update
-            // the drag state right when the priamry button was pressed.
-            // We also want to have our own rules when a drag really becomes valid to avoid
-            // graphical artifacts. Sometimes the user is a little fast with the mouse and
-            // it creates the drag overlay when it really shouldn't have.
-            let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
-            if primary_pressed && settings.allow_drag_and_drop {
-                let pointer_pos = ui.ctx().pointer_latest_pos().unwrap_or_default();
-                let node_ids = if state.is_selected(&node_id) {
-                    state.selected().clone()
-                } else {
-                    vec![node_id.clone()]
-                };
-                state.dragged = Some(DragState {
-                    node_ids,
-                    drag_start_pos: pointer_pos,
-                    drag_valid: false,
-                });
-            }
-        }
-    }
-
-    if ui.memory(|m| m.has_focus(id)) {
-        // If the widget is focused but no node is selected we want to select any node
-        // to allow navigating throught the tree.
-        // In case we gain focus from a drag action we select the dragged node directly.
-        if state.selected().is_empty() {
-            let fallback_selection = state
-                .dragged
-                .as_ref()
-                .map(|drag_state| drag_state.node_ids.clone())
-                .or(state.node_states().first().map(|(id, _)| vec![id.clone()]));
-            if let Some(fallback_selection) = fallback_selection {
-                state.set_selected(fallback_selection);
-                selection_changed = true;
-            }
-        }
-        ui.input(|i| {
-            for event in i.events.iter() {
-                match event {
-                    Event::Key {
-                        key: Key::Enter,
-                        pressed: true,
-                        ..
-                    } => {
-                        should_activate = true;
-                    }
-                    Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } => {
-                        state.handle_key(key, modifiers, settings.allow_multi_select);
-                        selection_changed = true;
-                    }
-                    _ => (),
-                }
-            }
-        });
-    }
-    // Update the drag state
-    // A drag only becomes a valid drag after the pointer has traveled some distance.
-    if let Some(drag_state) = state.dragged.as_mut() {
-        if !drag_state.drag_valid {
-            drag_state.drag_valid = drag_state
-                .drag_start_pos
-                .distance(ui.ctx().pointer_latest_pos().unwrap_or_default())
-                > 5.0;
-        }
-    }
-
-    InputResult {
-        selection_changed,
-        should_activate,
-    }
-}
-
-fn get_drop_position<NodeIdType: NodeId>(
-    tree_view_result: &UiData<NodeIdType>,
-    state: &mut TreeViewState<NodeIdType>,
-) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
-    if !state.drag_valid() {
-        return None;
-    }
-    let drag_state = state.dragged.as_ref()?;
-    let hover_pos = tree_view_result.interaction.hover_pos()?;
-    let (hovered_id, drop_quarter) = tree_view_result
-        .row_rectangles
-        .iter()
-        .filter_map(|(id, row)| {
-            let drop_quarter = DropQuarter::new(row.row_rect.y_range(), hover_pos.y)?;
-            Some((id, drop_quarter))
-        })
-        .next()?;
-
-    // At this point we know that the drag is valid and the cursor
-    // is hovering above a row in the tree.
-
-    // Dropping a node on itself is technically a fine thing to do
-    // but it causes all sorts of problems for the implementer of the drop action.
-    // They would have to remove a node and then somehow insert it after itself.
-    // For that reason it is easier to disallow dropping on itself altogether.
-    if drag_state.node_ids.contains(hovered_id) {
-        return None;
-    }
-
-    // If the hovered node is a child of one of the dragged node then this
-    // is not a valid drop target
-
-    let is_hovering_on_child_of_dragged_node = drag_state
-        .node_ids
-        .iter()
-        .any(|id| state.node_states().is_child_of(hovered_id, id));
-    if is_hovering_on_child_of_dragged_node {
-        return None;
-    }
-
-    let hovered_node = state
-        .node_state_of(hovered_id)
-        .expect("If the node exists in the row rectangles it should also exist in the node states");
-    return get_drop_position_node(hovered_node, &drop_quarter);
-}
-
-fn draw_drop<NodeIdType: NodeId>(
-    ui: &mut Ui,
-    ui_data: &UiData<NodeIdType>,
-    state: &TreeViewState<NodeIdType>,
-    drop_position: Option<&(NodeIdType, DirPosition<NodeIdType>)>,
-) {
-    pub const DROP_LINE_HEIGHT: f32 = 3.0;
-    if let Some((parent_id, drop_position)) = drop_position {
-        let drop_marker =
-            match drop_position {
-                DirPosition::Before(target_id) => {
-                    let row_rectangles = ui_data.row_rectangles.get(&target_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    Rect::from_x_y_ranges(
-                        row_rectangles.row_rect.x_range(),
-                        Rangef::point(row_rectangles.row_rect.min.y).expand(DROP_LINE_HEIGHT * 0.5),
-                    )
-                }
-                DirPosition::After(target_id) => {
-                    let row_rectangles = ui_data.row_rectangles.get(&target_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    Rect::from_x_y_ranges(
-                        row_rectangles.row_rect.x_range(),
-                        Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
-                    )
-                }
-                DirPosition::First => {
-                    let row_rectangles = ui_data.row_rectangles.get(&parent_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    Rect::from_x_y_ranges(
-                        row_rectangles.row_rect.x_range(),
-                        Rangef::point(row_rectangles.row_rect.max.y).expand(DROP_LINE_HEIGHT * 0.5),
-                    )
-                }
-                DirPosition::Last => {
-                    let row_rectangles_start = ui_data.row_rectangles.get(&parent_id).expect(
-                        "Drop target must have a rectangle or it could not be a drop target",
-                    );
-                    // For directories the drop marker should expand its height to include all
-                    // its child nodes. To do this, first we have to find its last child node,
-                    // then we can get the correct y range.
-                    let last_visible_child_row = ui_data
-                        .row_rectangles
-                        .iter()
-                        .filter(|(id, _row)| state.node_states().is_child_of(&id, &parent_id))
-                        .map(|(_, value)| value)
-                        .max_by_key(|row| row.row_rect.max.y as i32);
-
-                    let y_range = match last_visible_child_row {
-                        Some(last_visible_child_row) => {
-                            let y = last_visible_child_row.row_rect.max.y;
-                            Rangef::new(row_rectangles_start.row_rect.min.y, y)
-                        }
-                        None => row_rectangles_start.row_rect.y_range(),
-                    };
-                    Rect::from_x_y_ranges(row_rectangles_start.row_rect.x_range(), y_range)
-                }
-            };
-
-        let shape = epaint::RectShape::new(
-            drop_marker,
-            ui.visuals().widgets.active.corner_radius,
-            ui.style().visuals.selection.bg_fill.linear_multiply(0.6),
-            Stroke::NONE,
-            egui::StrokeKind::Inside,
-        );
-        ui.painter().set(ui_data.drop_marker_idx, shape);
-    }
-}
-
-fn draw_background<NodeIdType: NodeId>(
-    ui: &mut Ui,
-    state: &TreeViewState<NodeIdType>,
-    ui_data: &UiData<NodeIdType>,
-) {
-    if !state.selected().is_empty() {
-        let mut selected_rects = state
-            .selected()
-            .iter()
-            .filter_map(|id| ui_data.row_rectangles.get(id).map(|r| r.row_rect))
-            .collect::<Vec<_>>();
-        if !selected_rects.is_empty() {
-            selected_rects.sort_by(|a, b| {
-                if a.min.y > b.min.y {
-                    Ordering::Greater
-                } else {
-                    Ordering::Less
-                }
-            });
-
-            let mut combined_rects = Vec::new();
-            let mut current_rect = selected_rects[0];
-            for rect in selected_rects.iter().skip(1) {
-                if (rect.min.y - current_rect.max.y).abs() < 1.0 {
-                    current_rect = Rect::from_min_max(current_rect.min, rect.max)
-                } else {
-                    combined_rects.push(current_rect);
-                    current_rect = *rect;
-                }
-            }
-            combined_rects.push(current_rect);
-
-            for (rect, shape_idx) in combined_rects.iter().zip(&ui_data.background_idx) {
-                ui.painter().set(
-                    *shape_idx,
-                    epaint::RectShape::new(
-                        *rect,
-                        ui.visuals().widgets.active.corner_radius,
-                        if ui_data.has_focus {
-                            ui.visuals().selection.bg_fill
-                        } else {
-                            ui.visuals()
-                                .widgets
-                                .inactive
-                                .weak_bg_fill
-                                .linear_multiply(0.3)
-                        },
-                        Stroke::NONE,
-                        egui::StrokeKind::Inside,
-                    ),
-                );
-            }
-        }
-    }
-
-    if state.context_menu_was_open {
-        if let Some(row_rectangles) = state
-            .secondary_selection
-            .as_ref()
-            .and_then(|id| ui_data.row_rectangles.get(&id))
-        {
-            ui.painter().set(
-                ui_data.secondary_selection_idx,
-                epaint::RectShape::new(
-                    row_rectangles.row_rect,
-                    ui.visuals().widgets.active.corner_radius,
-                    egui::Color32::TRANSPARENT,
-                    ui.visuals().widgets.inactive.fg_stroke,
-                    egui::StrokeKind::Inside,
-                ),
-            );
-        }
-    }
-
-    if ui_data.has_focus {
-        if let Some(row_rectangles) = state
-            .selection_cursor()
-            .and_then(|id| ui_data.row_rectangles.get(&id))
-        {
-            ui.painter().set(
-                ui_data.selection_cursor_idx,
-                epaint::RectShape::new(
-                    row_rectangles.row_rect,
-                    ui.visuals().widgets.active.corner_radius,
-                    egui::Color32::TRANSPARENT,
-                    ui.visuals().widgets.inactive.fg_stroke,
-                    egui::StrokeKind::Inside,
-                ),
-            );
-        }
-    }
-
-    if let Some(drag_state) = &state.dragged {
-        if drag_state.drag_valid {
-            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-                let delta = pointer_pos.to_vec2() - drag_state.drag_start_pos.to_vec2();
-                let transform = emath::TSTransform::from_translation(delta);
-                ui.ctx()
-                    .transform_layer_shapes(ui_data.drag_layer, transform);
-            }
-        }
-    }
-}
-
-fn simplify_selection_for_dnd<NodeIdType: NodeId>(
-    state: &TreeViewState<NodeIdType>,
-    nodes: &[NodeIdType],
-) -> Vec<NodeIdType> {
-    // When multiple nodes are selected it is possible that a folder is selected aswell as a
-    // leaf inside that folder. In that case, a drag and drop action should only include the folder and not the leaf.
-    let mut result = Vec::new();
-    let mut node_states = nodes
-        .into_iter()
-        .filter_map(|id| state.node_states().get(id))
-        .collect::<Vec<_>>();
-    node_states.sort_by_key(|ns| ns.position);
-
-    'i: for i in 0..node_states.len() {
-        for j in 0..i {
-            let i_is_child_of_j = state
-                .node_states()
-                .is_child_of(&node_states[i].id, &node_states[j].id);
-            if i_is_child_of_j {
-                continue 'i;
-            }
-        }
-        // is is not a child of any of 0..j
-        result.push(node_states[i].id.clone());
-    }
-    result
-}
-
-fn get_drop_position_node<NodeIdType: NodeId>(
-    node: &NodeState<NodeIdType>,
-    drop_quater: &DropQuarter,
-) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
-    match drop_quater {
-        DropQuarter::Top => {
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
-            }
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            None
-        }
-        DropQuarter::MiddleTop => {
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::Before(node.id.clone())));
-            }
-            None
-        }
-        DropQuarter::MiddleBottom => {
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
-            }
-            None
-        }
-        DropQuarter::Bottom => {
-            if node.drop_allowed && node.open {
-                return Some((node.id.clone(), DirPosition::First));
-            }
-            if let Some(parent_id) = node.parent_id.as_ref() {
-                return Some((parent_id.clone(), DirPosition::After(node.id.clone())));
-            }
-            if node.drop_allowed {
-                return Some((node.id.clone(), DirPosition::Last));
-            }
-            None
+fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>) {
+    if ui_data.interaction.dragged() {
+        let (start, current) = ui.input(|i| (i.pointer.press_origin(), i.pointer.hover_pos()));
+        if let (Some(start), Some(current)) = (start, current) {
+            let delta = current.to_vec2() - start.to_vec2();
+            let transform = emath::TSTransform::from_translation(delta);
+            ui.ctx()
+                .transform_layer_shapes(ui_data.drag_layer, transform);
         }
     }
 }
@@ -1051,28 +645,10 @@ pub struct TreeViewSettings {
     pub indent_hint_style: IndentHintStyle,
     /// The row layout for this tree.
     pub row_layout: RowLayout,
-    /// The maximum width the tree can have.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill the available horizontal space.
-    pub max_width: f32,
-    /// The maximum height the tree can have.
-    ///
-    /// If the tree is part of a vertical justified layout, this property has no effect and the tree will always fill the available vertical space.
-    pub max_height: f32,
     /// The minimum width the tree can have.
     pub min_width: f32,
     /// The minimum height the tree can have.
     pub min_height: f32,
-    /// Whether the tree should fill all available horizontal space.
-    ///
-    /// If the tree is part of a horizontally justified layout, this property has no effect and the tree will always fill horizontal space.
-    /// Default is true.
-    pub fill_space_horizontal: bool,
-    /// Whether the tree should fill all available vertical space.
-    ///
-    /// If the tree is part of a vertically justified layout, this property has no effect and the tree will always fill vertical space.
-    /// Default is false.
-    pub fill_space_vertical: bool,
     /// If the tree view is allowed to select multiple nodes at once.
     /// Default is true.
     pub allow_multi_select: bool,
@@ -1090,12 +666,8 @@ impl Default for TreeViewSettings {
             override_indent: None,
             indent_hint_style: Default::default(),
             row_layout: Default::default(),
-            max_width: f32::INFINITY,
-            max_height: f32::INFINITY,
             min_width: 0.0,
             min_height: 0.0,
-            fill_space_horizontal: true,
-            fill_space_vertical: false,
             allow_multi_select: true,
             allow_drag_and_drop: true,
             default_node_height: None,
@@ -1109,8 +681,28 @@ pub enum IndentHintStyle {
     /// No indent hint is shown.
     None,
     /// A single vertical line is show for the full height of the directory.
+    /// ```text
+    /// v Foo
+    /// │  Alice
+    /// │  v Bar
+    /// │  │ Bob
+    /// │  │  v Baz
+    /// │  │  │ Clair
+    /// │  │  │ Denis
+    /// │  Emil
+    /// ```
     Line,
     /// A vertical line is show with horizontal hooks to the child nodes of the directory.
+    /// ```text
+    /// v Foo
+    /// ├─ Alice
+    /// ├─ v Bar
+    /// │  ├─ Bob
+    /// │  └─ v Baz
+    /// │     ├─ Clair
+    /// │     └─ Denis
+    /// └─ Emil
+    /// ```
     #[default]
     Hook,
 }
@@ -1218,11 +810,6 @@ fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Respo
     res
 }
 
-struct InputResult {
-    selection_changed: bool,
-    should_activate: bool,
-}
-
 enum DropQuarter {
     Top,
     MiddleTop,
@@ -1251,20 +838,173 @@ impl DropQuarter {
 }
 
 struct UiData<NodeIdType> {
-    row_rectangles: HashMap<NodeIdType, RowRectangles>,
-    seconday_click: Option<NodeIdType>,
     context_menu_was_open: bool,
     interaction: Response,
     drag_layer: LayerId,
     has_focus: bool,
-    background_idx: Vec<ShapeIdx>,
-    secondary_selection_idx: ShapeIdx,
-    selection_cursor_idx: ShapeIdx,
     drop_marker_idx: ShapeIdx,
+    drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    activate: Option<Vec<NodeIdType>>,
+    space_used: Rect,
 }
 
-#[derive(Debug)]
-struct RowRectangles {
-    row_rect: Rect,
-    closer_rect: Option<Rect>,
+/// When you ast a rectangle if it contains a point it does so inclusive the upper bound.
+/// like this: min <= p <= max
+/// Visually the rectangle is displayed exclusive the upper bound.
+/// like this: min <= p < max
+///
+/// This means that two rectangles can not overlap visually but overlap when aksing if a point
+/// is contained in them.
+/// This check if a point is contained exclusive the upper bound.
+fn rect_contains_visually(rect: &Rect, pos: &Pos2) -> bool {
+    rect.min.x <= pos.x && pos.x < rect.max.x && rect.min.y <= pos.y && pos.y < rect.max.y
+}
+
+enum Input<NodeIdType> {
+    DragStarted {
+        pos: Pos2,
+        simplified_dragged: Vec<NodeIdType>,
+    },
+    Dragged(Pos2),
+    SecondaryClick(Pos2),
+    Click {
+        pos: Pos2,
+        double: bool,
+        modifiers: Modifiers,
+        activatable_nodes: Vec<NodeIdType>,
+        shift_click_nodes: Option<Vec<NodeIdType>>,
+    },
+    KeyLeft,
+    KeyRight {
+        select_next: bool,
+    },
+    KeyUp {
+        previous_node: Option<NodeIdType>,
+    },
+    KeyUpAndCommand {
+        previous_node: Option<NodeIdType>,
+    },
+    KeyUpAndShift {
+        previous_node: Option<NodeIdType>,
+        nodes_to_select: Option<Vec<NodeIdType>>,
+        next_cursor: Option<NodeIdType>,
+    },
+    KeyDown(bool),
+    KeyDownAndCommand {
+        is_next: bool,
+    },
+    KeyDownAndShift {
+        nodes_to_select: Option<Vec<NodeIdType>>,
+        next_cursor: Option<NodeIdType>,
+        is_next: bool,
+    },
+    KeySpace,
+    KeyEnter {
+        activatable_nodes: Vec<NodeIdType>,
+    },
+    None,
+}
+enum Output<NodeIdType> {
+    SetDragged(DragState<NodeIdType>),
+    SetDraggedSelection(DragState<NodeIdType>),
+    SetSecondaryClicked(NodeIdType),
+    ActivateSelection(Vec<NodeIdType>),
+    ActivateThis(NodeIdType),
+    SelectOneNode(NodeIdType),
+    ShiftSelect(Vec<NodeIdType>),
+    ToggleSelection(NodeIdType),
+    Select {
+        selection: Vec<NodeIdType>,
+        pivot: NodeIdType,
+        cursor: NodeIdType,
+    },
+    SetCursor(NodeIdType),
+    None,
+}
+
+fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeIdType> {
+    let press_origin = ui.input(|i| i.pointer.press_origin());
+    let pointer_pos = ui.input(|i| i.pointer.latest_pos());
+    let modifiers = ui.input(|i| i.modifiers);
+
+    if interaction.context_menu_opened() {
+        return Input::None;
+    }
+
+    if interaction.drag_started_by(PointerButton::Primary) {
+        return Input::DragStarted {
+            pos: press_origin
+                .expect("If a drag has started it must have a position where the press started"),
+            simplified_dragged: Vec::new(),
+        };
+    }
+    if interaction.dragged_by(PointerButton::Primary)
+        || interaction.drag_stopped_by(PointerButton::Primary)
+    {
+        return Input::Dragged(
+            pointer_pos.expect("If the tree view is dragged it must have a pointer position"),
+        );
+    }
+    if interaction.secondary_clicked() {
+        return Input::SecondaryClick(
+            pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+        );
+    }
+    if interaction.clicked_by(PointerButton::Primary) {
+        return Input::Click {
+            pos: pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+            double: interaction.double_clicked(),
+            modifiers,
+            activatable_nodes: Vec::new(),
+            shift_click_nodes: None,
+        };
+    }
+    if !ui.memory(|m| m.has_focus(id)) {
+        return Input::None;
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowLeft)) {
+        return Input::KeyLeft;
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowRight)) {
+        return Input::KeyRight { select_next: false };
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowUp)) {
+        if modifiers.shift_only() {
+            return Input::KeyUpAndShift {
+                previous_node: None,
+                nodes_to_select: None,
+                next_cursor: None,
+            };
+        }
+        if modifiers.command_only() {
+            return Input::KeyUpAndCommand {
+                previous_node: None,
+            };
+        }
+        return Input::KeyUp {
+            previous_node: None,
+        };
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
+        if modifiers.shift_only() {
+            return Input::KeyDownAndShift {
+                nodes_to_select: None,
+                next_cursor: None,
+                is_next: false,
+            };
+        }
+        if modifiers.command_only() {
+            return Input::KeyDownAndCommand { is_next: false };
+        }
+        return Input::KeyDown(false);
+    }
+    if ui.input(|i| i.key_pressed(Key::Space)) {
+        return Input::KeySpace;
+    }
+    if ui.input(|i| i.key_pressed(Key::Enter)) {
+        return Input::KeyEnter {
+            activatable_nodes: Vec::new(),
+        };
+    }
+    Input::None
 }

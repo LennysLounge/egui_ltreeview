@@ -22,7 +22,6 @@ serde = { version = "1", features = ["derive"], optional = true }
 [dev-dependencies]
 eframe = "0.31"
 egui_extras = { version = "0.31", features = ["all_loaders"] }
-performance_measure = "2.0.0"
 uuid = { version = "1", features = ["v4"] }
 
 [features]

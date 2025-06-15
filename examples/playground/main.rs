@@ -2,7 +2,7 @@ mod data;
 use std::{collections::HashSet, env};
 
 use data::*;
-use egui::{Color32, DragValue, Id, Label, Layout, Response, ThemePreference, Ui};
+use egui::{Color32, DragValue, Id, Label, Response, ScrollArea, ThemePreference, Ui};
 use egui_ltreeview::{
     Action, DirPosition, IndentHintStyle, NodeBuilder, RowLayout, TreeView, TreeViewBuilder,
     TreeViewState,
@@ -36,17 +36,11 @@ struct MyApp {
 
 #[derive(Default)]
 struct Settings {
-    layout_h_justify: bool,
-    layout_v_justify: bool,
+    scroll_vertical: bool,
+    scroll_horizontal: bool,
     override_indent: Option<f32>,
     indent_hint: IndentHintStyle,
     row_layout: RowLayout,
-    fill_space_horizontal: bool,
-    fill_space_vertical: bool,
-    max_width_enabled: bool,
-    max_width: f32,
-    max_height_enabled: bool,
-    max_height: f32,
     min_width_enabled: bool,
     min_width: f32,
     min_height_enabled: bool,
@@ -68,12 +62,9 @@ impl Default for MyApp {
             settings_id: Uuid::new_v4(),
             settings: Settings {
                 row_layout: RowLayout::CompactAlignedLabels,
-                fill_space_horizontal: true,
-                fill_space_vertical: false,
-                max_width: 100.0,
-                max_height: 100.0,
                 show_size: true,
                 allow_multi_select: true,
+                scroll_vertical: true,
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
@@ -87,15 +78,17 @@ impl eframe::App for MyApp {
         egui::SidePanel::left(Id::new("tree view"))
             .resizable(true)
             .show(ctx, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.with_layout(
-                    Layout::top_down(egui::Align::Min)
-                        .with_main_justify(self.settings.layout_v_justify)
-                        .with_cross_justify(self.settings.layout_h_justify),
-                    |ui| {
+                ScrollArea::both()
+                    .scroll([
+                        self.settings.scroll_horizontal,
+                        self.settings.scroll_vertical,
+                    ])
+                    .scroll_bar_visibility(
+                        egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                    )
+                    .show(ui, |ui| {
                         show_tree_view(ui, self);
-                    },
-                );
+                    });
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.tree_view_state.selected().len() > 1 {
@@ -151,18 +144,6 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
         .override_indent(app.settings.override_indent)
         .indent_hint_style(app.settings.indent_hint)
         .row_layout(app.settings.row_layout)
-        .fill_space_horizontal(app.settings.fill_space_horizontal)
-        .fill_space_vertical(app.settings.fill_space_vertical)
-        .max_width(if app.settings.max_width_enabled {
-            app.settings.max_width
-        } else {
-            f32::INFINITY
-        })
-        .max_height(if app.settings.max_height_enabled {
-            app.settings.max_height
-        } else {
-            f32::INFINITY
-        })
         .min_width(if app.settings.min_width_enabled {
             app.settings.min_width
         } else {
@@ -390,11 +371,11 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             });
         });
         ui.end_row();
-        ui.label("Layout h justify:");
-        ui.checkbox(&mut settings.layout_h_justify, "");
+        ui.label("Scroll horizontal:");
+        ui.checkbox(&mut settings.scroll_horizontal, "");
         ui.end_row();
-        ui.label("Layout v justify:");
-        ui.checkbox(&mut settings.layout_v_justify, "");
+        ui.label("Scroll vertical:");
+        ui.checkbox(&mut settings.scroll_vertical, "");
         ui.end_row();
         ui.label("Show size:");
         ui.checkbox(&mut settings.show_size, "");
@@ -472,34 +453,6 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
                     "Aligned icons and labels",
                 );
             });
-        ui.end_row();
-
-        ui.label("fill horizontal");
-        ui.checkbox(&mut settings.fill_space_horizontal, "");
-        ui.end_row();
-
-        ui.label("fill vertical");
-        ui.checkbox(&mut settings.fill_space_vertical, "");
-        ui.end_row();
-
-        ui.label("max width");
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut settings.max_width_enabled, "");
-            ui.add_enabled(
-                settings.max_width_enabled,
-                egui::DragValue::new(&mut settings.max_width).range(0.0..=f32::INFINITY),
-            );
-        });
-        ui.end_row();
-
-        ui.label("max height");
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut settings.max_height_enabled, "");
-            ui.add_enabled(
-                settings.max_height_enabled,
-                egui::DragValue::new(&mut settings.max_height).range(0.0..=f32::INFINITY),
-            );
-        });
         ui.end_row();
 
         ui.label("min width");
