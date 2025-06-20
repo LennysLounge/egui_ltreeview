@@ -5,6 +5,7 @@ use egui::{Id, Ui};
 use crate::NodeId;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct DragState<NodeIdType> {
     pub dragged: Vec<NodeIdType>,
     pub simplified: Vec<NodeIdType>,
@@ -16,7 +17,7 @@ pub(crate) struct DragState<NodeIdType> {
 /// state of the directories.
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub struct TreeViewState<NodeIdType> {
+pub struct TreeViewState<NodeIdType: Eq + std::hash::Hash> {
     /// Id of the node that was selected.
     selected: Vec<NodeIdType>,
     /// The pivot element used for selection.
@@ -37,7 +38,7 @@ pub struct TreeViewState<NodeIdType> {
     dragged: Option<DragState<NodeIdType>>,
 }
 
-impl<NodeIdType> Default for TreeViewState<NodeIdType> {
+impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
     fn default() -> Self {
         Self {
             selected: Default::default(),

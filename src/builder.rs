@@ -34,7 +34,7 @@ struct IndentState<NodeIdType> {
 /// The builder used to construct the tree.
 ///
 /// Use this to add directories or leaves to the tree.
-pub struct TreeViewBuilder<'ui, NodeIdType> {
+pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     ui: &'ui mut Ui,
     state: &'ui mut TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,

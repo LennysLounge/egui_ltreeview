@@ -8,11 +8,7 @@ description = "A tree view widget for egui"
 repository = "https://github.com/LennysLounge/egui_ltreeview"
 categories = ["gui"]
 keywords = ["egui", "gui", "widget", "tree"]
-include = [
-    "src/**/*.rs",
-    "Cargo.toml",
-    "LICENSE"
-]
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
 
 [dependencies]
 egui = { version = "0.31" }
@@ -30,3 +26,7 @@ persistence = ["serde", "egui/persistence"]
 
 [profile.release]
 debug = 1
+
+[[example]]
+name = "persistence"
+required-features = ["persistence"]
