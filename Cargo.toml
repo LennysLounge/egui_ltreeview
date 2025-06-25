@@ -23,7 +23,7 @@ uuid = { version = "1", features = ["v4"] }
 
 [features]
 default = []
-persistence = ["serde", "egui/persistence"]
+persistence = ["serde", "egui/persistence", "uuid/serde"]
 
 [profile.release]
 debug = 1
