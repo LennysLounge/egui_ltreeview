@@ -114,8 +114,9 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
 
     pub(crate) fn prune_selection_to_single_id(&mut self) {
         if self.selected.len() > 1 {
-            let new_selection = self.selected[0].clone();
-            self.set_one_selected(new_selection);
+            if let Some(new_selection) = &self.selection_pivot {
+                self.set_one_selected(new_selection.clone());
+            }
         }
     }
     pub(crate) fn get_simplified_dragged(&self) -> Option<&Vec<NodeIdType>> {

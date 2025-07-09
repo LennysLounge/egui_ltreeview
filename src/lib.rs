@@ -459,7 +459,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         Output::SelectOneNode(id) => {
             ui_data.selected = true;
             state.set_one_selected(id.clone());
-            state.set_pivot(Some(id));
             state.set_cursor(None);
         }
         Output::ToggleSelection(id) => {
