@@ -225,9 +225,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
                 }));
             }
         }
-        // Create a selection action.
-        // TODO:
-        if false {
+
+        if ui_data.selected {
             actions.push(Action::SetSelected(state.selected().clone()));
         }
 
@@ -406,6 +405,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
         activate: None,
+        selected: false,
         space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
     };
     // Run the build tree view closure
@@ -457,15 +457,18 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             ui_data.activate = Some(vec![id]);
         }
         Output::SelectOneNode(id) => {
+            ui_data.selected = true;
             state.set_one_selected(id.clone());
             state.set_pivot(Some(id));
             state.set_cursor(None);
         }
         Output::ToggleSelection(id) => {
+            ui_data.selected = true;
             state.toggle_selected(&id);
             state.set_pivot(Some(id));
         }
         Output::ShiftSelect(ids) => {
+            ui_data.selected = true;
             state.set_selected_dont_change_pivot(ids);
         }
         Output::Select {
@@ -473,6 +476,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             pivot,
             cursor,
         } => {
+            ui_data.selected = true;
             state.set_selected(selection);
             state.set_pivot(Some(pivot));
             state.set_cursor(Some(cursor));
@@ -728,6 +732,7 @@ struct UiData<NodeIdType> {
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     activate: Option<Vec<NodeIdType>>,
+    selected: bool,
     space_used: Rect,
 }
 
