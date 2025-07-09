@@ -147,10 +147,6 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             )
         });
 
-        if !settings.allow_multi_select {
-            state.prune_selection_to_single_id();
-        }
-
         let (ui_data, tree_view_rect) = draw_foreground(
             ui,
             id,
@@ -159,6 +155,10 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             build_tree_view,
             &mut fallback_context_menu,
         );
+
+        if !settings.allow_multi_select {
+            state.prune_selection_to_single_id();
+        }
         // Remember the size of the tree for next frame.
         //state.size = response.rect.size();
 
