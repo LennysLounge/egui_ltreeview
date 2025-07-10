@@ -324,7 +324,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 /// The width of the tree view is the largest of either:
 /// * the remaining width of the ui using [`ui.available_size().x`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
 /// * the minimum width via [`TreeViewSettings::min_width`] or [`TreeView::min_width`]
-/// * the largest width of any node in the tree[^1]
+/// * the largest width of any node in the tree
 ///
 /// The height of the tree view is the largest of either:
 /// * the remaining height of the ui using [`ui.available_size().y`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
@@ -361,10 +361,6 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 ///         });
 /// });
 /// ```
-///
-/// [^1]: The tree view stores the width of the largest node it had to render in the [`TreeViewState`].
-/// The consequence of this is that the tree view might expand to a larget width than necessary
-/// even if all nodes in the tree are shorter.
 impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// Set the minimum width the tree can have.
     pub fn min_width(mut self, width: f32) -> Self {
@@ -391,8 +387,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     let interaction_rect = Rect::from_min_size(
         ui.cursor().min,
         ui.available_size()
-            .at_least(vec2(settings.min_width, settings.min_height))
-            .at_least(vec2(state.min_width, 0.0)),
+            .at_least(vec2(settings.min_width, settings.min_height)),
     );
 
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
@@ -427,9 +422,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     let tree_view_rect = ui_data.space_used.union(interaction_rect);
     ui.allocate_rect(tree_view_rect, Sense::hover());
-
-    // Remember width of the tree view for next frame
-    state.min_width = state.min_width.at_least(ui_data.space_used.width());
 
     // Do context menu
     if !ui_data.context_menu_was_open {
