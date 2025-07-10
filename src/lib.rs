@@ -324,7 +324,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 /// The width of the tree view is the largest of either:
 /// * the remaining width of the ui using [`ui.available_size().x`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
 /// * the minimum width via [`TreeViewSettings::min_width`] or [`TreeView::min_width`]
-/// * the largest width of any node in the tree
+/// * the largest width of any (currently visible) node in the tree
 ///
 /// The height of the tree view is the largest of either:
 /// * the remaining height of the ui using [`ui.available_size().y`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
