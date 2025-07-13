@@ -51,7 +51,7 @@ pub use builder::*;
 pub use node::*;
 pub use state::*;
 
-/// A node in the tree is identified by an id that must implement this trait.
+/// Identifies a node in the tree.
 ///
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
@@ -93,13 +93,12 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         }
     }
 
-    /// Start displaying the tree view.  
-    /// `NodeId` has to be thread safe for this to load the [`TreeViewState`] from egui data.
-    /// If your `NodeId` is not threadsafe consider creating a [`TreeViewState`] directly and displaying
+    /// Construct the tree view using the [`TreeViewBuilder`] by adding [nodes](`NodeBuilder`) to the tree.
+    ///
+    /// [`NodeId`] has to be thread safe for this to load the [`TreeViewState`] from egui data.
+    /// If your [`NodeId`] is not threadsafe consider creating a [`TreeViewState`] directly and displaying
     /// the the tree with [`TreeView::show_state`]
     ///
-    /// Construct the tree view using the [`TreeViewBuilder`] by adding
-    /// directories or leaves to the tree.
     pub fn show(
         self,
         ui: &mut Ui,
@@ -248,6 +247,23 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 ///
 /// # Customizing the look and feel of the tree view.
 ///
+/// To change the basic settings of the tree view you can use the [`TreeViewSettings`] to customize the tree view
+/// or use the convenience methods on [`TreeView`] directly.
+/// Check out [`TreeViewSettings`] for all settings possible on the tree view.
+/// ```
+/// TreeView::new(id)
+///     .with_settings(TreeViewSettings{
+///         override_indent: Some(15),
+///         fill_space_horizontal: true,
+///         fill_space_vertical: true,
+///         ..Default::default()
+///     })
+///     .max_height(200)
+///     .show(ui, |builder| {
+///     // build your tree here
+/// });
+/// ```
+///
 impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// Set the settings for this tree view with the [`TreeViewSettings`] struct.
     ///
@@ -299,9 +315,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 
     /// Add a fallback context menu to the tree.
     ///
-    /// If the node did not configure a context menu directly or
-    /// if multiple nodes were selected and right-clicked, then
-    /// this fallback context menu will be opened.
+    /// If the node did not configure a context menu, either through [`NodeBuilder`](`NodeBuilder::context_menu`) or [`NodeConfig`](`NodeConfig::has_context_menu`),
+    /// or if multiple nodes were selected and right-clicked, then this fallback context menu will be opened.
     ///
     /// A context menu in egui gets its size the first time it becomes visible.
     /// Since all nodes in the tree view share the same context menu you must set
@@ -314,58 +329,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         self.fallback_context_menu = Some(Box::new(context_menu));
         self
     }
-}
 
-///
-/// # Controlling the size of the tree view
-///
-/// The tree view deliberately does not offer many options to control its size, instead the size is mostly
-/// determined automatically.  
-/// The width of the tree view is the largest of either:
-/// * the remaining width of the ui using [`ui.available_size().x`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
-/// * the minimum width via [`TreeViewSettings::min_width`] or [`TreeView::min_width`]
-/// * the largest width of any node in the tree[^1]
-///
-/// The height of the tree view is the largest of either:
-/// * the remaining height of the ui using [`ui.available_size().y`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.available_size)
-/// * the minimum height via [`TreeViewSettings::min_height`] or [`TreeView::min_height`]
-/// * the combined hight of all nodes in the tree
-///
-/// # Suggestion: Wrap the tree view in a scroll area in a side panel
-/// In most cases a tree view is placed in a scroll area in a left hand side panel.
-/// ```
-/// egui::SidePanel::left(Id::new("tree view panel"))
-///     .resizable(true)
-///     .show(ctx, |ui| {
-///         ScrollArea::both().show(ui, |ui| {
-///             TreeView::new(Id::new("tree view"))::show(ui, |builder|{
-///                 // build your tree here
-///             })
-///         });
-///     });
-/// ```
-///
-/// # Sugestion: Control the maximum size of the tree view using a scrol panel and a group
-/// If you want to have the tree as a smaller part of a more complicated panel you can
-/// control the size using the scroll area and wrap it inside a group for better seperateion.
-/// ```
-/// ui.group(|ui| {
-///     ScrollArea::both()
-///         .max_height(200.0)
-///         .max_width(200.0)
-///         .show(ui, |ui| {
-///             TreeView::new(Id::new("tree view")).show(ui, |builder| {
-///                     // build your tree here
-///                 },
-///             );
-///         });
-/// });
-/// ```
-///
-/// [^1]: The tree view stores the width of the largest node it had to render in the [`TreeViewState`].
-/// The consequence of this is that the tree view might expand to a larget width than necessary
-/// even if all nodes in the tree are shorter.
-impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// Set the minimum width the tree can have.
     pub fn min_width(mut self, width: f32) -> Self {
         self.settings.min_width = width;

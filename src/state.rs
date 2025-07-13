@@ -102,7 +102,11 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         self.node_states.insert(id, open);
     }
 
-    pub(crate) fn is_open(&self, id: &NodeIdType) -> Option<bool> {
+    /// Get the open state of the node.
+    /// If this node is unknown to the tree view this will return `None`.
+    /// If the node is known to the tree view but still uses its default value
+    /// this method will also return `None`.
+    pub fn is_open(&self, id: &NodeIdType) -> Option<bool> {
         self.node_states.get(id).cloned()
     }
 

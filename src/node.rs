@@ -5,6 +5,8 @@ use egui::{
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
 
+/// Provides the configuration of a node in the tree.
+///
 /// Used to configure the appearance and behavior of a node in the tree.
 ///
 /// Implementing this trait is not necessary most of the time. The [`NodeBuilder`]
@@ -96,6 +98,9 @@ pub trait NodeConfig<NodeIdType> {
     fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {}
 
     /// Whether or not this node has a context menu.
+    /// 
+    /// If a node was right-clicked but did not configure a context menu then the
+    /// [`TreeView::fallback_context_menu`](`crate::TreeView::fallback_context_menu`) will be used.
     ///
     /// Default is false. Override to customize.
     fn has_context_menu(&self) -> bool {
@@ -109,6 +114,12 @@ pub trait NodeConfig<NodeIdType> {
 }
 
 /// A builder to build a node.
+///
+/// This implements [`NodeConfig`] trait and acts as a more convenient way to construct directories and leaf nodes
+/// to be added to the tree.
+///
+/// More settings for the tree as a whole are available in [`TreeView`](`crate::TreeView`)  and [`TreeViewSettings`]
+///
 pub struct NodeBuilder<'add_ui, NodeIdType> {
     id: NodeIdType,
     is_dir: bool,
@@ -166,7 +177,25 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     /// A directory that is flattened is not visible in the tree and cannot be navigated to.
     /// Its children appear like the children of the grand parent directory.
     ///
-    /// This node will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
+    /// For example, this file structure:
+    /// ```text
+    /// Foo
+    /// ├─ Alice
+    /// ├─ Bar
+    /// │  ├─ Bob
+    /// │  └─ Clair
+    /// └─ Denis
+    /// ```
+    /// looks like this when the `Bar` directory is flattened:
+    /// ```text
+    /// Foo
+    /// ├─ Alice
+    /// ├─ Bob
+    /// ├─ Clair
+    /// └─ Denis
+    /// ```
+    ///
+    /// This node (`Bar` in the example) will still appear in [`Action::SetSelected`](crate::Action) if it is part of a relevant
     /// multi selection process.
     /// This node will still be the target of any [`drag and drop action`](crate::Action) as if it was visible.
     pub fn flatten(mut self, flatten: bool) -> Self {
@@ -217,6 +246,16 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         self
     }
 
+    /// Add a label to this node from a `WidgetText`.
+    ///
+    /// If you want to add more than just text to your label use [`NodeBuilder::label_ui`].
+    pub fn label(self, text: impl Into<WidgetText> + 'add_ui) -> Self {
+        let widget_text = text.into();
+        self.label_ui(move |ui| {
+            ui.add(Label::new(widget_text.clone()).selectable(false));
+        })
+    }
+
     /// Add a label to this node.
     pub fn label_ui(
         mut self,
@@ -226,15 +265,10 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         self
     }
 
-    /// Add a label to this node from a `WidgetText`.
-    pub fn label(self, text: impl Into<WidgetText> + 'add_ui) -> Self {
-        let widget_text = text.into();
-        self.label_ui(move |ui| {
-            ui.add(Label::new(widget_text.clone()).selectable(false));
-        })
-    }
-
     /// Add a context menu to this node.
+    /// 
+    /// If a node was right-clicked but did not configure a context menu then the
+    /// [`TreeView::fallback_context_menu`](`crate::TreeView::fallback_context_menu`) will be used.
     ///
     /// A context menu in egui gets its size the first time it becomes visible.
     /// Since all nodes in the tree view share the same context menu you must set
