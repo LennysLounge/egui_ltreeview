@@ -90,7 +90,8 @@ pub fn make_table_of_contents(tokens: TokenStream) -> TokenStream {
                     .to_lowercase()
                     .replace(" ", "-")
                     .replace(",", "")
-                    .replace("\"", ""),
+                    .replace("\"", "")
+                    .replace("`", ""),
             );
             section_numbers.insert(heading_level, 0);
         }

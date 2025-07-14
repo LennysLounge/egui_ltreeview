@@ -133,9 +133,84 @@ ui.group(|ui| {
 });
 ```
 ## Customizing the tree view itself
+Todo, sorry.
+
 ## Customizing nodes
+Todo, sorry.
 
 # Performance
-## Implementing `NodeConfig` for better performance
+In some applications the tree view can contain an extremely large number of nodes. A file tree of a file system can easily exceed 100k nodes. Even in these extreme cases the tree view should still be reasonably performant.
+
+To achieve this goal, the widget does two primary things to improve performance. First, it only renders nodes that are visible. In a normal application there are roughly 100 nodes that can be visible at the same time (depending on scaling an resolution). Nodes that are not visible in the current viewport are not rendered and therefore add almost no performance overhead.
+
+Second, the widget tries to store as little state as possible. The [`TreeViewState`] stores the open state for directories in a map as well as some miscellaneous data. Reading from this map is the main contributor to the render time for extremely large trees.
+
+If the default performance of the tree view is not good enough there are two main things a user can do to improve the performance further. These strategies are discusses in the following sections.
+
 ## Culling hidden nodes
+The easiest strategy to improve performance is to add fewer nodes to the tree view. A file tree might have more than 100k nodes but almost none of them are ever going to be visible. Almost never is a very large tree going to have all its directories expanded and all its nodes potentially visible.
+Therefore we don't have to add nodes to the tree that we know are inside of a collapsed directory.
+
+The [`TreeViewBuilder::node`] and [`TreeViewBuilder::dir`] methods return the open state of the directory. If this directory is closed we can skip adding any of its children and directly call [`TreeViewBuilder::close_dir`].
+
+```
+TreeView::new(Id::new("tree view")).show(ui, |builder| {
+    let is_root_visible = builder.dir(0, "Root");
+    if is_root_visible{
+        builder.leaf(1, "Ava");
+        builder.leaf(2, "Benjamin");
+        builder.leaf(3, "Charlotte");
+    }
+    builder.close_dir();
+});
+```
+
+Using this technique we can render arbitrarily large trees as long as only a few directory are open (few is relative of course). The downside is that the render time is going to increase with the amount of nodes added to the tree view.
+
+## Implementing `NodeConfig` for better performance
+If a little bit more performance is required it is possible to implement the [`NodeConfig`] trait directly and skip the [`NodeBuilder`]. For lifetime reasons, the [`NodeBuilder`] places the [`label`](`NodeBuilder::label_ui`), [`closer`](`NodeBuilder::closer`), [`icon`](`NodeBuilder::icon`) and [`context menu`](`NodeBuilder`) callbacks into a `Box`. Usually this is so fast that you never have to think about it, however for very large trees these small delays add up.
+
+To avoid this overhead you can skip the [`NodeBuilder`] and directly implement the [`NodeConfig`] and pass it to [`TreeViewBuilder::node`]. From that point onwards, no boxing of closures is required and rendering the node config has as little overhead as a single method call.
+
+Custom icons, closers and context menus are optional in the [`NodeConfig`] trait and therefore have their own methods to signal if this feature is implemented. These methods must be implemented and return true to enable icons, closers and context menus.
+* If you want a custom icon then [`NodeConfig::has_custom_icon`] must return true
+* If you want a custom closer then [`NodeConfig::has_custom_closer`] must return true
+* If you want a custom context menu then [`NodeConfig::has_context_menu`] must return true
+
+This is an example implementation of the [`NodeConfig`] trait with a simple label:
+```
+TreeView::new(Id::new("tree view")).show(ui, |builder| {
+    builder.node(SimpleNode::new(0, "Root", true));
+    builder.node(SimpleNode::new(1, "Ava", false));
+    builder.node(SimpleNode::new(2, "Benjamin", false));
+    builder.node(SimpleNode::new(3, "Charlotte", false));
+    builder.close_dir();
+});
+
+struct SimpleNode<'a> {
+    id: i32,
+    label: &'a str,
+    is_dir: bool,
+}
+impl<'a> SimpleNode<'a> {
+    fn new(id: i32, label: &'a str, is_dir: bool) -> Self {
+        Self { id, label, is_dir }
+    }
+}
+impl<'a> NodeConfig<i32> for SimpleNode<'a> {
+    fn id(&self) -> &i32 {
+        &self.id
+    }
+
+    fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+
+    fn label(&mut self, ui: &mut egui::Ui) {
+        ui.add(Label::new(self.label).selectable(false));
+    }
+}
+```
+
+
 
