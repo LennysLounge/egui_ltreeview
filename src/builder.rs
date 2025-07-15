@@ -519,8 +519,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::KeyEnter { activatable_nodes } => {
                 if self.state.is_selected(&node.id) && node.activatable {
                     activatable_nodes.push(node.id.clone());
-                }
-                if self.state.is_selected(&node.id) && node.activatable {
                     *self.output = Output::ActivateSelection(activatable_nodes.clone());
                     *self.input = Input::None;
                 }
@@ -765,7 +763,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         match self.output {
             Output::ActivateSelection(selection) => {
                 if self.state.is_selected(&node.id) && node.activatable {
-                    selection.push(node.id.clone());
+                    if !selection.contains(&node.id) {
+                        selection.push(node.id.clone());
+                    }
                 }
             }
             Output::SetDraggedSelection(drag_state) => {

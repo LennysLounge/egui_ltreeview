@@ -64,6 +64,26 @@ fn init_state(state: &mut TreeViewState<Uuid>, node: &Node) {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
+            let dt = ui.input(|i| i.stable_dt);
+            ui.label(format!(
+                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:.3}ms, min: {:.3}ms, max: {:.3}ms",
+                dt * 1000.0,
+                (1.0 / dt).floor() as i32,
+                self.avg.as_secs_f64() * 1000.0,
+                self.min.as_secs_f64() * 1000.0,
+                self.max.as_secs_f64() * 1000.0
+            ));
+        });
+        if ctx.input(|i| i.viewport().close_requested()) {
+            println!(
+                "avg: {:.3}ms\tlow: {:.3}ms\thigh: {:.3}ms",
+                self.avg.as_secs_f64() * 1000.0,
+                self.min.as_secs_f64() * 1000.0,
+                self.max.as_secs_f64() * 1000.0
+            );
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 let start = Instant::now();
@@ -90,25 +110,6 @@ impl eframe::App for MyApp {
                 self.avg = self.times.iter().sum::<Duration>() / self.times.len() as u32;
             })
         });
-        egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
-            let dt = ui.input(|i| i.stable_dt);
-            ui.label(format!(
-                "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:.3}ms, min: {:.3}ms, max: {:.3}ms",
-                dt * 1000.0,
-                (1.0 / dt).floor() as i32,
-                self.avg.as_secs_f64() * 1000.0,
-                self.min.as_secs_f64() * 1000.0,
-                self.max.as_secs_f64() * 1000.0
-            ));
-        });
-        if ctx.input(|i| i.viewport().close_requested()) {
-            println!(
-                "avg: {:.3}ms\tlow: {:.3}ms\thigh: {:.3}ms",
-                self.avg.as_secs_f64() * 1000.0,
-                self.min.as_secs_f64() * 1000.0,
-                self.max.as_secs_f64() * 1000.0
-            );
-        }
     }
 }
 

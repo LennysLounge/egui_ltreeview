@@ -441,7 +441,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
                 .spacing()
                 .icon_rectangles(ui.available_rect_before_wrap());
 
-            let res = ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
+            let res = ui.scope_builder(UiBuilder::new().max_rect(big_rect), |ui| {
                 let is_hovered = interaction
                     .hover_pos()
                     .is_some_and(|pos| ui.max_rect().contains(pos));
@@ -475,7 +475,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
                 .spacing()
                 .icon_rectangles(ui.available_rect_before_wrap());
             Some(
-                ui.allocate_new_ui(UiBuilder::new().max_rect(big_rect), |ui| {
+                ui.scope_builder(UiBuilder::new().max_rect(big_rect), |ui| {
                     ui.set_min_size(big_rect.size());
                     self.config.icon(ui);
                 })
