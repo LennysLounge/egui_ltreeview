@@ -4,7 +4,7 @@
 //! This tree view widget implements all the common features of a tree view to get you
 //! up and running as fast as possible.
 //!
-//! ### Features:
+//! # Features:
 //! * Directory and leaf nodes
 //! * Node selection
 //! * Select multiple nodes
@@ -15,6 +15,7 @@
 //!
 //! # Crate feature flags
 //! * `persistence` Adds serde to [`NodeId`] and enabled the `persistence` feature of egui.
+//! * `doc` Adds additional documentation.
 //!
 //! # Quick start
 //! ```
@@ -31,13 +32,20 @@
 //! to the tree. The nodes of the tree must have a unique id which implements the [`NodeId`] trait.
 //!
 //! # Further information
-//!
-//! Visit the [`doc`] module documentation for further information about these topics:
-//!
-#![doc = make_table_of_contents::make_table_of_contents!("src/doc/doc.md", "doc/index.html")]
+#![cfg_attr(feature = "doc",
+    doc = "Visit the [`doc`] module documentation for further information about these topics:",
+    doc = "",
+    doc = make_table_of_contents::make_table_of_contents!("src/doc/doc.md", "doc/index.html")
+)]
+#![cfg_attr(
+    not(feature = "doc"),
+    doc = "Enable the `doc` feature for further information"
+)]
+
+#[cfg(feature = "doc")]
+pub mod doc;
 
 mod builder;
-pub mod doc;
 mod node;
 mod state;
 

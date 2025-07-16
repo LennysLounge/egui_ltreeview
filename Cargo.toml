@@ -10,11 +10,14 @@ categories = ["gui"]
 keywords = ["egui", "gui", "widget", "tree"]
 include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
 
+[package.metadata.docs.rs]
+features = ["doc"]
+
 [dependencies]
 egui = { version = "0.32" }
 indexmap = "2.9.0"
 serde = { version = "1", features = ["derive"], optional = true }
-make_table_of_contents = { path = "make_table_of_contents" }
+make_table_of_contents = { path = "make_table_of_contents", optional = true }
 
 [dev-dependencies]
 eframe = "0.32"
@@ -24,6 +27,7 @@ uuid = { version = "1", features = ["v4"] }
 [features]
 default = []
 persistence = ["dep:serde", "egui/persistence", "uuid/serde"]
+doc = ["dep:make_table_of_contents"]
 
 [[example]]
 name = "persistence"
