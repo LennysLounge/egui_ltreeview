@@ -105,32 +105,42 @@ The height of the tree view is the largest of either:
 **Suggestion: Wrap the tree view in a scroll area in a side panel**  
 In most cases a tree view is placed in a scroll area in a left hand side panel. This can be easily done like this:
 ```
+# use egui_ltreeview::*;
+# use egui::*;
+# fn ui(ctx: &mut egui::Context){
 egui::SidePanel::left(Id::new("tree view panel"))
     .resizable(true)
     .show(ctx, |ui| {
         ScrollArea::both().show(ui, |ui| {
-            TreeView::new(Id::new("tree view"))::show(ui, |builder|{
+            TreeView::new(Id::new("tree view")).show(ui, |builder|{
+                # builder.leaf(0, "");
                 // build your tree here
             })
         });
     });
+# }
 ```
 
 **Suggestion: Control the maximum size of the tree view using a scroll area and a group**  
 If you want to have the tree as a smaller part of a more complicated panel you can
 control the size using the scroll area and wrap it inside a group for better separation.
 ```
+# use egui_ltreeview::*;
+# use egui::*;
+# fn ui(ui: &mut egui::Ui){
 ui.group(|ui| {
     ScrollArea::both()
         .max_height(200.0)
         .max_width(200.0)
         .show(ui, |ui| {
             TreeView::new(Id::new("tree view")).show(ui, |builder| {
+                    # builder.leaf(0, "");
                     // build your tree here
                 },
             );
         });
 });
+# }
 ```
 ## Customizing the tree view itself
 Todo, sorry.
@@ -154,6 +164,9 @@ Therefore we don't have to add nodes to the tree that we know are inside of a co
 The [`TreeViewBuilder::node`] and [`TreeViewBuilder::dir`] methods return the open state of the directory. If this directory is closed we can skip adding any of its children and directly call [`TreeViewBuilder::close_dir`].
 
 ```
+# use egui_ltreeview::*;
+# use egui::*;
+# fn ui(ui: &mut egui::Ui){
 TreeView::new(Id::new("tree view")).show(ui, |builder| {
     let is_root_visible = builder.dir(0, "Root");
     if is_root_visible{
@@ -163,6 +176,7 @@ TreeView::new(Id::new("tree view")).show(ui, |builder| {
     }
     builder.close_dir();
 });
+# }
 ```
 
 Using this technique we can render arbitrarily large trees as long as only a few directory are open (few is relative of course). The downside is that the render time is going to increase with the amount of nodes added to the tree view.
@@ -179,6 +193,9 @@ Custom icons, closers and context menus are optional in the [`NodeConfig`] trait
 
 This is an example implementation of the [`NodeConfig`] trait with a simple label:
 ```
+# use egui_ltreeview::*;
+# use egui::*;
+# fn ui(ui: &mut egui::Ui){
 TreeView::new(Id::new("tree view")).show(ui, |builder| {
     builder.node(SimpleNode::new(0, "Root", true));
     builder.node(SimpleNode::new(1, "Ava", false));
@@ -186,6 +203,7 @@ TreeView::new(Id::new("tree view")).show(ui, |builder| {
     builder.node(SimpleNode::new(3, "Charlotte", false));
     builder.close_dir();
 });
+# }
 
 struct SimpleNode<'a> {
     id: i32,

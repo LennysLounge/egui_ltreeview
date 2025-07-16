@@ -51,10 +51,20 @@ pub fn make_table_of_contents(tokens: TokenStream) -> TokenStream {
     let mut toc = String::new();
     let reader = BufReader::new(file);
     let mut section_numbers = HashMap::<i32, i32>::new();
+    let mut code_block = false;
     for line in reader.lines() {
         let Ok(line) = line else {
             continue;
         };
+
+        if line.starts_with("```") {
+            code_block = !code_block;
+            continue;
+        }
+        if code_block{
+            continue;
+        }
+
 
         let mut chars = line.chars().peekable();
         let mut heading_level = 0;

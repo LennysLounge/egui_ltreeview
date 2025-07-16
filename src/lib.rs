@@ -19,6 +19,9 @@
 //!
 //! # Quick start
 //! ```
+//! # use egui_ltreeview::*;
+//! # use egui::*;
+//! # fn ui(ui: &mut egui::Ui){
 //! TreeView::new(Id::new("tree view")).show(ui, |builder| {
 //!     builder.dir(0, "Root");
 //!     builder.leaf(1, "Ava");
@@ -26,6 +29,7 @@
 //!     builder.leaf(3, "Charlotte");
 //!     builder.close_dir();
 //! });
+//! # }
 //! ```
 //! Create a new [`TreeView`] with its unique id and show it for the current ui.
 //! Use the [`builder`](TreeViewBuilder) in the callback to add directories and leaves
@@ -246,17 +250,19 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 /// or use the convenience methods on [`TreeView`] directly.
 /// Check out [`TreeViewSettings`] for all settings possible on the tree view.
 /// ```
+/// # use egui_ltreeview::*;
+/// # fn ui(ui: &mut egui::Ui, id: egui::Id){
 /// TreeView::new(id)
 ///     .with_settings(TreeViewSettings{
-///         override_indent: Some(15),
-///         fill_space_horizontal: true,
-///         fill_space_vertical: true,
+///         override_indent: Some(15.0),
 ///         ..Default::default()
 ///     })
-///     .max_height(200)
+///     .min_height(200.0)
 ///     .show(ui, |builder| {
-///     // build your tree here
+///         # builder.leaf(0, "");
+///         // build your tree here
 /// });
+/// # }
 /// ```
 ///
 impl<NodeIdType: NodeId> TreeView<NodeIdType> {
