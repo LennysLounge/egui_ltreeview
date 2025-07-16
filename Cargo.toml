@@ -15,7 +15,6 @@ features = ["doc"]
 
 [dependencies]
 egui = { version = "0.32" }
-indexmap = "2.9.0"
 serde = { version = "1", features = ["derive"], optional = true }
 make_table_of_contents = { path = "make_table_of_contents", optional = true }
 
