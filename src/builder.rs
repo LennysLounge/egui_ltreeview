@@ -105,10 +105,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub fn close_dir_in(&mut self, child_count: usize) {
         if child_count == 0 {
             self.close_dir();
-        } else {
-            if let Some(dir_state) = self.stack.last_mut() {
-                dir_state.child_count = Some(child_count);
-            }
+        } else if let Some(dir_state) = self.stack.last_mut() {
+            dir_state.child_count = Some(child_count);
         }
     }
 
@@ -151,7 +149,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .clamp(pos2(top.x, self.ui_data.space_used.bottom()));
 
         match self.settings.indent_hint_style {
-            IndentHintStyle::None => return,
+            IndentHintStyle::None => (),
             IndentHintStyle::Line => {
                 self.ui.painter().line_segment(
                     [top, bottom],
@@ -259,7 +257,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         node_is_open
     }
 
-    fn node_structually_visible<'builder, 'add_ui>(&mut self, mut node: Node<NodeIdType>) -> bool {
+    fn node_structually_visible(&mut self, mut node: Node<NodeIdType>) -> bool {
         let row_rect = Rect::from_min_size(
             self.ui_data.space_used.left_bottom(),
             vec2(
@@ -273,11 +271,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             if node_width > self.ui_data.space_used.width() {
                 self.ui_data.space_used.set_width(node_width);
             }
-        } else {
-            if self.ui_data.space_used.bottom() > self.ui.clip_rect().bottom() {
-                if let Some(indent) = self.indents.last_mut() {
-                    indent.extends_below_clip_rect = true;
-                }
+        } else if self.ui_data.space_used.bottom() > self.ui.clip_rect().bottom() {
+            if let Some(indent) = self.indents.last_mut() {
+                indent.extends_below_clip_rect = true;
             }
         }
         *self.ui_data.space_used.bottom_mut() += row_rect.height();
@@ -403,8 +399,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 .push(closer.or(icon).unwrap_or(label).left_center());
         }
 
-        let node_width = label.right() - outer_rect.left();
-        node_width
+        label.right() - outer_rect.left()
     }
 
     fn do_input_output(&mut self, node: &Node<NodeIdType>, row_rect: &Rect, closer: Option<&Rect>) {
@@ -418,7 +413,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 if self.state.is_selected(&node.id) && !current_branch_dragged {
                     simplified_dragged.push(node.id.clone());
                 }
-                if rect_contains_visually(&row_rect, &pos) {
+                if rect_contains_visually(row_rect, pos) {
                     if self.state.is_selected(&node.id) {
                         *self.output = Output::SetDraggedSelection(DragState {
                             dragged: self.state.get_selection().clone(),
@@ -433,7 +428,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 }
             }
             Input::Dragged(pos) => {
-                if rect_contains_visually(&row_rect, &pos)
+                if rect_contains_visually(row_rect, pos)
                     && !self.current_branch_dragged()
                     && !self.state.is_dragged(&node.id)
                 {
@@ -455,13 +450,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 shift_click_nodes,
             } => 'block: {
                 // Closer click
-                if closer.is_some_and(|closer| rect_contains_visually(&closer, &pos)) {
+                if closer.is_some_and(|closer| rect_contains_visually(closer, pos)) {
                     self.state.set_openness(node.id.clone(), !node.is_open);
                     *self.input = Input::None;
                     break 'block;
                 }
 
-                let row_clicked = rect_contains_visually(&row_rect, &pos);
+                let row_clicked = rect_contains_visually(row_rect, pos);
                 let double_click = row_clicked && *double && self.state.was_clicked_last(&node.id);
                 if row_clicked {
                     self.state.set_last_clicked(&node.id);
@@ -503,16 +498,14 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         *self.input = Input::None;
                         break 'block;
                     }
-                } else {
-                    if row_clicked {
-                        *self.output = Output::SelectOneNode(node.id.clone());
-                        *self.input = Input::None;
-                        break 'block;
-                    }
+                } else if row_clicked {
+                    *self.output = Output::SelectOneNode(node.id.clone());
+                    *self.input = Input::None;
+                    break 'block;
                 }
             }
             Input::SecondaryClick(pos) => {
-                if rect_contains_visually(&row_rect, &pos) {
+                if rect_contains_visually(row_rect, pos) {
                     *self.output = Output::SetSecondaryClicked(node.id.clone());
                 }
             }
@@ -535,10 +528,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if self.state.selected_count() == 1 {
                         if node.is_dir && node.is_open {
                             self.state.set_openness(node.id.clone(), !node.is_open);
-                        } else {
-                            if let Some(dir_state) = self.stack.last() {
-                                *self.output = Output::SelectOneNode(dir_state.id.clone());
-                            }
+                        } else if let Some(dir_state) = self.stack.last() {
+                            *self.output = Output::SelectOneNode(dir_state.id.clone());
                         }
                     }
                 }
@@ -547,18 +538,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 if *select_next {
                     *self.output = Output::SelectOneNode(node.id.clone());
                     *self.input = Input::None;
-                } else {
-                    if self.state.is_selected(&node.id) {
-                        if self.state.selected_count() == 1 {
-                            if node.is_dir && !node.is_open {
-                                self.state.set_openness(node.id.clone(), !node.is_open);
-                                *self.input = Input::None;
-                            } else {
-                                *select_next = true;
-                            }
-                        } else {
+                } else if self.state.is_selected(&node.id) {
+                    if self.state.selected_count() == 1 {
+                        if node.is_dir && !node.is_open {
+                            self.state.set_openness(node.id.clone(), !node.is_open);
                             *self.input = Input::None;
+                        } else {
+                            *select_next = true;
                         }
+                    } else {
+                        *self.input = Input::None;
                     }
                 }
             }
@@ -762,10 +751,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         match self.output {
             Output::ActivateSelection(selection) => {
-                if self.state.is_selected(&node.id) && node.activatable {
-                    if !selection.contains(&node.id) {
-                        selection.push(node.id.clone());
-                    }
+                if self.state.is_selected(&node.id)
+                    && node.activatable
+                    && !selection.contains(&node.id)
+                {
+                    selection.push(node.id.clone());
                 }
             }
             Output::SetDraggedSelection(drag_state) => {

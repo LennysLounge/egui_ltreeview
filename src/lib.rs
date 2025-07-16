@@ -191,10 +191,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
         if ui_data.interaction.dragged() {
             if let Some((drop_id, position)) = &ui_data.drop_target {
                 actions.push(Action::Drag(DragAndDrop {
-                    source: state
-                        .get_simplified_dragged()
-                        .map(|o| o.clone())
-                        .unwrap_or(Vec::new()),
+                    source: state.get_simplified_dragged().cloned().unwrap_or_default(),
                     target: drop_id.clone(),
                     position: position.clone(),
                     drop_marker_idx: ui_data.drop_marker_idx,
@@ -203,20 +200,14 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             if let Some(position) = ui.ctx().pointer_latest_pos() {
                 actions.push(Action::DragExternal(DragAndDropExternal {
                     position,
-                    source: state
-                        .get_simplified_dragged()
-                        .map(|o| o.clone())
-                        .unwrap_or(Vec::new()),
+                    source: state.get_simplified_dragged().cloned().unwrap_or_default(),
                 }));
             }
         }
         if ui_data.interaction.drag_stopped() {
             if let Some((drop_id, position)) = ui_data.drop_target {
                 actions.push(Action::Move(DragAndDrop {
-                    source: state
-                        .get_simplified_dragged()
-                        .map(|o| o.clone())
-                        .unwrap_or(Vec::new()),
+                    source: state.get_simplified_dragged().cloned().unwrap_or_default(),
                     target: drop_id,
                     position,
                     drop_marker_idx: ui_data.drop_marker_idx,
@@ -225,10 +216,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
             if let Some(position) = ui.ctx().pointer_latest_pos() {
                 actions.push(Action::MoveExternal(DragAndDropExternal {
                     position,
-                    source: state
-                        .get_simplified_dragged()
-                        .map(|o| o.clone())
-                        .unwrap_or(Vec::new()),
+                    source: state.get_simplified_dragged().cloned().unwrap_or_default(),
                 }));
             }
         }
@@ -350,7 +338,8 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     }
 }
 
-fn draw_foreground<'context_menu, NodeIdType: NodeId>(
+#[allow(clippy::type_complexity)]
+fn draw_foreground<NodeIdType: NodeId>(
     ui: &mut Ui,
     id: Id,
     settings: &TreeViewSettings,
