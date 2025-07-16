@@ -257,16 +257,16 @@ fn show_dir(
             ui.separator();
             if ui.button("delete").clicked() {
                 actions.push(ContextMenuActions::Delete(dir.id));
-                ui.close_menu();
+                ui.close();
             }
             ui.separator();
             if ui.button("new file").clicked() {
                 actions.push(ContextMenuActions::AddLeaf(dir.id, DirPosition::Last));
-                ui.close_menu();
+                ui.close();
             }
             if ui.button("new directory").clicked() {
                 actions.push(ContextMenuActions::AddDir(dir.id, DirPosition::Last));
-                ui.close_menu();
+                ui.close();
             }
         });
     if dir.icon {
@@ -321,7 +321,7 @@ fn show_file(
             ui.label(&file.name);
             if ui.button("delete").clicked() {
                 actions.push(ContextMenuActions::Delete(file.id));
-                ui.close_menu();
+                ui.close();
             }
             ui.separator();
             if ui.button("new file").clicked() {
@@ -329,14 +329,14 @@ fn show_file(
                     parent_node,
                     DirPosition::After(file.id),
                 ));
-                ui.close_menu();
+                ui.close();
             }
             if ui.button("new directory").clicked() {
                 actions.push(ContextMenuActions::AddDir(
                     parent_node,
                     DirPosition::After(file.id),
                 ));
-                ui.close_menu();
+                ui.close();
             }
         });
     if file.icon {
