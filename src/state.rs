@@ -28,6 +28,8 @@ pub struct TreeViewState<NodeIdType: Eq + std::hash::Hash> {
     pub(crate) secondary_selection: Option<NodeIdType>,
     /// The minimum width of the tree view.
     pub(crate) min_width: f32,
+    /// The hight of the tree view last frame.
+    pub(crate) last_height: f32,
     /// Open states of the dirs in this tree.
     node_states: HashMap<NodeIdType, bool>,
     /// Wether or not the context menu was open last frame.
@@ -47,6 +49,7 @@ impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
             dragged: Default::default(),
             secondary_selection: Default::default(),
             min_width: 0.0,
+            last_height: 0.0,
             node_states: HashMap::new(),
             context_menu_was_open: false,
             last_clicked_node: None,

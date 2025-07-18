@@ -358,7 +358,7 @@ fn draw_foreground<NodeIdType: NodeId>(
         ui.cursor().min,
         ui.available_size()
             .at_least(vec2(settings.min_width, settings.min_height))
-            .at_least(vec2(state.min_width, 0.0)),
+            .at_least(vec2(state.min_width, state.last_height)),
     );
 
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
@@ -397,6 +397,7 @@ fn draw_foreground<NodeIdType: NodeId>(
 
     // Remember width of the tree view for next frame
     state.min_width = state.min_width.at_least(ui_data.space_used.width());
+    state.last_height = tree_view_rect.height();
 
     // Do context menu
     if !ui_data.context_menu_was_open {
