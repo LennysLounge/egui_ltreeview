@@ -424,15 +424,21 @@ fn draw_foreground<NodeIdType: NodeId>(
         Output::ActivateThis(id) => {
             ui_data.activate = Some(vec![id]);
         }
-        Output::SelectOneNode(id) => {
+        Output::SelectOneNode(id, scroll_to_rect) => {
             ui_data.selected = true;
             state.set_one_selected(id.clone());
             state.set_cursor(None);
+            if let Some(scroll_to_rect) = scroll_to_rect {
+                ui.scroll_to_rect(scroll_to_rect, None);
+            }
         }
-        Output::ToggleSelection(id) => {
+        Output::ToggleSelection(id, scroll_to_rect) => {
             ui_data.selected = true;
             state.toggle_selected(&id);
             state.set_pivot(Some(id));
+            if let Some(scroll_to_rect) = scroll_to_rect {
+                ui.scroll_to_rect(scroll_to_rect, None);
+            }
         }
         Output::ShiftSelect(ids) => {
             ui_data.selected = true;
@@ -442,14 +448,17 @@ fn draw_foreground<NodeIdType: NodeId>(
             selection,
             pivot,
             cursor,
+            scroll_to_rect,
         } => {
             ui_data.selected = true;
             state.set_selected(selection);
             state.set_pivot(Some(pivot));
             state.set_cursor(Some(cursor));
+            ui.scroll_to_rect(scroll_to_rect, None);
         }
-        Output::SetCursor(id) => {
+        Output::SetCursor(id, scroll_to_rect) => {
             state.set_cursor(Some(id));
+            ui.scroll_to_rect(scroll_to_rect, None);
         }
         Output::None => (),
     }
@@ -734,15 +743,15 @@ enum Input<NodeIdType> {
         select_next: bool,
     },
     KeyUp {
-        previous_node: Option<NodeIdType>,
+        previous_node: Option<(NodeIdType, Rect)>,
     },
     KeyUpAndCommand {
-        previous_node: Option<NodeIdType>,
+        previous_node: Option<(NodeIdType, Rect)>,
     },
     KeyUpAndShift {
-        previous_node: Option<NodeIdType>,
+        previous_node: Option<(NodeIdType, Rect)>,
         nodes_to_select: Option<Vec<NodeIdType>>,
-        next_cursor: Option<NodeIdType>,
+        next_cursor: Option<(NodeIdType, Rect)>,
     },
     KeyDown(bool),
     KeyDownAndCommand {
@@ -750,7 +759,7 @@ enum Input<NodeIdType> {
     },
     KeyDownAndShift {
         nodes_to_select: Option<Vec<NodeIdType>>,
-        next_cursor: Option<NodeIdType>,
+        next_cursor: Option<(NodeIdType, Rect)>,
         is_next: bool,
     },
     KeySpace,
@@ -765,15 +774,16 @@ enum Output<NodeIdType> {
     SetSecondaryClicked(NodeIdType),
     ActivateSelection(Vec<NodeIdType>),
     ActivateThis(NodeIdType),
-    SelectOneNode(NodeIdType),
+    SelectOneNode(NodeIdType, Option<Rect>),
     ShiftSelect(Vec<NodeIdType>),
-    ToggleSelection(NodeIdType),
+    ToggleSelection(NodeIdType, Option<Rect>),
     Select {
         selection: Vec<NodeIdType>,
         pivot: NodeIdType,
         cursor: NodeIdType,
+        scroll_to_rect: Rect,
     },
-    SetCursor(NodeIdType),
+    SetCursor(NodeIdType, Rect),
     None,
 }
 
