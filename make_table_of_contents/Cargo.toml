@@ -2,6 +2,10 @@
 name = "make_table_of_contents"
 version = "0.1.0"
 edition = "2024"
+authors = ["Leonard Schüngel <schuengel.leonard@gmail.com>"]
+license = "MIT"
+description = "A helper macro to generate table of contents from a markdown file for rust doc"
+repository = "https://github.com/LennysLounge/egui_ltreeview/tree/main/make_table_of_contents"
 
 [dependencies]
 quote = "1.0.40"
