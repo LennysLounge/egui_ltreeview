@@ -8,7 +8,7 @@ description = "A tree view widget for egui"
 repository = "https://github.com/LennysLounge/egui_ltreeview"
 categories = ["gui"]
 keywords = ["egui", "gui", "widget", "tree"]
-include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "src/doc/mod.md"]
 
 [package.metadata.docs.rs]
 features = ["doc"]
