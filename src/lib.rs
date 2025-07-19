@@ -793,6 +793,11 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeI
     let modifiers = ui.input(|i| i.modifiers);
 
     if interaction.context_menu_opened() {
+        if interaction.secondary_clicked() {
+            return Input::SecondaryClick(
+                pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
+            );
+        }
         return Input::None;
     }
 

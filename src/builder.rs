@@ -373,11 +373,14 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
 
         // Show the context menu.
-        let was_right_clicked = self.state.is_secondary_selected(&node.id)
-            || matches!(self.output, Output::SetSecondaryClicked(id) if id == &node.id);
         let was_only_target = !self.state.is_selected(&node.id)
             || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
-        if was_right_clicked && was_only_target {
+        let should_show_context_menu = match self.output {
+            Output::SetSecondaryClicked(id) if id == &node.id => true,
+            Output::SetSecondaryClicked(_) => false,
+            _ => self.state.is_secondary_selected(&node.id),
+        };
+        if should_show_context_menu && was_only_target && !self.ui_data.context_menu_was_open {
             self.ui_data.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
         }
 
@@ -778,6 +781,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::SecondaryClick(pos) => {
                 if rect_contains_visually(row_rect, pos) {
                     *self.output = Output::SetSecondaryClicked(node.id.clone());
+                    *self.input = Input::None;
                 }
             }
             Input::KeyLeft => (),
