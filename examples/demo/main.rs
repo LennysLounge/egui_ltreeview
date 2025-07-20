@@ -1,7 +1,7 @@
 use std::{env, path::Path};
 
 use egui::{Id, Label, Modal, ScrollArea, ThemePreference};
-use egui_ltreeview::{NodeConfig, RowLayout, TreeView, TreeViewBuilder};
+use egui_ltreeview::{NodeConfig, RowLayout, TreeView, TreeViewBuilder, TreeViewState};
 use uuid::Uuid;
 
 fn main() -> Result<(), eframe::Error> {
@@ -12,7 +12,7 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
     eframe::run_native(
-        "Egui_ltreeview simple example",
+        "Project files",
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_zoom_factor(2.0);
@@ -24,6 +24,7 @@ fn main() -> Result<(), eframe::Error> {
                 tree: build_tree(Path::new("../egui_ltreeview")),
                 add_dir_at: None,
                 dir_name: String::from("New Dir"),
+                tree_view: TreeViewState::default(),
             }))
         }),
     )
@@ -89,12 +90,14 @@ struct MyApp {
     tree: Node,
     add_dir_at: Option<Uuid>,
     dir_name: String,
+    tree_view: TreeViewState<Uuid>,
 }
 
 struct TreeNode<'a> {
     node: &'a Node,
     default_open: bool,
     add_dir_at: &'a mut bool,
+    delete: &'a mut Option<Uuid>,
 }
 impl<'a> NodeConfig<Uuid> for TreeNode<'a> {
     fn id(&self) -> &Uuid {
@@ -189,7 +192,9 @@ impl<'a> NodeConfig<Uuid> for TreeNode<'a> {
         _ = ui.button("Copy relative path");
         ui.separator();
         _ = ui.button("Rename");
-        _ = ui.button("Delete");
+        if ui.button("Delete").clicked() {
+            *self.delete = Some(*self.node.id());
+        }
     }
 }
 
@@ -209,8 +214,10 @@ impl eframe::App for MyApp {
                                 name: self.dir_name.clone(),
                                 content: Vec::new(),
                             };
+                            self.tree_view.set_openness(*node.id(), true);
                             insert_nodes(&mut self.tree, vec![node], &target, true);
                             self.add_dir_at = None;
+                            self.dir_name = String::from("New Dir");
                         }
                     },
                 );
@@ -218,6 +225,7 @@ impl eframe::App for MyApp {
         }
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut delete_nodes = Vec::new();
+            let mut delete_this = None;
             let output = ScrollArea::both().show(ui, |ui| {
                 TreeView::new(ui.make_persistent_id("Names tree view"))
                     .row_layout(RowLayout::CompactAlignedLabels)
@@ -232,12 +240,21 @@ impl eframe::App for MyApp {
                             delete_nodes = nodes.clone();
                         };
                     })
-                    .show(ui, |builder| {
-                        show_node(builder, &self.tree, true, &mut self.add_dir_at);
+                    .show_state(ui, &mut self.tree_view, |builder| {
+                        show_node(
+                            builder,
+                            &self.tree,
+                            true,
+                            &mut self.add_dir_at,
+                            &mut delete_this,
+                        );
                     })
             });
             for node_to_delete in delete_nodes {
                 remove_node(&mut self.tree, &node_to_delete);
+            }
+            if let Some(uuid) = delete_this {
+                remove_node(&mut self.tree, &uuid);
             }
             let (_tree_response, actions) = output.inner;
             for action in actions {
@@ -264,12 +281,14 @@ fn show_node(
     node: &Node,
     first: bool,
     add_dir_at: &mut Option<Uuid>,
+    delete: &mut Option<Uuid>,
 ) {
     let mut add_dir = false;
     builder.node(TreeNode {
         node,
         default_open: first,
         add_dir_at: &mut add_dir,
+        delete,
     });
     if add_dir {
         *add_dir_at = builder.parent_id().cloned();
@@ -279,7 +298,7 @@ fn show_node(
             builder.close_dir_in(content.len());
             content
                 .iter()
-                .for_each(|n| show_node(builder, n, false, add_dir_at));
+                .for_each(|n| show_node(builder, n, false, add_dir_at, delete));
         }
         Node::File { .. } => (),
     }
