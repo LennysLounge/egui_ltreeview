@@ -397,7 +397,7 @@ fn draw_foreground<NodeIdType: NodeId>(
 
     // Remember width of the tree view for next frame
     state.min_width = state.min_width.at_least(ui_data.space_used.width());
-    state.last_height = tree_view_rect.height();
+    state.last_height = ui_data.space_used.height();
 
     // Do context menu
     if !ui_data.context_menu_was_open {
