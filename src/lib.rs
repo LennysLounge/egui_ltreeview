@@ -88,14 +88,14 @@ impl<T> NodeId for T where
 }
 
 /// A tree view widget.
-pub struct TreeView<NodeIdType> {
+pub struct TreeView<'context_menu, NodeIdType> {
     id: Id,
     settings: TreeViewSettings,
     #[allow(clippy::type_complexity)]
-    fallback_context_menu: Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>)>>,
+    fallback_context_menu: Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
 }
 
-impl<NodeIdType: NodeId> TreeView<NodeIdType> {
+impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     /// Create a tree view from an unique id.
     pub fn new(id: Id) -> Self {
         Self {
@@ -265,7 +265,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 /// # }
 /// ```
 ///
-impl<NodeIdType: NodeId> TreeView<NodeIdType> {
+impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     /// Set the settings for this tree view with the [`TreeViewSettings`] struct.
     ///
     /// This is maybe more convienient to you than setting each setting individually.
@@ -325,7 +325,7 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
     /// sized context menus.
     pub fn fallback_context_menu(
         mut self,
-        context_menu: impl FnOnce(&mut Ui, &Vec<NodeIdType>) + 'static,
+        context_menu: impl FnOnce(&mut Ui, &Vec<NodeIdType>) + 'context_menu,
     ) -> Self {
         self.fallback_context_menu = Some(Box::new(context_menu));
         self
@@ -345,13 +345,13 @@ impl<NodeIdType: NodeId> TreeView<NodeIdType> {
 }
 
 #[allow(clippy::type_complexity)]
-fn draw_foreground<NodeIdType: NodeId>(
+fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     ui: &mut Ui,
     id: Id,
     settings: &TreeViewSettings,
     state: &mut TreeViewState<NodeIdType>,
     build_tree_view: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
-    fall_back_context_menu: &mut Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>)>>,
+    fall_back_context_menu: &mut Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
 ) -> (UiData<NodeIdType>, Rect) {
     // Calculate the desired size of the tree view widget.
     let interaction_rect = Rect::from_min_size(
