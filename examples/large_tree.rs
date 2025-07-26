@@ -3,7 +3,7 @@ use std::{
     u64,
 };
 
-use egui::{Label, ThemePreference};
+use egui::{Label, NumExt, ThemePreference};
 use egui_ltreeview::{NodeConfig, TreeView, TreeViewBuilder, TreeViewState};
 use uuid::Uuid;
 
@@ -37,7 +37,7 @@ struct MyApp {
 }
 impl MyApp {
     fn new() -> Self {
-        let tree = build_tree(200_000, 11);
+        let tree = build_tree(100_000, 1, 2);
         let mut state = TreeViewState::default();
         init_state(&mut state, &tree);
         MyApp {
@@ -114,38 +114,24 @@ impl eframe::App for MyApp {
 }
 
 fn build_node_once(node: &Node, builder: &mut TreeViewBuilder<Uuid>) {
-    let mut stack = vec![node];
-    while let Some(elem) = stack.pop() {
-        match elem {
-            Node::Directory { id, children, name } => {
-                //builder.node(NodeBuilder::dir(*id).label(name).default_open(true));
-                builder.node(DefaultNode {
-                    id,
-                    name,
-                    is_dir: true,
-                });
-                builder.close_dir_in(children.len());
-                for child in children {
-                    stack.push(child)
-                }
-                // let open = builder.node(NodeBuilder::dir(*id).label(name).default_open(false));
-                // if open {
-                //     builder.close_dir_in(children.len());
-                //     for child in children {
-                //         stack.push(child)
-                //     }
-                // } else {
-                //     builder.close_dir();
-                // }
+    match node {
+        Node::Directory { id, children, name } => {
+            builder.node(DefaultNode {
+                id,
+                name,
+                is_dir: true,
+            });
+            builder.close_dir_in(children.len());
+            for child in children {
+                build_node_once(child, builder);
             }
-            Node::Leaf { id, name } => {
-                //builder.node(NodeBuilder::leaf(*id).label(name));
-                builder.node(DefaultNode {
-                    id,
-                    name,
-                    is_dir: false,
-                });
-            }
+        }
+        Node::Leaf { id, name } => {
+            builder.node(DefaultNode {
+                id,
+                name,
+                is_dir: false,
+            });
         }
     }
 }
@@ -163,81 +149,97 @@ enum Node {
     },
 }
 
-fn build_tree(node_count: u32, max_depth: u32) -> Node {
-    let (width, max_nodes) = get_tree_width(node_count, max_depth);
-    println!(
-        "max depth of {} and a width of {} gives {} total possible nodes",
-        max_depth, width, max_nodes
+fn build_tree(max_node_count: u32, files_per_dir: u32, dirs_per_dir: u32) -> Node {
+    let mut root_nodes = Vec::new();
+    let mut node_count = 0;
+    add_dir(
+        &mut root_nodes,
+        max_node_count - node_count,
+        &mut node_count,
+        files_per_dir,
+        dirs_per_dir,
+        0,
     );
-    let (node, _) = build_sub_tree(node_count, max_depth, width);
+    let node = Node::Directory {
+        id: Uuid::new_v4(),
+        name: "Root".to_string(),
+        children: root_nodes,
+    };
     let counts = count_nodes(&node);
     println!("{} total nodes produced", counts.0 + counts.1);
-    println!("dirs: {}, leafs: {}", counts.0, counts.1);
+    println!(
+        "dirs: {}, leafs: {}, max depth: {}",
+        counts.0, counts.1, counts.2
+    );
     node
 }
-fn build_sub_tree(node_count: u32, max_depth: u32, max_width: u32) -> (Node, u32) {
-    if max_depth == 0 {
-        let id = Uuid::new_v4();
-        return (
-            Node::Leaf {
-                id,
-                name: format!("{node_count}"),
-            },
-            1,
+fn add_dir(
+    parent: &mut Vec<Node>,
+    max_node_count: u32,
+    node_count: &mut u32,
+    files_per_dir: u32,
+    dirs_per_dir: u32,
+    depth: i32,
+) {
+    //println!("depth: {depth} start, node_count: {}", *node_count);
+    for _ in 0..files_per_dir {
+        if *node_count >= max_node_count {
+            return;
+        }
+        parent.push(Node::Leaf {
+            id: Uuid::new_v4(),
+            name: format!("File {}", *node_count),
+        });
+        *node_count += 1;
+    }
+
+    for dirs_to_be_added in (1..=dirs_per_dir).rev() {
+        if *node_count >= max_node_count {
+            return;
+        }
+        //println!("depth: {depth} dirs to be added: {dirs_to_be_added}");
+        let nodes_remaining = max_node_count - *node_count;
+        //println!("depth: {depth} nodes_to_be_added: {nodes_remaining}");
+        let nodes_per_dir =
+            (nodes_remaining.at_least(dirs_to_be_added) - dirs_to_be_added) / dirs_to_be_added;
+        //println!("depth: {depth} nodes per dir: {nodes_per_dir}");
+
+        let mut children = Vec::new();
+        let name = format!("Dir {} nodes inside: {}", *node_count, nodes_per_dir);
+        *node_count += 1;
+
+        add_dir(
+            &mut children,
+            *node_count + nodes_per_dir,
+            node_count,
+            files_per_dir,
+            dirs_per_dir,
+            depth + 1,
         );
-    }
 
-    let mut child_nodes = Vec::new();
-    let mut nodes_made = 1;
-    for _ in 0..max_width {
-        if node_count - nodes_made > 0 {
-            let (node, new_nodes_made) =
-                build_sub_tree(node_count - nodes_made, max_depth - 1, max_width);
-            nodes_made += new_nodes_made;
-            child_nodes.push(node);
-        }
+        parent.push(Node::Directory {
+            id: Uuid::new_v4(),
+            children,
+            name,
+        });
     }
-
-    let id = Uuid::new_v4();
-    (
-        Node::Directory {
-            id,
-            children: child_nodes,
-            name: format!("{node_count}"),
-        },
-        nodes_made,
-    )
 }
 
-fn get_tree_width(node_count: u32, max_depth: u32) -> (u32, u32) {
-    for width in 2..100 {
-        let mut total_count = width;
-        let mut prev_width = width;
-        for d in 0..max_depth {
-            prev_width = prev_width * width;
-            total_count += prev_width;
-            println!("total count {total_count} width: {width}, depth: {d}");
-            if total_count > node_count {
-                return (width, total_count);
-            }
-        }
-    }
-    panic!("dude what the hell")
-}
-
-fn count_nodes(node: &Node) -> (i32, i32) {
+fn count_nodes(node: &Node) -> (i32, i32, i32) {
     match node {
         Node::Directory { children, .. } => {
             let mut dirs = 1;
             let mut leafs = 0;
+            let mut max_depth = 0;
             for child in children {
                 let counts = count_nodes(child);
                 dirs += counts.0;
                 leafs += counts.1;
+                max_depth = max_depth.max(counts.2);
             }
-            (dirs, leafs)
+            (dirs, leafs, max_depth + 1)
         }
-        Node::Leaf { .. } => (0, 1),
+        Node::Leaf { .. } => (0, 1, 0),
     }
 }
 
