@@ -115,9 +115,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     /// Close the current directory.
     pub fn close_dir(&mut self) {
         while let Some(dir_state) = self.stack.pop() {
-            let indent = self
-                .indents
-                .pop_if(|indent| indent.source_node == dir_state.id);
+            let indent = if self.indents.last().map(|indent| indent.source_node == dir_state.id).unwrap_or(false) {
+                self.indents.pop()
+            } else {
+                None
+            };
             if let Some(indent) = indent {
                 self.draw_indent_hint(&indent);
                 match self.ui_data.drop_target.as_ref() {

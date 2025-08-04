@@ -35,6 +35,13 @@ to the tree. The nodes of the tree must have a unqiue id which implements the [`
 The examples folder contains a few examples to get you up and running quickly.
 It also contains a [`playground`](https://github.com/LennysLounge/egui_ltreeview/blob/main/examples/playground/main.rs) example witch implements every feature of this widget and lets you change its settings on the fly. You can run it using `cargo run --example playground`.
 
+# WASM Example
+See the wasm_example folder.
+
+# WASM Example
+Install trunk: `cargo install --locked trunk` for serving the files
+Build and run the example with `trunk serve`
+
 # Demo
 ![Demo showing selection, moving and creation of files in the tree view](demo.gif)
 
