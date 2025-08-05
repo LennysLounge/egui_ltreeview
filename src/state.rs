@@ -199,7 +199,4 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
     pub(crate) fn get_selection_pivot(&self) -> Option<&NodeIdType> {
         self.selection_pivot.as_ref()
     }
-    pub(crate) fn get_selection(&self) -> &Vec<NodeIdType> {
-        &self.selected
-    }
 }

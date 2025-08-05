@@ -57,7 +57,7 @@ use egui::{
     self, emath, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
     Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
 };
-use std::hash::Hash;
+use std::{collections::HashSet, hash::Hash};
 
 pub use builder::*;
 pub use node::*;
@@ -411,11 +411,21 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         }
     }
     // Read out results from inputs
+    match input {
+        Input::DragStarted {
+            selected_node_dragged,
+            simplified_dragged,
+            ..
+        } if selected_node_dragged => {
+            state.set_dragged(DragState {
+                dragged: state.selected().clone(),
+                simplified: simplified_dragged,
+            });
+        }
+        _ => (),
+    };
     match output {
         Output::SetDragged(dragged) => {
-            state.set_dragged(dragged);
-        }
-        Output::SetDraggedSelection(dragged) => {
             state.set_dragged(dragged);
         }
         Output::SetSecondaryClicked(id) => {
@@ -731,6 +741,8 @@ fn rect_contains_visually(rect: &Rect, pos: &Pos2) -> bool {
 enum Input<NodeIdType> {
     DragStarted {
         pos: Pos2,
+        selected_node_dragged: bool,
+        visited_selected_nodes: HashSet<NodeIdType>,
         simplified_dragged: Vec<NodeIdType>,
     },
     Dragged(Pos2),
@@ -774,7 +786,6 @@ enum Input<NodeIdType> {
 }
 enum Output<NodeIdType> {
     SetDragged(DragState<NodeIdType>),
-    SetDraggedSelection(DragState<NodeIdType>),
     SetSecondaryClicked(NodeIdType),
     ActivateSelection(Vec<NodeIdType>),
     ActivateThis(NodeIdType),
@@ -809,6 +820,8 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeI
         return Input::DragStarted {
             pos: press_origin
                 .expect("If a drag has started it must have a position where the press started"),
+            selected_node_dragged: false,
+            visited_selected_nodes: HashSet::new(),
             simplified_dragged: Vec::new(),
         };
     }

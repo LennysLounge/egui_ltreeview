@@ -241,15 +241,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 id: config.id().clone(),
                 child_count: None,
                 branch_expanded: self.current_branch_expanded() && node_is_open,
-                branch_dragged: self.current_branch_dragged()
-                    || self.state.is_dragged(config.id())
-                    || match self.output {
-                        Output::SetDragged(drag_state)
-                        | Output::SetDraggedSelection(drag_state) => {
-                            drag_state.dragged.contains(config.id())
-                        }
-                        _ => false,
-                    },
+                branch_dragged: self.current_branch_dragged() || self.state.is_dragged(config.id()),
                 row_rect,
             });
         }
@@ -678,28 +670,35 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
     fn do_input_output(&mut self, node: &Node<NodeIdType>, row_rect: &Rect, closer: Option<&Rect>) {
         // Handle inputs
-        let current_branch_dragged = self.current_branch_dragged();
         match &mut self.input {
             Input::DragStarted {
                 pos,
+                selected_node_dragged,
+                visited_selected_nodes,
                 simplified_dragged,
-            } => {
-                if self.state.is_selected(&node.id) && !current_branch_dragged {
-                    simplified_dragged.push(node.id.clone());
-                }
+            } => 'arm: {
                 if rect_contains_visually(row_rect, pos) {
-                    self.ui_data.drop_on_self = true;
                     if self.state.is_selected(&node.id) {
-                        *self.output = Output::SetDraggedSelection(DragState {
-                            dragged: self.state.get_selection().clone(),
-                            simplified: simplified_dragged.clone(),
-                        });
+                        *selected_node_dragged = true;
                     } else {
                         *self.output = Output::SetDragged(DragState {
                             dragged: vec![node.id.clone()],
                             simplified: vec![node.id.clone()],
                         });
+                        *self.input = Input::None;
+                        break 'arm;
                     }
+                }
+                if self.state.is_selected(&node.id) {
+                    let was_parent_visited = self
+                        .stack
+                        .last()
+                        .map(|d| &d.id)
+                        .is_some_and(|parent_id| visited_selected_nodes.contains(parent_id));
+                    if !was_parent_visited {
+                        simplified_dragged.push(node.id.clone());
+                    }
+                    visited_selected_nodes.insert(node.id.clone());
                 }
             }
             Input::Dragged(pos) => {
@@ -798,8 +797,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::None => (),
         };
     }
+    
     fn do_output(&mut self, node: &Node<NodeIdType>) {
-        let current_branch_dragged = self.current_branch_dragged();
         match self.output {
             Output::ActivateSelection(selection) => {
                 if self.state.is_selected(&node.id)
@@ -807,11 +806,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     && !selection.contains(&node.id)
                 {
                     selection.push(node.id.clone());
-                }
-            }
-            Output::SetDraggedSelection(drag_state) => {
-                if self.state.is_selected(&node.id) && !current_branch_dragged {
-                    drag_state.simplified.push(node.id.clone());
                 }
             }
             _ => (),
