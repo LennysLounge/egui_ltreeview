@@ -200,12 +200,13 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     position: position.clone(),
                     drop_marker_idx: ui_data.drop_marker_idx,
                 }))
-            }
-            if let Some(position) = ui.ctx().pointer_latest_pos() {
-                actions.push(Action::DragExternal(DragAndDropExternal {
-                    position,
-                    source: state.get_simplified_dragged().cloned().unwrap_or_default(),
-                }));
+            } else if !ui_data.drop_on_self {
+                if let Some(position) = ui.ctx().pointer_latest_pos() {
+                    actions.push(Action::DragExternal(DragAndDropExternal {
+                        position,
+                        source: state.get_simplified_dragged().cloned().unwrap_or_default(),
+                    }));
+                }
             }
         }
         if ui_data.interaction.drag_stopped() {
@@ -216,12 +217,13 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                     position,
                     drop_marker_idx: ui_data.drop_marker_idx,
                 }))
-            }
-            if let Some(position) = ui.ctx().pointer_latest_pos() {
-                actions.push(Action::MoveExternal(DragAndDropExternal {
-                    position,
-                    source: state.get_simplified_dragged().cloned().unwrap_or_default(),
-                }));
+            } else if !ui_data.drop_on_self {
+                if let Some(position) = ui.ctx().pointer_latest_pos() {
+                    actions.push(Action::MoveExternal(DragAndDropExternal {
+                        position,
+                        source: state.get_simplified_dragged().cloned().unwrap_or_default(),
+                    }));
+                }
             }
         }
 
@@ -371,6 +373,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
+        drop_on_self: false,
         activate: None,
         selected: false,
         space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
@@ -707,6 +710,7 @@ struct UiData<NodeIdType> {
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    drop_on_self: bool,
     activate: Option<Vec<NodeIdType>>,
     selected: bool,
     space_used: Rect,

@@ -688,6 +688,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     simplified_dragged.push(node.id.clone());
                 }
                 if rect_contains_visually(row_rect, pos) {
+                    self.ui_data.drop_on_self = true;
                     if self.state.is_selected(&node.id) {
                         *self.output = Output::SetDraggedSelection(DragState {
                             dragged: self.state.get_selection().clone(),
@@ -702,18 +703,18 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 }
             }
             Input::Dragged(pos) => {
-                if rect_contains_visually(row_rect, pos)
-                    && !self.current_branch_dragged()
-                    && !self.state.is_dragged(&node.id)
-                {
-                    self.ui_data.drop_target = self.get_drop_position(row_rect, node);
-                    match self.ui_data.drop_target.as_ref() {
-                        Some((_, dir_position)) if dir_position != &DirPosition::Last => {
-                            self.draw_drop_marker(row_rect.y_range(), dir_position);
-                        }
-                        _ => (),
-                    };
-                    *self.input = Input::None;
+                if rect_contains_visually(row_rect, pos) && !self.current_branch_dragged() {
+                    self.ui_data.drop_on_self = self.state.is_dragged(&node.id);
+                    if !self.ui_data.drop_on_self {
+                        self.ui_data.drop_target = self.get_drop_position(row_rect, node);
+                        match self.ui_data.drop_target.as_ref() {
+                            Some((_, dir_position)) if dir_position != &DirPosition::Last => {
+                                self.draw_drop_marker(row_rect.y_range(), dir_position);
+                            }
+                            _ => (),
+                        };
+                        *self.input = Input::None;
+                    }
                 }
             }
             Input::Click {
