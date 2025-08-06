@@ -15,7 +15,7 @@ pub(crate) struct DragState<NodeIdType> {
 ///
 /// This holds which node is selected and the open/close
 /// state of the directories.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct TreeViewState<NodeIdType: Eq + std::hash::Hash> {
     /// Id of the node that was selected.

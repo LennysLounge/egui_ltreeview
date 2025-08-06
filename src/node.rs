@@ -544,6 +544,7 @@ pub(crate) fn paint_default_icon(ui: &mut Ui, openness: f32, rect: &Rect, is_hov
 }
 
 /// State of the closer when it is drawn.
+#[derive(Debug)]
 pub struct CloserState {
     /// Wether the current directory this closer represents is currently open or closed.
     pub is_open: bool,

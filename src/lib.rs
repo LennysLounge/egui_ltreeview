@@ -68,9 +68,9 @@ pub use state::*;
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
 #[cfg(not(feature = "persistence"))]
-pub trait NodeId: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
+pub trait NodeId: Clone + PartialEq + Eq + Hash {}
 #[cfg(not(feature = "persistence"))]
-impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
+impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash{}
 
 #[cfg(feature = "persistence")]
 /// A node in the tree is identified by an id that must implement this trait.
@@ -510,6 +510,7 @@ pub enum DirPosition<NodeIdType> {
 }
 
 /// The global settings the tree view will use.
+#[derive(Clone, Debug)]
 pub struct TreeViewSettings {
     /// Override the indent value for the tree view.
     ///
@@ -552,7 +553,7 @@ impl Default for TreeViewSettings {
 }
 
 /// Style of the vertical line to show the indentation level.
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IndentHintStyle {
     /// No indent hint is shown.
     None,
@@ -588,7 +589,7 @@ pub enum IndentHintStyle {
 /// Each row in the tree is made up of three elements. A closer,
 /// an icon and a label. The layout of these elements is controlled
 /// by this value.
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RowLayout {
     /// No icons are displayed.
     /// Directories only show the closer and the label.
@@ -611,7 +612,7 @@ pub enum RowLayout {
 
 /// An action the tree view would like to take as a result
 /// of some user input like drag and drop.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Action<NodeIdType> {
     /// Set the selected node to be this.
     SetSelected(Vec<NodeIdType>),
@@ -637,7 +638,7 @@ pub enum Action<NodeIdType> {
 
 /// Represents a drag-and-drop interaction where nodes are dragged outside the TreeView.
 /// Used to handle external drops (e.g., onto another UI component or the workspace).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DragAndDropExternal<NodeIdType> {
     /// The nodes that are being dragged
     pub source: Vec<NodeIdType>,
@@ -647,7 +648,7 @@ pub struct DragAndDropExternal<NodeIdType> {
 
 /// Information about drag and drop action that is currently
 /// happening on the tree.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DragAndDrop<NodeIdType> {
     /// The nodes that are being dragged
     pub source: Vec<NodeIdType>,
@@ -669,7 +670,7 @@ impl<NodeIdType> DragAndDrop<NodeIdType> {
 }
 
 /// Information about the `Activate` action in the tree.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Activate<NodeIdType> {
     /// The nodes that are being activated.
     pub selected: Vec<NodeIdType>,
