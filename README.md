@@ -37,4 +37,3 @@ It also contains a [`playground`](https://github.com/LennysLounge/egui_ltreeview
 
 # Demo
 ![Demo showing selection, moving and creation of files in the tree view](demo.gif)
-
