@@ -27,6 +27,7 @@ pub struct TreeViewState<NodeIdType: Eq + std::hash::Hash> {
     /// Id of the node that was right clicked.
     pub(crate) secondary_selection: Option<NodeIdType>,
     /// The minimum width of the tree view.
+    #[cfg_attr(feature = "persistence", serde(skip))]
     pub(crate) min_width: f32,
     /// The hight of the tree view last frame.
     pub(crate) last_height: f32,
