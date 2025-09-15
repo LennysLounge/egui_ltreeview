@@ -1,0 +1,31 @@
+name: Version Sync Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-version-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check version sync
+        run: |
+          EGUI_CARGO_VERSION=$(sed -nE 's/egui = { version = "(.+)" }/\1/p' Cargo.toml)
+          echo "Got: $EGUI_CARGO_VERSION"
+          EGUI_README_VERSION=$(sed -nE 's/.*https://img.shields.io/badge/egui-(\d+\.\d+[.\d+]?)-.*/\1/p' README.md)
+          echo "Got: $EGUI_README_VERSION"
+
+          if [ "$EGUI_CARGO_VERSION" != "$EGUI_README_VERSION" ]; then
+            echo "Version mismatch: Cargo.toml version is $EGUI_CARGO_VERSION, but README.md version is $EGUI_README_VERSION."
+            exit 1
+          else
+            echo "Versions are in sync: $EGUI_CARGO_VERSION"
+          fi
