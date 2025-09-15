@@ -18,9 +18,9 @@ jobs:
 
       - name: Check version sync
         run: |
-          EGUI_CARGO_VERSION=$(sed -nE 's/egui = \{ version = "(\d+\.\d+)[\.\d+]?" \}/\1/p' Cargo.toml)
+          EGUI_CARGO_VERSION=$(sed -nE 's/egui = \{ version = "([0-9]+\.[0-9]+)(\.[0-9]+)?" \}/\1/p' Cargo.toml)
           echo "Got: $EGUI_CARGO_VERSION"
-          EGUI_README_VERSION=$(sed -nE 's/.*img\.shields\.io\/badge\/egui-(\d+\.\d+)[\.\d+]?-blue.*/\1/p' README.md)
+          EGUI_README_VERSION=$(sed -nE 's/.*img\.shields\.io\/badge\/egui-([0-9]+\.[0-9]+)(\.[0-9]+)?-blue.*/\1/p' README.md)
           echo "Got: $EGUI_README_VERSION"
 
           if [ "$EGUI_CARGO_VERSION" != "$EGUI_README_VERSION" ]; then
