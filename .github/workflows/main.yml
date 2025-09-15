@@ -18,7 +18,7 @@ jobs:
 
       - name: Check version sync
         run: |
-          EGUI_CARGO_VERSION=$(sed -nE 's/egui = { version = "(.+)" }/\1/p' Cargo.toml)
+          EGUI_CARGO_VERSION=$(sed -nE 's/egui = \{ version = "(.+)" \}/\1/p' Cargo.toml)
           echo "Got: $EGUI_CARGO_VERSION"
           EGUI_README_VERSION=$(sed -nE 's/.*https://img.shields.io/badge/egui-(\d+\.\d+[.\d+]?)-.*/\1/p' README.md)
           echo "Got: $EGUI_README_VERSION"
