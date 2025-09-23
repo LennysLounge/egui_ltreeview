@@ -45,6 +45,12 @@ Either `Double Clicking` or the `Enter` key will activate the current selection.
 
 A usual use case for activating nodes is opening a node in a new window. For example a file viewer might open the contents of a file in a new tab when activated.
 
+## Opening closing directory nodes
+
+A directory node can be usally opened/closed in three ways, a) by clicking on the 'closer' icon for it. b) double clicking elsewhere on the row, c) using the keyboard, as above.
+
+However, to avoid user intention confusion for activatable directory nodes when a directory node is 'activatable', double-clicking will only 'activate' the node, and will not expand or collapse the directory.
+
 ## Drag and drop
 If drag and drop is enabled in the [`TreeViewSettings::allow_drag_and_drop`], the tree view has support for implementing drag and drop in your data structure.
 
