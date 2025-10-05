@@ -724,14 +724,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 shift_click_nodes,
             } => 'block: {
                 // Closer click
-                if closer.is_some_and(|closer| rect_contains_visually(closer, pos)) {
+                let closer_clicked = closer.is_some_and(|closer| rect_contains_visually(closer, pos));
+                if closer_clicked {
                     self.state.set_openness(node.id.clone(), !node.is_open);
                     *self.input = Input::None;
                     break 'block;
                 }
 
                 let row_clicked = rect_contains_visually(row_rect, pos);
-                let double_click = row_clicked && *double && self.state.was_clicked_last(&node.id);
+                let double_click = row_clicked && *double && !closer_clicked && self.state.was_clicked_last(&node.id);
                 if row_clicked {
                     self.state.set_last_clicked(&node.id);
                 }
@@ -743,13 +744,14 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 // Double clicked
                 if double_click {
-                    self.state.set_openness(node.id.clone(), !node.is_open);
                     if node.activatable {
                         if self.state.is_selected(&node.id) {
                             *self.output = Output::ActivateSelection(activatable_nodes.clone());
                         } else {
                             *self.output = Output::ActivateThis(node.id.clone());
                         }
+                    } else {
+                        self.state.set_openness(node.id.clone(), !node.is_open);
                     }
                     *self.input = Input::None;
                     break 'block;

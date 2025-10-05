@@ -64,6 +64,8 @@ pub trait NodeConfig<NodeIdType> {
     /// Whether or not this node can be activated.
     ///
     /// Default is false for directories and true otherwise. Override to customize.
+    /// Enabling 'activatable' disables double-click to expand/collapse for directories, directories can still be
+    /// expanded/collapsed using the 'opener' icon or the keyboard.
     fn activatable(&self) -> bool {
         !self.is_dir()
     }
