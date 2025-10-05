@@ -40,6 +40,7 @@ struct Settings {
     scroll_horizontal: bool,
     override_indent: Option<f32>,
     indent_hint: IndentHintStyle,
+    override_striped: Option<bool>,
     row_layout: RowLayout,
     min_width_enabled: bool,
     min_width: f32,
@@ -143,6 +144,7 @@ impl eframe::App for MyApp {
 fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
     let mut context_menu_actions = Vec::<ContextMenuActions>::new();
     let (response, actions) = TreeView::new(ui.make_persistent_id("Names tree view"))
+        .override_striped(app.settings.override_striped)
         .override_indent(app.settings.override_indent)
         .indent_hint_style(app.settings.indent_hint)
         .row_layout(app.settings.row_layout)
@@ -380,6 +382,13 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.label("Scroll vertical:");
         ui.checkbox(&mut settings.scroll_vertical, "");
         ui.end_row();
+        ui.label("Striped:");
+        let mut striped = ui.ctx().style().visuals.striped;
+        ui.checkbox(&mut striped, "");
+        ui.ctx().style_mut(|style| {
+            style.visuals.striped = striped;
+        });
+        ui.end_row();
         ui.label("Show size:");
         ui.checkbox(&mut settings.show_size, "");
         ui.end_row();
@@ -395,6 +404,27 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
 
         ui.label("allow drag and drop");
         ui.checkbox(&mut settings.allow_drag_and_drop, "");
+        ui.end_row();
+
+        ui.label("Override striped");
+        ui.horizontal(|ui| {
+            let mut override_enabled = settings.override_striped.is_some();
+            if ui.checkbox(&mut override_enabled, "").changed() {
+                if override_enabled {
+                    settings.override_striped = Some(ui.visuals().striped);
+                } else {
+                    settings.override_striped = None;
+                }
+            };
+            ui.add_enabled_ui(override_enabled, |ui| {
+                let mut override_striped_value =
+                    settings.override_striped.unwrap_or(ui.visuals().striped);
+                let res = ui.checkbox(&mut override_striped_value, "");
+                if res.changed() && override_enabled {
+                    settings.override_striped = Some(override_striped_value);
+                }
+            });
+        });
         ui.end_row();
 
         ui.label("Override indent");

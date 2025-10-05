@@ -1,4 +1,6 @@
-use egui::{layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Ui, UiBuilder, WidgetText};
+use egui::{
+    layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, UiBuilder, WidgetText,
+};
 
 use crate::{
     node::NodeBuilder, rect_contains_visually, DirPosition, DragState, DropQuarter,
@@ -46,6 +48,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     indents: Vec<IndentState<NodeIdType>>,
     input: &'ui mut Input<NodeIdType>,
     output: &'ui mut Output<NodeIdType>,
+    striped: bool,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -67,6 +70,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             indents: Vec::new(),
             input,
             output,
+            striped: false,
         }
     }
 
@@ -297,6 +301,22 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, outer_rect: Rect) -> f32 {
+        // Add striping
+        let is_striped = self
+            .settings
+            .override_striped
+            .unwrap_or(self.ui.visuals().striped);
+        if self.striped && is_striped {
+            self.ui.painter().rect(
+                outer_rect,
+                self.ui.visuals().widgets.active.corner_radius,
+                self.ui.visuals().faint_bg_color,
+                Stroke::NONE,
+                egui::StrokeKind::Inside,
+            );
+        }
+        self.striped = !self.striped;
+
         // Draw background
         if self.state.is_selected(&node.id) {
             let (shape_idx, rect) = self
@@ -724,7 +744,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 shift_click_nodes,
             } => 'block: {
                 // Closer click
-                let closer_clicked = closer.is_some_and(|closer| rect_contains_visually(closer, pos));
+                let closer_clicked =
+                    closer.is_some_and(|closer| rect_contains_visually(closer, pos));
                 if closer_clicked {
                     self.state.set_openness(node.id.clone(), !node.is_open);
                     *self.input = Input::None;
@@ -732,7 +753,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 }
 
                 let row_clicked = rect_contains_visually(row_rect, pos);
-                let double_click = row_clicked && *double && !closer_clicked && self.state.was_clicked_last(&node.id);
+                let double_click = row_clicked
+                    && *double
+                    && !closer_clicked
+                    && self.state.was_clicked_last(&node.id);
                 if row_clicked {
                     self.state.set_last_clicked(&node.id);
                 }
@@ -799,7 +823,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::None => (),
         };
     }
-    
+
     fn do_output(&mut self, node: &Node<NodeIdType>) {
         match self.output {
             Output::ActivateSelection(selection) => {

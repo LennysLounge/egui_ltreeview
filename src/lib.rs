@@ -286,6 +286,16 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
+    /// Override whether or not the background of the nodes should striped.
+    /// 
+    /// By default, this value is 'None' which means that the striped setting from the
+    /// current UI style is used. If this value is set, it will be used without
+    /// affecting the ui's value.
+    pub fn override_striped(mut self, striped: Option<bool>) -> Self {
+        self.settings.override_striped = striped;
+        self
+    }
+
     /// Set the style of the indent hint to show the indentation level.
     pub fn indent_hint_style(mut self, style: IndentHintStyle) -> Self {
         self.settings.indent_hint_style = style;
@@ -518,6 +528,12 @@ pub struct TreeViewSettings {
     /// current UI is used. If this value is set, this value will be used as the indent
     /// value without affecting the ui's indent value.
     pub override_indent: Option<f32>,
+    /// Override whether or not the background of the nodes should striped.
+    /// 
+    /// By default, this value is 'None' which means that the striped setting from the
+    /// current UI style is used. If this value is set, it will be used without
+    /// affecting the ui's value.
+    pub override_striped: Option<bool>,
     /// The style of the indent hint to show the indentation level.
     pub indent_hint_style: IndentHintStyle,
     /// The row layout for this tree.
@@ -541,6 +557,7 @@ impl Default for TreeViewSettings {
     fn default() -> Self {
         Self {
             override_indent: None,
+            override_striped: None,
             indent_hint_style: Default::default(),
             row_layout: Default::default(),
             min_width: 0.0,
