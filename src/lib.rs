@@ -70,7 +70,7 @@ pub use state::*;
 #[cfg(not(feature = "persistence"))]
 pub trait NodeId: Clone + PartialEq + Eq + Hash {}
 #[cfg(not(feature = "persistence"))]
-impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash{}
+impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash {}
 
 #[cfg(feature = "persistence")]
 /// A node in the tree is identified by an id that must implement this trait.
@@ -365,7 +365,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
     let mut output = Output::None;
-    let mut input = get_input::<NodeIdType>(ui, &interaction, id);
+    let mut input = get_input::<NodeIdType>(ui, &interaction, id, settings);
     let mut ui_data = UiData {
         interaction,
         context_menu_was_open: false,
@@ -803,7 +803,12 @@ enum Output<NodeIdType> {
     None,
 }
 
-fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeIdType> {
+fn get_input<NodeIdType>(
+    ui: &Ui,
+    interaction: &Response,
+    id: Id,
+    settings: &TreeViewSettings,
+) -> Input<NodeIdType> {
     let press_origin = ui.input(|i| i.pointer.press_origin());
     let pointer_pos = ui.input(|i| i.pointer.latest_pos());
     let modifiers = ui.input(|i| i.modifiers);
@@ -817,7 +822,7 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeI
         return Input::None;
     }
 
-    if interaction.drag_started_by(PointerButton::Primary) {
+    if interaction.drag_started_by(PointerButton::Primary) && settings.allow_drag_and_drop {
         return Input::DragStarted {
             pos: press_origin
                 .expect("If a drag has started it must have a position where the press started"),
@@ -826,8 +831,9 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeI
             simplified_dragged: Vec::new(),
         };
     }
-    if interaction.dragged_by(PointerButton::Primary)
-        || interaction.drag_stopped_by(PointerButton::Primary)
+    if (interaction.dragged_by(PointerButton::Primary)
+        || interaction.drag_stopped_by(PointerButton::Primary))
+        && settings.allow_drag_and_drop
     {
         return Input::Dragged(
             pointer_pos.expect("If the tree view is dragged it must have a pointer position"),
@@ -838,7 +844,9 @@ fn get_input<NodeIdType>(ui: &Ui, interaction: &Response, id: Id) -> Input<NodeI
             pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
         );
     }
-    if interaction.clicked_by(PointerButton::Primary) {
+    if interaction.clicked_by(PointerButton::Primary)
+        || interaction.drag_started_by(PointerButton::Primary) && !settings.allow_drag_and_drop
+    {
         return Input::Click {
             pos: pointer_pos.expect("If the tree view was clicked it must have a pointer position"),
             double: interaction.double_clicked(),

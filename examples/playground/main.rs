@@ -47,6 +47,7 @@ struct Settings {
     min_height: f32,
     show_size: bool,
     allow_multi_select: bool,
+    allow_drag_and_drop: bool,
 }
 
 enum ContextMenuActions {
@@ -64,6 +65,7 @@ impl Default for MyApp {
                 row_layout: RowLayout::CompactAlignedLabels,
                 show_size: true,
                 allow_multi_select: true,
+                allow_drag_and_drop: true,
                 scroll_vertical: true,
                 ..Default::default()
             },
@@ -162,6 +164,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
                 ui.label(format!("{}", node));
             }
         })
+        .allow_drag_and_drop(app.settings.allow_drag_and_drop)
         .show_state(ui, &mut app.tree_view_state, |mut builder| {
             builder.node(
                 NodeBuilder::leaf(app.settings_id)
@@ -388,6 +391,10 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
 
         ui.label("allow multi select");
         ui.checkbox(&mut settings.allow_multi_select, "");
+        ui.end_row();
+
+        ui.label("allow drag and drop");
+        ui.checkbox(&mut settings.allow_drag_and_drop, "");
         ui.end_row();
 
         ui.label("Override indent");
