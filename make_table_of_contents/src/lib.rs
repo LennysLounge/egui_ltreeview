@@ -61,10 +61,9 @@ pub fn make_table_of_contents(tokens: TokenStream) -> TokenStream {
             code_block = !code_block;
             continue;
         }
-        if code_block{
+        if code_block {
             continue;
         }
-
 
         let mut chars = line.chars().peekable();
         let mut heading_level = 0;

@@ -43,7 +43,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   fmt:
-    name: Run rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
