@@ -62,10 +62,11 @@ pub trait NodeConfig<NodeIdType> {
         self.is_dir()
     }
     /// Whether or not this node can be activated.
+    /// 
+    /// If a directory is activatable the double-click to expand/collapse for that node is disabled. Directories can still be
+    /// expanded/collapsed by clicking on the closer or using the keyboard.
     ///
     /// Default is false for directories and true otherwise. Override to customize.
-    /// Enabling 'activatable' disables double-click to expand/collapse for directories, directories can still be
-    /// expanded/collapsed using the 'opener' icon or the keyboard.
     fn activatable(&self) -> bool {
         !self.is_dir()
     }
@@ -218,6 +219,9 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Whether or not this node can be activated.
+    /// 
+    /// If a directory is activatable the double-click to expand/collapse for that node is disabled. Directories can still be
+    /// expanded/collapsed by clicking on the closer or using the keyboard.
     pub fn activatable(mut self, activatable: bool) -> Self {
         self.activatable = activatable;
         self
