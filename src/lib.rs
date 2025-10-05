@@ -810,7 +810,7 @@ fn get_input<NodeIdType>(
     settings: &TreeViewSettings,
 ) -> Input<NodeIdType> {
     let press_origin = ui.input(|i| i.pointer.press_origin());
-    let pointer_pos = ui.input(|i| i.pointer.latest_pos());
+    let pointer_pos = ui.input(|i| i.pointer.interact_pos());
     let modifiers = ui.input(|i| i.modifiers);
 
     if interaction.context_menu_opened() {
