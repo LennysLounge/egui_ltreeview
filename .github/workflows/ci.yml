@@ -1,0 +1,54 @@
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+name: CI
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  build_and_test:
+    name: Tests on Rust ${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - "stable"
+          - "1.80.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "${{ matrix.toolchain }}"
+      - name: Run check
+        run: cargo check --all-features
+      - name: Run tests
+        run: cargo test --all-features
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: giraffate/clippy-action@v1
+        with:
+          reporter: 'github-pr-review'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  fmt:
+    name: Run rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+          components: rustfmt
+      - run: cargo fmt --all --check
