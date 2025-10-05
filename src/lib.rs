@@ -287,7 +287,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
     }
 
     /// Override whether or not the background of the nodes should striped.
-    /// 
+    ///
     /// By default, this value is 'None' which means that the striped setting from the
     /// current UI style is used. If this value is set, it will be used without
     /// affecting the ui's value.
@@ -529,7 +529,7 @@ pub struct TreeViewSettings {
     /// value without affecting the ui's indent value.
     pub override_indent: Option<f32>,
     /// Override whether or not the background of the nodes should striped.
-    /// 
+    ///
     /// By default, this value is 'None' which means that the striped setting from the
     /// current UI style is used. If this value is set, it will be used without
     /// affecting the ui's value.

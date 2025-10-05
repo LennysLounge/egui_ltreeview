@@ -62,7 +62,7 @@ pub trait NodeConfig<NodeIdType> {
         self.is_dir()
     }
     /// Whether or not this node can be activated.
-    /// 
+    ///
     /// If a directory is activatable the double-click to expand/collapse for that node is disabled. Directories can still be
     /// expanded/collapsed by clicking on the closer or using the keyboard.
     ///
@@ -101,7 +101,7 @@ pub trait NodeConfig<NodeIdType> {
     fn closer(&mut self, ui: &mut Ui, closer_state: CloserState) {}
 
     /// Whether or not this node has a context menu.
-    /// 
+    ///
     /// If a node was right-clicked but did not configure a context menu then the
     /// [`TreeView::fallback_context_menu`](`crate::TreeView::fallback_context_menu`) will be used.
     ///
@@ -219,7 +219,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Whether or not this node can be activated.
-    /// 
+    ///
     /// If a directory is activatable the double-click to expand/collapse for that node is disabled. Directories can still be
     /// expanded/collapsed by clicking on the closer or using the keyboard.
     pub fn activatable(mut self, activatable: bool) -> Self {
@@ -272,7 +272,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     }
 
     /// Add a context menu to this node.
-    /// 
+    ///
     /// If a node was right-clicked but did not configure a context menu then the
     /// [`TreeView::fallback_context_menu`](`crate::TreeView::fallback_context_menu`) will be used.
     ///

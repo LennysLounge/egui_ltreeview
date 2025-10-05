@@ -64,7 +64,7 @@ impl eframe::App for MyApp {
                         builder.close_dir();
                         builder.close_dir();
                     });
-    
+
                 for action in actions {
                     match action {
                         Action::Activate(Activate {
