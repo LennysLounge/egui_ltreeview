@@ -21,7 +21,12 @@ make_table_of_contents = { path = "make_table_of_contents", version = "0.1.0", o
 [dev-dependencies]
 eframe = "0.32"
 egui_extras = { version = "0.32", features = ["all_loaders"] }
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "js"] }
+# web:
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+log = "0.4.27"
+wasm-bindgen-futures = "0.4.50"
+web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
 
 [features]
 default = []
