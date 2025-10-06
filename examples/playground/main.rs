@@ -113,7 +113,6 @@ impl Default for MyApp {
             settings_id: Uuid::new_v4(),
             settings: Settings {
                 row_layout: RowLayout::CompactAlignedLabels,
-                show_size: true,
                 allow_multi_select: true,
                 allow_drag_and_drop: true,
                 scroll_vertical: true,

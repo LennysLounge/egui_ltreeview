@@ -16,6 +16,8 @@ up and running as fast as possible.
 * Frontend for Drag and Drop support
 * Agnostic to the implementation of your data.
 
+👉 **[🚀 Click here to view a web demo of the playground example !](https://www.lennyslounge.net/egui_ltreeview/)**
+
 # Getting started
 ```
 let id = ui.make_persistent_id("Names tree view");
