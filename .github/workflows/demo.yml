@@ -1,7 +1,10 @@
 # Simple workflow for deploying static content to GitHub Pages
-name: Deploy a wasm demo to Pages
+name: Build/deploy web demo
 
 on:
+  push:
+    branches:
+      - main
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
