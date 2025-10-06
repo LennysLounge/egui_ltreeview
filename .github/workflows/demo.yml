@@ -29,11 +29,16 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compile wasm
+        run: cargo build --example playground --release --target wasm32-unknown-unknown
+      - name: Compile wasm-bindgen
+        run: wasm-bindgen ./target/wasm32-unknown-unknown/release/examples/playground.wasm --target web --out-dir web_demo --no-typescript
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload entire repository
-          path: './github_pages'
+          path: './web_demo'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
