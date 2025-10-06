@@ -34,6 +34,8 @@ jobs:
           target: wasm32-unknown-unknown
       - name: Compile wasm
         run: cargo build --example playground --release --target wasm32-unknown-unknown
+      - name: Install wasm-bindgen
+        run: cargo install wasm-bindgen-cli
       - name: Compile wasm-bindgen
         run: wasm-bindgen ./target/wasm32-unknown-unknown/release/examples/playground.wasm --target web --out-dir web_demo --no-typescript
       - name: Upload artifact
