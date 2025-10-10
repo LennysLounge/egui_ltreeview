@@ -126,6 +126,9 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::bottom(Id::new("footer")).show(ctx, |ui|{
+            ui.label(format!("App version: {}", env!("CARGO_PKG_VERSION")))
+        });
         egui::SidePanel::left(Id::new("tree view"))
             .resizable(true)
             .show(ctx, |ui| {
