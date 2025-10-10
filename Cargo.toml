@@ -1,6 +1,6 @@
 [package]
 name = "egui_ltreeview"
-version = "0.5.3"
+version = "0.6.0"
 edition = "2021"
 authors = ["Leonard Schüngel <schuengel.leonard@gmail.com>"]
 license = "MIT"
@@ -14,13 +14,13 @@ include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "src/doc/doc.md"]
 features = ["doc"]
 
 [dependencies]
-egui = { version = "0.32" }
+egui = { version = "0.33" }
 serde = { version = "1", features = ["derive"], optional = true }
 make_table_of_contents = { path = "make_table_of_contents", version = "0.1.0", optional = true }
 
 [dev-dependencies]
-eframe = "0.32"
-egui_extras = { version = "0.32", features = ["all_loaders"] }
+eframe = "0.33"
+egui_extras = { version = "0.33", features = ["all_loaders"] }
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
