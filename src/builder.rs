@@ -221,21 +221,26 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub fn node(&mut self, mut config: impl NodeConfig<NodeIdType>) -> bool {
         self.decrement_current_dir_child_count();
 
-        let (node_is_open, row_rect) = if self.current_branch_expanded() && !config.flatten() {
-            let node = Node::from_config(
-                if config.is_dir() {
-                    self.state
-                        .is_open(config.id())
-                        .unwrap_or(config.default_open())
-                } else {
-                    true
-                },
-                self.ui.spacing().interact_size.y,
-                self.indents.len(),
-                &mut config,
-            );
-            let (node_is_open, row_rect) = self.node_structually_visible(node);
-            (node_is_open, Some(row_rect))
+        let (node_is_open, row_rect) = if self.current_branch_expanded() {
+            if config.flatten() {
+                // a flattened dir is not visible but always reports itself as open.
+                (true, None)
+            } else {
+                let node = Node::from_config(
+                    if config.is_dir() {
+                        self.state
+                            .is_open(config.id())
+                            .unwrap_or(config.default_open())
+                    } else {
+                        true
+                    },
+                    self.ui.spacing().interact_size.y,
+                    self.indents.len(),
+                    &mut config,
+                );
+                let (node_is_open, row_rect) = self.node_structually_visible(node);
+                (node_is_open, Some(row_rect))
+            }
         } else {
             (false, None)
         };

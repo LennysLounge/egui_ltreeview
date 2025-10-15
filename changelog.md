@@ -1,5 +1,8 @@
 # v0.6.1-dev
 
+### Fixes:
+* Fix a bug where a flattened node made all its children invisible.
+
 # v0.6.0
 
 New features:
