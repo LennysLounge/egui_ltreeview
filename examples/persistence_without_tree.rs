@@ -1,4 +1,6 @@
-//! This example exists to test the compilation of the "persitence" feature.
+//! This example has the persistence feature enable on both eframe and therfore also egui
+//! The feature is _not_ enabled on egui_ltreeview which means that the tree view state 
+//! is not persisted and there is not requirement on the Node to be serializable
 
 #[path = "data.rs"]
 mod data;
@@ -10,6 +12,7 @@ fn main() -> Result<(), eframe::Error> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([300.0, 500.0]),
+        persistence_path: Some("./persistence_data_without_tree.json".into()),
         ..Default::default()
     };
     eframe::run_native(

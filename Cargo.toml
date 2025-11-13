@@ -35,5 +35,9 @@ persistence = ["dep:serde", "egui/persistence", "uuid/serde"]
 doc = ["dep:make_table_of_contents"]
 
 [[example]]
-name = "persistence"
-required-features = ["persistence", "uuid/serde"]
+name = "persistence_without_tree"
+required-features = ["eframe/persistence"]
+
+[[example]]
+name = "persistence_with_tree"
+required-features = ["eframe/persistence", "persistence"]

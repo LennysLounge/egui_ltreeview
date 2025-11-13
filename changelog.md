@@ -3,6 +3,13 @@
 ### Fixes:
 * Fix a bug where a flattened node made all its children invisible.
 
+Changes:
+* The tree state will now use temp storage if the persistence feature is not active.
+Previously, if the persistence feature on egui was active it would also require the persistence feature on egui_ltreeview
+to be active. That is not necessarily desired since it now also forces the NodeId to be serializable.
+Now the tree state will use temp storage if the feature is not active and persistent storage once the feature is activated.
+The requirement for NodeId to be serializable will therefore only show up once the feature on egui_ltreeview is used.
+
 # v0.6.0
 
 New features:

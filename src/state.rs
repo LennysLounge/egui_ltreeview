@@ -57,6 +57,8 @@ impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
         }
     }
 }
+
+#[cfg(feature = "persistence")]
 impl<NodeIdType> TreeViewState<NodeIdType>
 where
     NodeIdType: NodeId + Send + Sync + 'static,
@@ -68,6 +70,21 @@ where
     /// Store this [`TreeViewState`] to memory.
     pub fn store(self, ui: &mut Ui, id: Id) {
         ui.data_mut(|d| d.insert_persisted(id, self));
+    }
+}
+
+#[cfg(not(feature = "persistence"))]
+impl<NodeIdType> TreeViewState<NodeIdType>
+where
+    NodeIdType: NodeId + Send + Sync + 'static,
+{
+    /// Load a [`TreeViewState`] from memory.
+    pub fn load(ui: &mut Ui, id: Id) -> Option<Self> {
+        ui.data_mut(|d| d.get_temp(id))
+    }
+    /// Store this [`TreeViewState`] to memory.
+    pub fn store(self, ui: &mut Ui, id: Id) {
+        ui.data_mut(|d| d.insert_temp(id, self));
     }
 }
 
