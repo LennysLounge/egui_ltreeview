@@ -1,5 +1,5 @@
 //! This example has the persistence feature enable on both eframe and therfore also egui
-//! The feature is _not_ enabled on egui_ltreeview which means that the tree view state 
+//! The feature is _not_ enabled on egui_ltreeview which means that the tree view state
 //! is not persisted and there is not requirement on the Node to be serializable
 
 #[path = "data.rs"]
