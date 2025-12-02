@@ -405,7 +405,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     );
     build_tree_view(&mut tree_builder);
 
-    let tree_view_rect = ui_data.space_used.union(interaction_rect);
+    let tree_view_rect = ui_data.space_used.intersect(interaction_rect);
     ui.allocate_rect(tree_view_rect, Sense::hover());
 
     // Remember width of the tree view for next frame
