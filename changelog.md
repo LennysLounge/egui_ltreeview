@@ -2,6 +2,7 @@
 
 ### Fixes:
 * Fix a bug where a flattened node made all its children invisible.
+* Fix a panic when dragging a dropping a node onto a custom label.
 
 Changes:
 * The tree state will now use temp storage if the persistence feature is not active.

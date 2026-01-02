@@ -727,10 +727,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 }
             }
             Input::Dragged(pos) => {
-                if rect_contains_visually(row_rect, pos) && !self.current_branch_dragged() {
+                let pos = pos.clone();
+                if rect_contains_visually(row_rect, &pos) && !self.current_branch_dragged() {
                     self.ui_data.drop_on_self = self.state.is_dragged(&node.id);
                     if !self.ui_data.drop_on_self {
-                        self.ui_data.drop_target = self.get_drop_position(row_rect, node);
+                        self.ui_data.drop_target = self.get_drop_position(row_rect, node, &pos);
                         match self.ui_data.drop_target.as_ref() {
                             Some((_, dir_position)) if dir_position != &DirPosition::Last => {
                                 self.draw_drop_marker(row_rect.y_range(), dir_position);
@@ -847,13 +848,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         &self,
         row: &Rect,
         node: &Node<NodeIdType>,
+        cursor_pos: &Pos2,
     ) -> Option<(NodeIdType, DirPosition<NodeIdType>)> {
-        let drop_quarter = self
-            .ui_data
-            .interaction
-            .hover_pos()
-            .and_then(|pos| DropQuarter::new(row.y_range(), pos.y))
-            .expect("Cursor is above row so the drop quarter should be known");
+        let drop_quarter = DropQuarter::new(row.y_range(), cursor_pos.y)?;
         match drop_quarter {
             DropQuarter::Top => {
                 if let Some(parent_id) = self.parent_id() {
