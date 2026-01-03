@@ -2,9 +2,11 @@
 
 ### Fixes:
 * Fix a bug where a flattened node made all its children invisible.
-* Fix a panic when dragging a dropping a node onto a custom label.
+* Fix a panic when dragging a dropping a node onto a custom label. Closes #42
+* The ghost overlay when dragging a node would get detached from the cursor if the user scrolled while dragging
+This should no longer happen.
 
-Changes:
+### Changes:
 * The tree state will now use temp storage if the persistence feature is not active.
 Previously, if the persistence feature on egui was active it would also require the persistence feature on egui_ltreeview
 to be active. That is not necessarily desired since it now also forces the NodeId to be serializable.

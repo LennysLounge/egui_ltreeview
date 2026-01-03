@@ -283,6 +283,24 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 indent.extends_below_clip_rect = true;
             }
         }
+        // Draw node dragged
+        if self.state.is_dragged(&node.id) {
+            let mut dragged_ui = self
+                .ui
+                .new_child(UiBuilder::new().layer_id(self.ui_data.drag_layer));
+            // We translate the rectangle to the top left of the screen.
+            // This essentially removes the effect of the scroll area and we have a fixed position
+            // where the drag overlay is rendered.
+            let r = row_rect.translate(-self.ui.max_rect().min.to_vec2());
+            if self.state.is_selected(&node.id) {
+                dragged_ui.painter().rect_filled(
+                    r,
+                    dragged_ui.visuals().widgets.active.corner_radius,
+                    dragged_ui.visuals().selection.bg_fill.linear_multiply(0.4),
+                );
+            }
+            node.show_node(&mut dragged_ui, self.settings, r, false, true);
+        }
         *self.ui_data.space_used.bottom_mut() += row_rect.height();
         if node.is_dir {
             // If the directory is opened below the clip rect its indent hint is never
@@ -357,7 +375,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Draw node
         let (closer, icon, label) = node.show_node(
             self.ui,
-            &self.ui_data.interaction,
             self.settings,
             outer_rect,
             self.state.is_selected(&node.id),
@@ -366,28 +383,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         // Do input
         self.do_input_output(node, &outer_rect, closer.as_ref());
-
-        // Draw node dragged
-        if self.state.is_dragged(&node.id) {
-            self.ui
-                .scope_builder(UiBuilder::new().layer_id(self.ui_data.drag_layer), |ui| {
-                    if self.state.is_selected(&node.id) {
-                        ui.painter().rect_filled(
-                            outer_rect,
-                            ui.visuals().widgets.active.corner_radius,
-                            ui.visuals().selection.bg_fill.linear_multiply(0.4),
-                        );
-                    }
-                    node.show_node(
-                        ui,
-                        &self.ui_data.interaction,
-                        self.settings,
-                        outer_rect,
-                        false,
-                        true,
-                    );
-                });
-        }
 
         // Show the context menu.
         let was_only_target = !self.state.is_selected(&node.id)
@@ -707,6 +702,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         *selected_node_dragged = true;
                     } else {
                         *self.output = Output::SetDragged(DragState {
+                            drag_overlay_offset: self.ui.max_rect().min.to_vec2(),
                             dragged: vec![node.id.clone()],
                             simplified: vec![node.id.clone()],
                         });

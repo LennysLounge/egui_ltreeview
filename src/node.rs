@@ -386,7 +386,6 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
     pub fn show_node(
         &mut self,
         ui: &mut Ui,
-        interaction: &Response,
         settings: &TreeViewSettings,
         row_rect: Rect,
         selected: bool,
@@ -448,8 +447,8 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
                 .icon_rectangles(ui.available_rect_before_wrap());
 
             let res = ui.scope_builder(UiBuilder::new().max_rect(big_rect), |ui| {
-                let is_hovered = interaction
-                    .hover_pos()
+                let is_hovered = ui
+                    .input(|i| i.pointer.latest_pos())
                     .is_some_and(|pos| ui.max_rect().contains(pos));
                 if is_hovered {
                     ui.ctx().set_cursor_icon(CursorIcon::PointingHand);

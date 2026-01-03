@@ -380,6 +380,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
+        drag_layer_offset: state.get_drag_overlay_offset().unwrap_or_default(),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
@@ -428,6 +429,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             ..
         } if selected_node_dragged => {
             state.set_dragged(DragState {
+                drag_overlay_offset: builder_ui.max_rect().min.to_vec2(),
                 dragged: state.selected().clone(),
                 simplified: simplified_dragged,
             });
@@ -496,7 +498,7 @@ fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>
         let (start, current) = ui.input(|i| (i.pointer.press_origin(), i.pointer.hover_pos()));
         if let (Some(start), Some(current)) = (start, current) {
             let delta = current.to_vec2() - start.to_vec2();
-            let transform = emath::TSTransform::from_translation(delta);
+            let transform = emath::TSTransform::from_translation(delta + ui_data.drag_layer_offset);
             ui.ctx()
                 .transform_layer_shapes(ui_data.drag_layer, transform);
         }
@@ -735,6 +737,7 @@ struct UiData<NodeIdType> {
     context_menu_was_open: bool,
     interaction: Response,
     drag_layer: LayerId,
+    drag_layer_offset: Vec2,
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,

@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-use egui::{Id, Ui};
+use egui::{Id, Ui, Vec2};
 
 use crate::NodeId;
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct DragState<NodeIdType> {
+    pub drag_overlay_offset: Vec2,
     pub dragged: Vec<NodeIdType>,
     pub simplified: Vec<NodeIdType>,
 }
@@ -181,6 +182,10 @@ impl<NodeIdType: NodeId> TreeViewState<NodeIdType> {
         self.dragged
             .as_ref()
             .is_some_and(|state| state.dragged.contains(id))
+    }
+
+    pub(crate) fn get_drag_overlay_offset(&self) -> Option<Vec2> {
+        self.dragged.as_ref().map(|d| d.drag_overlay_offset)
     }
 
     pub(crate) fn is_selected(&self, id: &NodeIdType) -> bool {
