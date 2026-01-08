@@ -13,6 +13,7 @@ to be active. That is not necessarily desired since it now also forces the NodeI
 Now the tree state will use temp storage if the feature is not active and persistent storage once the feature is activated.
 The requirement for NodeId to be serializable will therefore only show up once the feature on egui_ltreeview is used.
 * Shift clicking a node when no previous selection was made will no select the clicked node instead of doing nothing. Closes #37
+* Make it so that the modifiers key required for a range selection or a set selection are configurable. Closes #39
 
 # v0.6.0
 

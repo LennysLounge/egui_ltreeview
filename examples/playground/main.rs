@@ -3,7 +3,7 @@ use std::{collections::HashSet, env};
 
 use data::*;
 use eframe::CreationContext;
-use egui::{Color32, DragValue, Id, Label, Response, ScrollArea, ThemePreference, Ui};
+use egui::{Color32, DragValue, Id, Label, Modifiers, Response, ScrollArea, ThemePreference, Ui};
 use egui_ltreeview::{
     Action, DirPosition, IndentHintStyle, NodeBuilder, RowLayout, TreeView, TreeViewBuilder,
     TreeViewState,
@@ -97,6 +97,8 @@ struct Settings {
     min_height: f32,
     show_size: bool,
     allow_multi_select: bool,
+    range_selection_modifier: Modifiers,
+    set_selection_modifier: Modifiers,
     allow_drag_and_drop: bool,
 }
 
@@ -116,6 +118,8 @@ impl Default for MyApp {
                 allow_multi_select: true,
                 allow_drag_and_drop: true,
                 scroll_vertical: true,
+                range_selection_modifier: Modifiers::SHIFT,
+                set_selection_modifier: Modifiers::COMMAND,
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
@@ -210,6 +214,8 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             0.0
         })
         .allow_multi_selection(app.settings.allow_multi_select)
+        .range_selection_modifier(app.settings.range_selection_modifier)
+        .set_selection_modifier(app.settings.set_selection_modifier)
         .fallback_context_menu(|ui, selected_nodes| {
             ui.set_min_width(250.0);
             ui.label("selected nodes:");
@@ -451,6 +457,36 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
 
         ui.label("allow multi select");
         ui.checkbox(&mut settings.allow_multi_select, "");
+        ui.end_row();
+
+        ui.add_enabled_ui(settings.allow_multi_select, |ui| {
+            ui.label("select range modifier");
+        });
+        ui.add_enabled_ui(settings.allow_multi_select, |ui| {
+            ui.horizontal(|ui| {
+                let modifiers = &mut settings.range_selection_modifier;
+                ui.checkbox(&mut modifiers.alt, "alt");
+                ui.checkbox(&mut modifiers.ctrl, "ctrl");
+                ui.checkbox(&mut modifiers.shift, "shift");
+                ui.checkbox(&mut modifiers.mac_cmd, "mac cmd");
+                ui.checkbox(&mut modifiers.command, "command");
+            });
+        });
+        ui.end_row();
+
+        ui.add_enabled_ui(settings.allow_multi_select, |ui| {
+            ui.label("select set modifier");
+        });
+        ui.add_enabled_ui(settings.allow_multi_select, |ui| {
+            ui.horizontal(|ui| {
+                let modifiers = &mut settings.set_selection_modifier;
+                ui.checkbox(&mut modifiers.alt, "alt");
+                ui.checkbox(&mut modifiers.ctrl, "ctrl");
+                ui.checkbox(&mut modifiers.shift, "shift");
+                ui.checkbox(&mut modifiers.mac_cmd, "mac cmd");
+                ui.checkbox(&mut modifiers.command, "command");
+            });
+        });
         ui.end_row();
 
         ui.label("allow drag and drop");

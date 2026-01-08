@@ -314,6 +314,18 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
+    /// Set the modifier that the user is required to press to initiate a range based selection.
+    pub fn range_selection_modifier(mut self, modifiers: Modifiers) -> Self {
+        self.settings.range_selection_modifier = modifiers;
+        self
+    }
+
+    /// Set the modifier that the user is required to press to initiate a set based selection.
+    pub fn set_selection_modifier(mut self, modifiers: Modifiers) -> Self {
+        self.settings.set_selection_modifier = modifiers;
+        self
+    }
+
     /// Set if nodes in the tree are allowed to be dragged and dropped.
     pub fn allow_drag_and_drop(mut self, allow_drag_and_drop: bool) -> Self {
         self.settings.allow_drag_and_drop = allow_drag_and_drop;
@@ -541,6 +553,14 @@ pub struct TreeViewSettings {
     /// If the tree view is allowed to select multiple nodes at once.
     /// Default is true.
     pub allow_multi_select: bool,
+    /// Specifies the modifier that the user is require to press for a range based multi selection.
+    /// A range based selection selects all nodes between the selected node and a previously selected pivot node.
+    /// Default is `egui::Modifiers::SHIFT`
+    pub range_selection_modifier: Modifiers,
+    /// Specified the modifier that the user is required to press for a set based multi selection.
+    /// A set based selection adds/removes the selected node to/from the multi selection.
+    /// Default is `egui::Modifiers::COMMAND`
+    pub set_selection_modifier: Modifiers,
     /// If the nodes in the tree view are allowed to be dragged and dropped.
     /// Default is true.
     pub allow_drag_and_drop: bool,
@@ -559,6 +579,8 @@ impl Default for TreeViewSettings {
             min_width: 0.0,
             min_height: 0.0,
             allow_multi_select: true,
+            range_selection_modifier: Modifiers::SHIFT,
+            set_selection_modifier: Modifiers::COMMAND,
             allow_drag_and_drop: true,
             default_node_height: None,
         }
@@ -879,14 +901,14 @@ fn get_input<NodeIdType>(
         return Input::KeyRight { select_next: false };
     }
     if ui.input(|i| i.key_pressed(Key::ArrowUp)) {
-        if modifiers.shift_only() {
+        if modifiers.matches_exact(settings.range_selection_modifier) {
             return Input::KeyUpAndShift {
                 previous_node: None,
                 nodes_to_select: None,
                 next_cursor: None,
             };
         }
-        if modifiers.command_only() {
+        if modifiers.matches_exact(settings.set_selection_modifier) {
             return Input::KeyUpAndCommand {
                 previous_node: None,
             };
@@ -896,14 +918,14 @@ fn get_input<NodeIdType>(
         };
     }
     if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
-        if modifiers.shift_only() {
+        if modifiers.matches_exact(settings.range_selection_modifier) {
             return Input::KeyDownAndShift {
                 nodes_to_select: None,
                 next_cursor: None,
                 is_next: false,
             };
         }
-        if modifiers.command_only() {
+        if modifiers.matches_exact(settings.set_selection_modifier) {
             return Input::KeyDownAndCommand { is_next: false };
         }
         return Input::KeyDown(false);

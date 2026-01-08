@@ -798,7 +798,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     break 'block;
                 }
                 // Single click
-                if modifiers.shift_only() {
+                if modifiers.matches_exact(self.settings.range_selection_modifier) {
                     if let Some(shift_click_nodes) = shift_click_nodes {
                         shift_click_nodes.push(node.id.clone());
                         if row_clicked || self.state.is_selection_pivot(&node.id) {
@@ -812,7 +812,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     } else if row_clicked || self.state.is_selection_pivot(&node.id) {
                         *shift_click_nodes = Some(vec![node.id.clone()]);
                     }
-                } else if modifiers.command_only() {
+                } else if modifiers.matches_exact(self.settings.set_selection_modifier) {
                     if row_clicked {
                         *self.output = Output::ToggleSelection(node.id.clone(), None);
                         *self.input = Input::None;
