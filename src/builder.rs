@@ -1,3 +1,5 @@
+use core::f32;
+
 use egui::{
     layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, UiBuilder, WidgetText,
 };
@@ -40,6 +42,7 @@ struct IndentState<NodeIdType> {
 /// Use this to add directories or leaves to the tree.
 pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     ui: &'ui mut Ui,
+    drag_layer_ui: Ui,
     state: &'ui mut TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
     ui_data: &'ui mut UiData<NodeIdType>,
@@ -60,11 +63,19 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         input: &'ui mut Input<NodeIdType>,
         output: &'ui mut Output<NodeIdType>,
     ) -> Self {
+        let viewport_rect = ui.ctx().input(|i| i.content_rect());
+        let mut drag_layer_ui = ui.new_child(
+            UiBuilder::new()
+                .layer_id(ui_data.drag_layer)
+                .max_rect(viewport_rect),
+        );
+        drag_layer_ui.set_clip_rect(viewport_rect);
         Self {
             ui_data,
             state,
             settings,
             ui,
+            drag_layer_ui,
             selection_background: None,
             stack: Vec::new(),
             indents: Vec::new(),
@@ -285,21 +296,25 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         }
         // Draw node dragged
         if self.state.is_dragged(&node.id) {
-            let mut dragged_ui = self
-                .ui
-                .new_child(UiBuilder::new().layer_id(self.ui_data.drag_layer));
             // We translate the rectangle to the top left of the screen.
             // This essentially removes the effect of the scroll area and we have a fixed position
             // where the drag overlay is rendered.
-            let r = row_rect.translate(-self.ui.max_rect().min.to_vec2());
-            if self.state.is_selected(&node.id) {
-                dragged_ui.painter().rect_filled(
-                    r,
-                    dragged_ui.visuals().widgets.active.corner_radius,
-                    dragged_ui.visuals().selection.bg_fill.linear_multiply(0.4),
-                );
+            let r = row_rect
+                .translate(-self.ui.max_rect().min.to_vec2() + self.ui_data.drag_layer_offset);
+            if self.drag_layer_ui.max_rect().intersects(r) {
+                if self.state.is_selected(&node.id) {
+                    self.drag_layer_ui.painter().rect_filled(
+                        r,
+                        self.drag_layer_ui.visuals().widgets.active.corner_radius,
+                        self.drag_layer_ui
+                            .visuals()
+                            .selection
+                            .bg_fill
+                            .linear_multiply(0.4),
+                    );
+                }
+                node.show_node(&mut self.drag_layer_ui, self.settings, r, false, true);
             }
-            node.show_node(&mut dragged_ui, self.settings, r, false, true);
         }
         *self.ui_data.space_used.bottom_mut() += row_rect.height();
         if node.is_dir {

@@ -54,8 +54,8 @@ mod node;
 mod state;
 
 use egui::{
-    self, emath, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
-    Order, PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
+    self, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt, Order,
+    PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
 };
 use std::{collections::HashSet, hash::Hash};
 
@@ -173,7 +173,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         // Remember the size of the tree for next frame.
         //state.size = response.rect.size();
 
-        draw_background(ui, &ui_data);
+        //draw_background(ui, &ui_data);
 
         if ui.memory(|m| m.has_focus(id)) {
             // If the widget is focused but no node is selected we want to select any node
@@ -376,11 +376,17 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
     let mut output = Output::None;
     let mut input = get_input::<NodeIdType>(ui, &interaction, id, settings);
+    let drag_layer_offset = ui
+        .input(|i| i.pointer.press_origin())
+        .zip(ui.input(|i| i.pointer.latest_pos()))
+        .zip(state.get_drag_overlay_offset())
+        .map(|((origin, latest), drag_overlay_offset)| (latest - origin) + drag_overlay_offset)
+        .unwrap_or_default();
     let mut ui_data = UiData {
         interaction,
         context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
-        drag_layer_offset: state.get_drag_overlay_offset().unwrap_or_default(),
+        drag_layer_offset,
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
         drop_target: None,
@@ -491,18 +497,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
 
     (ui_data, tree_view_rect)
-}
-
-fn draw_background<NodeIdType: NodeId>(ui: &mut Ui, ui_data: &UiData<NodeIdType>) {
-    if ui_data.interaction.dragged() {
-        let (start, current) = ui.input(|i| (i.pointer.press_origin(), i.pointer.hover_pos()));
-        if let (Some(start), Some(current)) = (start, current) {
-            let delta = current.to_vec2() - start.to_vec2();
-            let transform = emath::TSTransform::from_translation(delta + ui_data.drag_layer_offset);
-            ui.ctx()
-                .transform_layer_shapes(ui_data.drag_layer, transform);
-        }
-    }
 }
 
 /// A position inside a directory node.
