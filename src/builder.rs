@@ -806,6 +806,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                             *self.input = Input::None;
                             break 'block;
                         }
+                    } else if row_clicked && self.state.get_selection_pivot().is_none() {
+                        *self.output = Output::SelectOneNode(node.id.clone(), None);
+                        *self.input = Input::None;
                     } else if row_clicked || self.state.is_selection_pivot(&node.id) {
                         *shift_click_nodes = Some(vec![node.id.clone()]);
                     }
