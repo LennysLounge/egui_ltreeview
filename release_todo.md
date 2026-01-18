@@ -18,7 +18,7 @@ cargo package --list
 
 5. Publish to crates.io
 ```sh
-cargo publish --dry-run
+cargo publish
 ```
 
 6. Add git tag `release_vX.Y.Z` 
