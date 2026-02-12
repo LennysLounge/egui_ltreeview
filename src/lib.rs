@@ -388,6 +388,14 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
     let mut output = Output::None;
     let mut input = get_input::<NodeIdType>(ui, &interaction, id, settings);
+    let had_secondary_click = matches!(input, Input::SecondaryClick(_));
+    let had_primary_click = matches!(input, Input::Click { .. });
+
+    // Clear secondary selection when secondary clicking, it will be set again if a node is actually clicked
+    if had_secondary_click {
+        state.secondary_selection = None;
+    }
+
     let drag_layer_offset = ui
         .input(|i| i.pointer.press_origin())
         .zip(ui.input(|i| i.pointer.latest_pos()))
@@ -431,14 +439,6 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state.min_width = state.min_width.at_least(ui_data.space_used.width());
     state.last_height = ui_data.space_used.height();
 
-    // Do context menu
-    if !ui_data.context_menu_was_open {
-        if let Some(fallback_context_menu) = fall_back_context_menu.take() {
-            ui_data.interaction.context_menu(|ui| {
-                fallback_context_menu(ui, state.selected());
-            });
-        }
-    }
     // Read out results from inputs
     match input {
         Input::DragStarted {
@@ -503,7 +503,25 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             state.set_cursor(Some(id));
             ui.scroll_to_rect(scroll_to_rect, None);
         }
-        Output::None => (),
+        Output::None => {
+            // If primary click happened but no node was clicked, clear all selection
+            if had_primary_click {
+                ui_data.selected = true;
+                state.set_selected(Vec::new());
+                state.set_pivot(None);
+                state.set_cursor(None);
+            }
+        }
+    }
+
+    // Do context menu
+    // Only show fallback context menu if a node was actually secondary clicked
+    if !ui_data.context_menu_was_open && state.secondary_selection.is_some() {
+        if let Some(fallback_context_menu) = fall_back_context_menu.take() {
+            ui_data.interaction.context_menu(|ui| {
+                fallback_context_menu(ui, state.selected());
+            });
+        }
     }
 
     state.context_menu_was_open = ui_data.interaction.context_menu_opened();
