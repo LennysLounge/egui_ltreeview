@@ -3,7 +3,9 @@ use std::{collections::HashSet, env};
 
 use data::*;
 use eframe::CreationContext;
-use egui::{Color32, DragValue, Id, Label, Modifiers, Panel, Response, ScrollArea, ThemePreference, Ui};
+use egui::{
+    Color32, DragValue, Id, Label, Modifiers, Panel, Response, ScrollArea, ThemePreference, Ui,
+};
 use egui_ltreeview::{
     Action, DirPosition, IndentHintStyle, NodeBuilder, RowLayout, TreeView, TreeViewBuilder,
     TreeViewState,
