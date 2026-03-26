@@ -3,7 +3,7 @@ use std::{collections::HashSet, env};
 
 use data::*;
 use eframe::CreationContext;
-use egui::{Color32, DragValue, Id, Label, Modifiers, Response, ScrollArea, ThemePreference, Ui};
+use egui::{Color32, DragValue, Id, Label, Modifiers, Panel, Response, ScrollArea, ThemePreference, Ui};
 use egui_ltreeview::{
     Action, DirPosition, IndentHintStyle, NodeBuilder, RowLayout, TreeView, TreeViewBuilder,
     TreeViewState,
@@ -129,13 +129,13 @@ impl Default for MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::bottom(Id::new("footer")).show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        Panel::bottom(Id::new("footer")).show_inside(ui, |ui| {
             ui.label(format!("App version: {}", env!("CARGO_PKG_VERSION")))
         });
-        egui::SidePanel::left(Id::new("tree view"))
+        Panel::left(Id::new("tree view"))
             .resizable(true)
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 ScrollArea::both()
                     .scroll([
                         self.settings.scroll_horizontal,
@@ -148,7 +148,7 @@ impl eframe::App for MyApp {
                         show_tree_view(ui, self);
                     });
             });
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             if self.tree_view_state.selected().len() > 1 {
                 ui.label("Multiple nodes selected");
                 egui::Grid::new("settings grid").show(ui, |ui| {
@@ -184,7 +184,7 @@ impl eframe::App for MyApp {
                 egui::Window::new(node.name())
                     .id(Id::new(node_id))
                     .open(&mut open)
-                    .show(ctx, |ui| {
+                    .show(ui, |ui| {
                         show_node_content(ui, node);
                     });
             });
@@ -417,18 +417,18 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.end_row();
 
         ui.label("Indent:");
-        let mut indent = ui.ctx().style().spacing.indent;
+        let mut indent = ui.global_style().spacing.indent;
         ui.add(DragValue::new(&mut indent).range(0.0..=f32::INFINITY));
-        ui.ctx().style_mut(|style| {
+        ui.global_style_mut(|style| {
             style.spacing.indent = indent;
         });
         ui.end_row();
         ui.label("Item spacing:");
         ui.horizontal(|ui| {
-            let mut spacing = ui.ctx().style().spacing.item_spacing;
+            let mut spacing = ui.global_style().spacing.item_spacing;
             ui.add(DragValue::new(&mut spacing.x));
             ui.add(DragValue::new(&mut spacing.y));
-            ui.ctx().style_mut(|style| {
+            ui.global_style_mut(|style| {
                 style.spacing.item_spacing = spacing;
             });
         });
@@ -440,9 +440,9 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
         ui.checkbox(&mut settings.scroll_vertical, "");
         ui.end_row();
         ui.label("Striped:");
-        let mut striped = ui.ctx().style().visuals.striped;
+        let mut striped = ui.global_style().visuals.striped;
         ui.checkbox(&mut striped, "");
-        ui.ctx().style_mut(|style| {
+        ui.global_style_mut(|style| {
             style.visuals.striped = striped;
         });
         ui.end_row();

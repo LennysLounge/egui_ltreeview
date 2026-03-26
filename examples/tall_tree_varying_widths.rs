@@ -1,4 +1,4 @@
-use egui::{ScrollArea, ThemePreference};
+use egui::{Panel, ScrollArea, ThemePreference};
 use egui_ltreeview::TreeView;
 
 fn main() -> Result<(), eframe::Error> {
@@ -22,8 +22,8 @@ fn main() -> Result<(), eframe::Error> {
 struct MyApp {}
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::SidePanel::left("tree panel").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        Panel::left("tree panel").show_inside(ui, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
                 TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |builder| {
                     for val in 1..100 {
@@ -34,6 +34,6 @@ impl eframe::App for MyApp {
                 });
             });
         });
-        egui::CentralPanel::default().show(ctx, |_ui| {});
+        egui::CentralPanel::default().show_inside(ui, |_ui| {});
     }
 }

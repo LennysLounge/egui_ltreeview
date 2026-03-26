@@ -3,7 +3,7 @@ use std::{
     u64,
 };
 
-use egui::{Label, NumExt, ThemePreference};
+use egui::{Label, NumExt, Panel, ThemePreference};
 use egui_ltreeview::{NodeConfig, TreeView, TreeViewBuilder, TreeViewState};
 use uuid::Uuid;
 
@@ -63,8 +63,8 @@ fn init_state(state: &mut TreeViewState<Uuid>, node: &Node) {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        Panel::bottom("bottom panel").show_inside(ui, |ui|{
             let dt = ui.input(|i| i.stable_dt);
             ui.label(format!(
                 "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:.3}ms, min: {:.3}ms, max: {:.3}ms",
@@ -75,7 +75,7 @@ impl eframe::App for MyApp {
                 self.max.as_secs_f64() * 1000.0
             ));
         });
-        if ctx.input(|i| i.viewport().close_requested()) {
+        if ui.input(|i| i.viewport().close_requested()) {
             println!(
                 "avg: {:.3}ms\tlow: {:.3}ms\thigh: {:.3}ms",
                 self.avg.as_secs_f64() * 1000.0,
@@ -84,7 +84,7 @@ impl eframe::App for MyApp {
             );
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 let start = Instant::now();
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(

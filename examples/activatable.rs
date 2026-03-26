@@ -8,7 +8,7 @@
 #[path = "data.rs"]
 mod data;
 
-use egui::{Id, ThemePreference};
+use egui::{Id, Panel, ThemePreference};
 use egui_ltreeview::{Action, Activate, TreeView, TreeViewState};
 
 fn main() -> Result<(), eframe::Error> {
@@ -43,8 +43,8 @@ impl Default for MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::SidePanel::left(Id::new("left")).show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        Panel::left(Id::new("left")).show_inside(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 let (_response, actions) = TreeView::new(ui.make_persistent_id("Names tree view"))
                     .show_state(ui, &mut self.tree, |builder| {
@@ -78,7 +78,7 @@ impl eframe::App for MyApp {
                 }
             });
         });
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.label("Activate selections by pressing enter or double-clicking.");
             ui.separator();
             ui.label("History");
