@@ -40,7 +40,7 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::left(Id::new("left")).show_inside(ui, |ui|{
+        Panel::left(Id::new("left")).show_inside(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                     ui,
