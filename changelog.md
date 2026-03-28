@@ -1,10 +1,11 @@
-# v0.6.2-dev
+# v0.7.0-dev
 
 ### New features:
 
 ### Fixes:
 
 ### Changes:
+* Update egui to 0.34
 * When clicking on the empty space bellow the tree, the selection will now be cleared.
 
 # v0.6.1

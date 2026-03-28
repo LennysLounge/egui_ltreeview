@@ -44,6 +44,7 @@ It also contains a [`playground`](https://github.com/LennysLounge/egui_ltreeview
 
 |egui Version   | compatible up to
 |--------------:|-----------------:
-|0.33           | current         
+|0.34           | current
+|0.33           | up to 0.6.1
 |0.32           | up to 0.5.3
 
