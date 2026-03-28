@@ -452,6 +452,10 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
                 simplified: simplified_dragged,
             });
         }
+        Input::Click { .. } => {
+            ui_data.selected = true;
+            state.set_selected(vec![]);
+        }
         _ => (),
     };
     match output {

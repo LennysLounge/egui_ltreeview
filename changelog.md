@@ -5,6 +5,7 @@
 ### Fixes:
 
 ### Changes:
+* When clicking on the empty space bellow the tree, the selection will now be cleared.
 
 # v0.6.1
 
