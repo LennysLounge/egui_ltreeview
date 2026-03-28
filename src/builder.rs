@@ -1,13 +1,13 @@
 use core::f32;
 
 use egui::{
-    layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Shape, Stroke, Ui, UiBuilder, WidgetText,
+    layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui, UiBuilder, Vec2,
+    WidgetText,
 };
 
 use crate::{
     node::NodeBuilder, rect_contains_visually, DirPosition, DragState, DropQuarter,
-    IndentHintStyle, Input, Node, NodeConfig, NodeId, Output, TreeViewSettings, TreeViewState,
-    UiData,
+    IndentHintStyle, Input, Node, NodeConfig, NodeId, TreeViewSettings, TreeViewState, UiData,
 };
 
 #[derive(Clone)]
@@ -37,6 +37,37 @@ struct IndentState<NodeIdType> {
     extends_below_clip_rect: bool,
 }
 
+pub(crate) struct TreeViewBuilderResponse<NodeIdType> {
+    pub(crate) interaction: Response,
+    pub(crate) context_menu_was_open: bool,
+    pub(crate) drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    pub(crate) drop_on_self: bool,
+    pub(crate) activate: Option<Vec<NodeIdType>>,
+    pub(crate) selected: bool,
+    pub(crate) space_used: Rect,
+    pub(crate) output: BuilderActions<NodeIdType>,
+    pub(crate) drop_marker_idx: ShapeIdx,
+    pub(crate) unfinished_input: Input<NodeIdType>,
+}
+
+pub(crate) enum BuilderActions<NodeIdType> {
+    SetDragged(DragState<NodeIdType>),
+    SetSecondaryClicked(NodeIdType),
+    ActivateSelection(Vec<NodeIdType>),
+    ActivateThis(NodeIdType),
+    SelectOneNode(NodeIdType, Option<Rect>),
+    ShiftSelect(Vec<NodeIdType>),
+    ToggleSelection(NodeIdType, Option<Rect>),
+    Select {
+        selection: Vec<NodeIdType>,
+        pivot: NodeIdType,
+        cursor: NodeIdType,
+        scroll_to_rect: Rect,
+    },
+    SetCursor(NodeIdType, Rect),
+    None,
+}
+
 /// The builder used to construct the tree.
 ///
 /// Use this to add directories or leaves to the tree.
@@ -45,43 +76,72 @@ pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     drag_layer_ui: Ui,
     state: &'ui mut TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
-    ui_data: &'ui mut UiData<NodeIdType>,
+    ui_data: UiData,
     selection_background: Option<(ShapeIdx, Rect)>,
     stack: Vec<DirectoryState<NodeIdType>>,
     indents: Vec<IndentState<NodeIdType>>,
-    input: &'ui mut Input<NodeIdType>,
-    output: &'ui mut Output<NodeIdType>,
+    input: Input<NodeIdType>,
     striped: bool,
+    context_menu_was_open: bool,
+    drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    drop_on_self: bool,
+    activate: Option<Vec<NodeIdType>>,
+    selected: bool,
+    space_used: Rect,
+    output: BuilderActions<NodeIdType>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
-    pub(crate) fn new(
+    pub(crate) fn run(
         ui: &'ui mut Ui,
         state: &'ui mut TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
-        ui_data: &'ui mut UiData<NodeIdType>,
-        input: &'ui mut Input<NodeIdType>,
-        output: &'ui mut Output<NodeIdType>,
-    ) -> Self {
-        let viewport_rect = ui.ctx().input(|i| i.content_rect());
-        let mut drag_layer_ui = ui.new_child(
-            UiBuilder::new()
-                .layer_id(ui_data.drag_layer)
-                .max_rect(viewport_rect),
-        );
-        drag_layer_ui.set_clip_rect(viewport_rect);
-        Self {
-            ui_data,
+        ui_data: UiData,
+        input: Input<NodeIdType>,
+        user_callback: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
+    ) -> TreeViewBuilderResponse<NodeIdType> {
+        let mut me = TreeViewBuilder {
             state,
             settings,
-            ui,
-            drag_layer_ui,
+            drag_layer_ui: {
+                let viewport_rect = ui.ctx().input(|i| i.content_rect());
+                let mut drag_layer_ui = ui.new_child(
+                    UiBuilder::new()
+                        .layer_id(ui_data.drag_layer)
+                        .max_rect(viewport_rect),
+                );
+                drag_layer_ui.set_clip_rect(viewport_rect);
+                drag_layer_ui
+            },
             selection_background: None,
             stack: Vec::new(),
             indents: Vec::new(),
             input,
-            output,
             striped: false,
+            context_menu_was_open: false,
+            drop_target: None,
+            drop_on_self: false,
+            activate: None,
+            selected: false,
+            space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
+            output: BuilderActions::None,
+            ui,
+            ui_data,
+        };
+
+        user_callback(&mut me);
+
+        TreeViewBuilderResponse {
+            interaction: me.ui_data.interaction,
+            context_menu_was_open: me.context_menu_was_open,
+            drop_target: me.drop_target,
+            drop_on_self: me.drop_on_self,
+            activate: me.activate,
+            selected: me.selected,
+            space_used: me.space_used,
+            output: me.output,
+            drop_marker_idx: me.ui_data.drop_marker_idx,
+            unfinished_input: me.input,
         }
     }
 
@@ -135,7 +195,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 .pop_if(|indent| indent.source_node == dir_state.id);
             if let Some(indent) = indent {
                 self.draw_indent_hint(&indent);
-                match self.ui_data.drop_target.as_ref() {
+                match self.drop_target.as_ref() {
                     Some((target_id, DirPosition::Last)) if target_id == &dir_state.id => {
                         self.draw_drop_marker(indent.anchor, &DirPosition::Last);
                     }
@@ -163,7 +223,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let bottom = self
             .ui
             .clip_rect()
-            .clamp(pos2(top.x, self.ui_data.space_used.bottom()));
+            .clamp(pos2(top.x, self.space_used.bottom()));
 
         match self.settings.indent_hint_style {
             IndentHintStyle::None => (),
@@ -203,7 +263,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         let x_range = self.ui.available_rect_before_wrap().x_range();
         let y_range = match dir_position {
             DirPosition::First => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
-            DirPosition::Last => Rangef::new(row_y_range.min, self.ui_data.space_used.bottom()),
+            DirPosition::Last => Rangef::new(row_y_range.min, self.space_used.bottom()),
             DirPosition::After(_) => Rangef::point(row_y_range.max).expand(DROP_LINE_HEIGHT * 0.5),
             DirPosition::Before(_) => Rangef::point(row_y_range.min).expand(DROP_LINE_HEIGHT * 0.5),
         };
@@ -275,7 +335,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
     fn node_structually_visible(&mut self, mut node: Node<NodeIdType>) -> (bool, Rect) {
         let row_rect = Rect::from_min_size(
-            self.ui_data.space_used.left_bottom(),
+            self.space_used.left_bottom(),
             vec2(
                 self.ui_data.interaction.rect.width(),
                 node.node_height + self.ui.spacing().item_spacing.y,
@@ -286,10 +346,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         if self.ui.clip_rect().intersects(row_rect) {
             let node_width = self.node_visible_in_clip_rect(&mut node, row_rect);
-            if node_width > self.ui_data.space_used.width() {
-                self.ui_data.space_used.set_width(node_width);
+            if node_width > self.space_used.width() {
+                self.space_used.set_width(node_width);
             }
-        } else if self.ui_data.space_used.bottom() > self.ui.clip_rect().bottom() {
+        } else if self.space_used.bottom() > self.ui.clip_rect().bottom() {
             if let Some(indent) = self.indents.last_mut() {
                 indent.extends_below_clip_rect = true;
             }
@@ -316,13 +376,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 node.show_node(&mut self.drag_layer_ui, self.settings, r, false, true);
             }
         }
-        *self.ui_data.space_used.bottom_mut() += row_rect.height();
+        *self.space_used.bottom_mut() += row_rect.height();
         if node.is_dir {
             // If the directory is opened below the clip rect its indent hint is never
             // going to be visible anyways so we dont bother.
             // Therfore we only add the indent hint if the cursor after the node was added
             // is still in the clip rect.
-            if self.ui_data.space_used.bottom() < self.ui.clip_rect().bottom() {
+            if self.space_used.bottom() < self.ui.clip_rect().bottom() {
                 self.indents.push(IndentState {
                     source_node: node.id.clone(),
                     anchor: row_rect.y_range(),
@@ -402,17 +462,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Show the context menu.
         let was_only_target = !self.state.is_selected(&node.id)
             || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
-        let should_show_context_menu = match self.output {
-            Output::SetSecondaryClicked(id) if id == &node.id => true,
-            Output::SetSecondaryClicked(_) => false,
+        let should_show_context_menu = match &self.output {
+            BuilderActions::SetSecondaryClicked(id) if id == &node.id => true,
+            BuilderActions::SetSecondaryClicked(_) => false,
             _ => self.state.is_secondary_selected(&node.id),
         };
-        if should_show_context_menu && was_only_target && !self.ui_data.context_menu_was_open {
-            self.ui_data.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
+        if should_show_context_menu && was_only_target && !self.context_menu_was_open {
+            self.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
         }
 
         // Draw context menu marker
-        if self.state.is_secondary_selected(&node.id) && self.ui_data.context_menu_was_open {
+        if self.state.is_secondary_selected(&node.id) && self.context_menu_was_open {
             self.ui.painter().rect_stroke(
                 outer_rect,
                 self.ui.visuals().widgets.active.corner_radius,
@@ -451,43 +511,45 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::KeyEnter { activatable_nodes } => {
                 if self.state.is_selected(&node.id) && node.activatable {
                     activatable_nodes.push(node.id.clone());
-                    *self.output = Output::ActivateSelection(activatable_nodes.clone());
-                    *self.input = Input::None;
+                    self.output = BuilderActions::ActivateSelection(activatable_nodes.clone());
+                    self.input = Input::None;
                 }
             }
             Input::KeySpace => {
                 if self.state.is_selection_cursor(&node.id) {
-                    *self.output = Output::ToggleSelection(node.id.clone(), Some(*row_rect));
-                    *self.input = Input::None;
+                    self.output = BuilderActions::ToggleSelection(node.id.clone(), Some(*row_rect));
+                    self.input = Input::None;
                 }
             }
             Input::KeyLeft => {
                 if self.state.is_selected(&node.id) {
-                    *self.input = Input::None;
+                    self.input = Input::None;
                     if self.state.selected_count() == 1 {
                         if node.is_dir && node.is_open {
                             self.state.set_openness(node.id.clone(), !node.is_open);
                         } else if let Some(dir_state) = self.stack.last() {
-                            *self.output =
-                                Output::SelectOneNode(dir_state.id.clone(), dir_state.row_rect);
+                            self.output = BuilderActions::SelectOneNode(
+                                dir_state.id.clone(),
+                                dir_state.row_rect,
+                            );
                         }
                     }
                 }
             }
             Input::KeyRight { select_next } => {
                 if *select_next {
-                    *self.output = Output::SelectOneNode(node.id.clone(), Some(*row_rect));
-                    *self.input = Input::None;
+                    self.output = BuilderActions::SelectOneNode(node.id.clone(), Some(*row_rect));
+                    self.input = Input::None;
                 } else if self.state.is_selected(&node.id) {
                     if self.state.selected_count() == 1 {
                         if node.is_dir && !node.is_open {
                             self.state.set_openness(node.id.clone(), !node.is_open);
-                            *self.input = Input::None;
+                            self.input = Input::None;
                         } else {
                             *select_next = true;
                         }
                     } else {
-                        *self.input = Input::None;
+                        self.input = Input::None;
                     }
                 }
             }
@@ -500,12 +562,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 if current_node_is_cursor {
                     if let Some((previous_node, prev_rect)) = previous_node {
-                        *self.output =
-                            Output::SelectOneNode(previous_node.clone(), Some(*prev_rect));
-                        *self.input = Input::None;
+                        self.output =
+                            BuilderActions::SelectOneNode(previous_node.clone(), Some(*prev_rect));
+                        self.input = Input::None;
                         break 'arm;
                     } else {
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     }
                 }
@@ -520,9 +582,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     .is_some_and(|cursor_id| cursor_id == &node.id);
                 if current_node_is_cursor {
                     if let Some((previous_node, prev_rect)) = previous_node {
-                        *self.output = Output::SetCursor(previous_node.clone(), *prev_rect);
+                        self.output = BuilderActions::SetCursor(previous_node.clone(), *prev_rect);
                     }
-                    *self.input = Input::None;
+                    self.input = Input::None;
                     break 'arm;
                 }
                 *previous_node = Some((node.id.clone(), *row_rect));
@@ -533,7 +595,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 next_cursor,
             } => 'arm: {
                 let Some(pivot) = self.state.get_selection_pivot() else {
-                    *self.input = Input::None;
+                    self.input = Input::None;
                     break 'arm;
                 };
                 let previous_node = {
@@ -549,7 +611,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         .or(self.state.get_selection_pivot())
                         .is_some_and(|cursor_id| cursor_id == &node.id);
                     if current_node_is_cursor {
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     }
                     if pivot == &node.id {
@@ -560,13 +622,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 let Some(cursor) = self.state.get_selection_cursor() else {
                     if self.state.is_selection_pivot(&node.id) {
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: vec![previous_node.clone(), node.id.clone()],
                             pivot: pivot.clone(),
                             cursor: previous_node.clone(),
                             scroll_to_rect: previous_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     };
                     break 'arm;
@@ -574,39 +636,39 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 if let Some(nodes_to_select) = nodes_to_select {
                     if cursor == &node.id {
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: previous_node.clone(),
                             scroll_to_rect: previous_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     } else if pivot == &node.id {
                         nodes_to_select.push(node.id.clone());
                         let (next_cursor, next_rect) = next_cursor
                             .clone()
                             .expect("The selection should have started on the cursor which would have se this value");
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: next_cursor,
                             scroll_to_rect: next_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     } else {
                         nodes_to_select.push(node.id.clone());
                     }
                 } else {
                     if cursor == &node.id && pivot == &node.id {
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: vec![previous_node.clone(), node.id.clone()],
                             pivot: pivot.clone(),
                             cursor: previous_node.clone(),
                             scroll_to_rect: previous_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     }
                     if cursor == &node.id {
@@ -619,8 +681,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::KeyDown(is_next) => 'arm: {
                 if *is_next {
-                    *self.output = Output::SelectOneNode(node.id.clone(), Some(*row_rect));
-                    *self.input = Input::None;
+                    self.output = BuilderActions::SelectOneNode(node.id.clone(), Some(*row_rect));
+                    self.input = Input::None;
                     break 'arm;
                 }
                 *is_next = self
@@ -631,8 +693,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::KeyDownAndCommand { is_next } => 'arm: {
                 if *is_next {
-                    *self.output = Output::SetCursor(node.id.clone(), *row_rect);
-                    *self.input = Input::None;
+                    self.output = BuilderActions::SetCursor(node.id.clone(), *row_rect);
+                    self.input = Input::None;
                     break 'arm;
                 }
                 *is_next = self
@@ -647,43 +709,43 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 is_next,
             } => 'arm: {
                 let Some(pivot) = self.state.get_selection_pivot() else {
-                    *self.input = Input::None;
+                    self.input = Input::None;
                     break 'arm;
                 };
 
                 if let Some(nodes_to_select) = nodes_to_select {
                     nodes_to_select.push(node.id.clone());
                     if *is_next {
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: node.id.clone(),
                             scroll_to_rect: *row_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     } else if pivot == &node.id {
                         let (next_cursor, next_rect) = next_cursor
                             .clone()
                             .expect("The selection should have started on the cursor which would have se this value");
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: next_cursor,
                             scroll_to_rect: next_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     }
                 } else {
                     if *is_next && pivot == &node.id {
-                        *self.output = Output::Select {
+                        self.output = BuilderActions::Select {
                             selection: vec![node.id.clone()],
                             pivot: pivot.clone(),
                             cursor: node.id.clone(),
                             scroll_to_rect: *row_rect,
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     }
                     if *is_next {
@@ -716,12 +778,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if self.state.is_selected(&node.id) {
                         *selected_node_dragged = true;
                     } else {
-                        *self.output = Output::SetDragged(DragState {
+                        self.output = BuilderActions::SetDragged(DragState {
                             drag_overlay_offset: self.ui.max_rect().min.to_vec2(),
                             dragged: vec![node.id.clone()],
                             simplified: vec![node.id.clone()],
                         });
-                        *self.input = Input::None;
+                        self.input = Input::None;
                         break 'arm;
                     }
                 }
@@ -740,16 +802,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::Dragged(pos) => {
                 let pos = pos.clone();
                 if rect_contains_visually(row_rect, &pos) && !self.current_branch_dragged() {
-                    self.ui_data.drop_on_self = self.state.is_dragged(&node.id);
-                    if !self.ui_data.drop_on_self {
-                        self.ui_data.drop_target = self.get_drop_position(row_rect, node, &pos);
-                        match self.ui_data.drop_target.as_ref() {
+                    self.drop_on_self = self.state.is_dragged(&node.id);
+                    if !self.drop_on_self {
+                        self.drop_target = self.get_drop_position(row_rect, node, &pos);
+                        match self.drop_target.as_ref() {
                             Some((_, dir_position)) if dir_position != &DirPosition::Last => {
                                 self.draw_drop_marker(row_rect.y_range(), dir_position);
                             }
                             _ => (),
                         };
-                        *self.input = Input::None;
+                        self.input = Input::None;
                     }
                 }
             }
@@ -765,7 +827,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     closer.is_some_and(|closer| rect_contains_visually(closer, pos));
                 if closer_clicked {
                     self.state.set_openness(node.id.clone(), !node.is_open);
-                    *self.input = Input::None;
+                    self.input = Input::None;
                     break 'block;
                 }
 
@@ -787,14 +849,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 if double_click {
                     if node.activatable {
                         if self.state.is_selected(&node.id) {
-                            *self.output = Output::ActivateSelection(activatable_nodes.clone());
+                            self.output =
+                                BuilderActions::ActivateSelection(activatable_nodes.clone());
                         } else {
-                            *self.output = Output::ActivateThis(node.id.clone());
+                            self.output = BuilderActions::ActivateThis(node.id.clone());
                         }
                     } else {
                         self.state.set_openness(node.id.clone(), !node.is_open);
                     }
-                    *self.input = Input::None;
+                    self.input = Input::None;
                     break 'block;
                 }
                 // Single click
@@ -802,32 +865,32 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if let Some(shift_click_nodes) = shift_click_nodes {
                         shift_click_nodes.push(node.id.clone());
                         if row_clicked || self.state.is_selection_pivot(&node.id) {
-                            *self.output = Output::ShiftSelect(shift_click_nodes.clone());
-                            *self.input = Input::None;
+                            self.output = BuilderActions::ShiftSelect(shift_click_nodes.clone());
+                            self.input = Input::None;
                             break 'block;
                         }
                     } else if row_clicked && self.state.get_selection_pivot().is_none() {
-                        *self.output = Output::SelectOneNode(node.id.clone(), None);
-                        *self.input = Input::None;
+                        self.output = BuilderActions::SelectOneNode(node.id.clone(), None);
+                        self.input = Input::None;
                     } else if row_clicked || self.state.is_selection_pivot(&node.id) {
                         *shift_click_nodes = Some(vec![node.id.clone()]);
                     }
                 } else if modifiers.matches_exact(self.settings.set_selection_modifier) {
                     if row_clicked {
-                        *self.output = Output::ToggleSelection(node.id.clone(), None);
-                        *self.input = Input::None;
+                        self.output = BuilderActions::ToggleSelection(node.id.clone(), None);
+                        self.input = Input::None;
                         break 'block;
                     }
                 } else if row_clicked {
-                    *self.output = Output::SelectOneNode(node.id.clone(), None);
-                    *self.input = Input::None;
+                    self.output = BuilderActions::SelectOneNode(node.id.clone(), None);
+                    self.input = Input::None;
                     break 'block;
                 }
             }
             Input::SecondaryClick(pos) => {
                 if rect_contains_visually(row_rect, pos) {
-                    *self.output = Output::SetSecondaryClicked(node.id.clone());
-                    *self.input = Input::None;
+                    self.output = BuilderActions::SetSecondaryClicked(node.id.clone());
+                    self.input = Input::None;
                 }
             }
             Input::KeyLeft => (),
@@ -845,8 +908,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn do_output(&mut self, node: &Node<NodeIdType>) {
-        match self.output {
-            Output::ActivateSelection(selection) => {
+        match &mut self.output {
+            BuilderActions::ActivateSelection(selection) => {
                 if self.state.is_selected(&node.id)
                     && node.activatable
                     && !selection.contains(&node.id)

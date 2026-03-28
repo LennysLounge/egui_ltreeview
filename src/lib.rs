@@ -158,7 +158,7 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             )
         });
 
-        let (ui_data, tree_view_rect) = draw_foreground(
+        let (builder_response, tree_view_rect) = draw_foreground(
             ui,
             id,
             &settings,
@@ -186,21 +186,21 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 }
             }
         }
-        if ui_data.interaction.clicked() || ui_data.interaction.drag_started() {
+        if builder_response.interaction.clicked() || builder_response.interaction.drag_started() {
             ui.memory_mut(|m| m.request_focus(id));
         }
 
         let mut actions = Vec::new();
         // Create a drag or move action.
-        if ui_data.interaction.dragged() {
-            if let Some((drop_id, position)) = &ui_data.drop_target {
+        if builder_response.interaction.dragged() {
+            if let Some((drop_id, position)) = &builder_response.drop_target {
                 actions.push(Action::Drag(DragAndDrop {
                     source: state.get_simplified_dragged().cloned().unwrap_or_default(),
                     target: drop_id.clone(),
                     position: position.clone(),
-                    drop_marker_idx: ui_data.drop_marker_idx,
+                    drop_marker_idx: builder_response.drop_marker_idx,
                 }))
-            } else if !ui_data.drop_on_self {
+            } else if !builder_response.drop_on_self {
                 if let Some(position) = ui.ctx().pointer_latest_pos() {
                     actions.push(Action::DragExternal(DragAndDropExternal {
                         position,
@@ -209,15 +209,15 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
                 }
             }
         }
-        if ui_data.interaction.drag_stopped() {
-            if let Some((drop_id, position)) = ui_data.drop_target {
+        if builder_response.interaction.drag_stopped() {
+            if let Some((drop_id, position)) = builder_response.drop_target {
                 actions.push(Action::Move(DragAndDrop {
                     source: state.get_simplified_dragged().cloned().unwrap_or_default(),
                     target: drop_id,
                     position,
-                    drop_marker_idx: ui_data.drop_marker_idx,
+                    drop_marker_idx: builder_response.drop_marker_idx,
                 }))
-            } else if !ui_data.drop_on_self {
+            } else if !builder_response.drop_on_self {
                 if let Some(position) = ui.ctx().pointer_latest_pos() {
                     actions.push(Action::MoveExternal(DragAndDropExternal {
                         position,
@@ -227,22 +227,25 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             }
         }
 
-        if ui_data.selected {
+        if builder_response.selected {
             actions.push(Action::SetSelected(state.selected().clone()));
         }
 
-        if let Some(nodes_to_activate) = ui_data.activate {
+        if let Some(nodes_to_activate) = builder_response.activate {
             actions.push(Action::Activate(Activate {
                 selected: nodes_to_activate.clone(),
                 modifiers: ui.ctx().input(|i| i.modifiers),
             }));
         }
 
-        if ui_data.interaction.drag_stopped() {
+        if builder_response.interaction.drag_stopped() {
             state.reset_dragged();
         }
 
-        (ui_data.interaction.with_new_rect(tree_view_rect), actions)
+        (
+            builder_response.interaction.with_new_rect(tree_view_rect),
+            actions,
+        )
     }
 }
 ///
@@ -376,7 +379,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state: &mut TreeViewState<NodeIdType>,
     build_tree_view: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
     fall_back_context_menu: &mut Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
-) -> (UiData<NodeIdType>, Rect) {
+) -> (TreeViewBuilderResponse<NodeIdType>, Rect) {
     // Calculate the desired size of the tree view widget.
     let interaction_rect = Rect::from_min_size(
         ui.cursor().min,
@@ -384,28 +387,19 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             .at_least(vec2(settings.min_width, settings.min_height))
             .at_least(vec2(state.min_width, state.last_height)),
     );
-
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
-    let mut output = Output::None;
-    let mut input = get_input::<NodeIdType>(ui, &interaction, id, settings);
-    let drag_layer_offset = ui
-        .input(|i| i.pointer.press_origin())
-        .zip(ui.input(|i| i.pointer.latest_pos()))
-        .zip(state.get_drag_overlay_offset())
-        .map(|((origin, latest), drag_overlay_offset)| (latest - origin) + drag_overlay_offset)
-        .unwrap_or_default();
-    let mut ui_data = UiData {
+    let input = get_input::<NodeIdType>(ui, &interaction, id, settings);
+    let ui_data = UiData {
         interaction,
-        context_menu_was_open: false,
         drag_layer: LayerId::new(Order::Tooltip, ui.make_persistent_id("ltreeviw drag layer")),
-        drag_layer_offset,
+        drag_layer_offset: ui
+            .input(|i| i.pointer.press_origin())
+            .zip(ui.input(|i| i.pointer.latest_pos()))
+            .zip(state.get_drag_overlay_offset())
+            .map(|((origin, latest), drag_overlay_offset)| (latest - origin) + drag_overlay_offset)
+            .unwrap_or_default(),
         has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
         drop_marker_idx: ui.painter().add(Shape::Noop),
-        drop_target: None,
-        drop_on_self: false,
-        activate: None,
-        selected: false,
-        space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
     };
     // Run the build tree view closure
 
@@ -414,33 +408,34 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             .layout(Layout::top_down(egui::Align::Min))
             .max_rect(interaction_rect),
     );
-    let mut tree_builder = TreeViewBuilder::new(
+    let mut builder_response = TreeViewBuilder::run(
         &mut builder_ui,
         state,
         settings,
-        &mut ui_data,
-        &mut input,
-        &mut output,
+        ui_data,
+        input,
+        build_tree_view,
     );
-    build_tree_view(&mut tree_builder);
 
-    let tree_view_rect = ui_data.space_used.union(interaction_rect);
+    let tree_view_rect = builder_response.space_used.union(interaction_rect);
     ui.allocate_rect(tree_view_rect, Sense::hover());
 
     // Remember width of the tree view for next frame
-    state.min_width = state.min_width.at_least(ui_data.space_used.width());
-    state.last_height = ui_data.space_used.height();
+    state.min_width = state
+        .min_width
+        .at_least(builder_response.space_used.width());
+    state.last_height = builder_response.space_used.height();
 
     // Do context menu
-    if !ui_data.context_menu_was_open {
+    if !builder_response.context_menu_was_open {
         if let Some(fallback_context_menu) = fall_back_context_menu.take() {
-            ui_data.interaction.context_menu(|ui| {
+            builder_response.interaction.context_menu(|ui| {
                 fallback_context_menu(ui, state.selected());
             });
         }
     }
     // Read out results from inputs
-    match input {
+    match builder_response.unfinished_input {
         Input::DragStarted {
             selected_node_dragged,
             simplified_dragged,
@@ -451,68 +446,79 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
                 dragged: state.selected().clone(),
                 simplified: simplified_dragged,
             });
+            builder_response.unfinished_input = Input::None;
         }
         Input::Click { .. } => {
-            ui_data.selected = true;
+            builder_response.selected = true;
             state.set_selected(vec![]);
+            builder_response.unfinished_input = Input::None;
         }
         _ => (),
     };
-    match output {
-        Output::SetDragged(dragged) => {
+    match builder_response.output {
+        BuilderActions::SetDragged(dragged) => {
             state.set_dragged(dragged);
+            builder_response.output = BuilderActions::None;
         }
-        Output::SetSecondaryClicked(id) => {
+        BuilderActions::SetSecondaryClicked(id) => {
             state.secondary_selection = Some(id);
+            builder_response.output = BuilderActions::None;
         }
-        Output::ActivateSelection(selection) => {
-            ui_data.activate = Some(selection);
+        BuilderActions::ActivateSelection(selection) => {
+            builder_response.activate = Some(selection);
+            builder_response.output = BuilderActions::None;
         }
-        Output::ActivateThis(id) => {
-            ui_data.activate = Some(vec![id]);
+        BuilderActions::ActivateThis(id) => {
+            builder_response.activate = Some(vec![id]);
+            builder_response.output = BuilderActions::None;
         }
-        Output::SelectOneNode(id, scroll_to_rect) => {
-            ui_data.selected = true;
+        BuilderActions::SelectOneNode(id, scroll_to_rect) => {
+            builder_response.selected = true;
             state.set_one_selected(id.clone());
             state.set_cursor(None);
             if let Some(scroll_to_rect) = scroll_to_rect {
                 ui.scroll_to_rect(scroll_to_rect, None);
             }
+            builder_response.output = BuilderActions::None;
         }
-        Output::ToggleSelection(id, scroll_to_rect) => {
-            ui_data.selected = true;
+        BuilderActions::ToggleSelection(id, scroll_to_rect) => {
+            builder_response.selected = true;
             state.toggle_selected(&id);
             state.set_pivot(Some(id));
             if let Some(scroll_to_rect) = scroll_to_rect {
                 ui.scroll_to_rect(scroll_to_rect, None);
             }
+            builder_response.output = BuilderActions::None;
         }
-        Output::ShiftSelect(ids) => {
-            ui_data.selected = true;
+        BuilderActions::ShiftSelect(ids) => {
+            builder_response.selected = true;
             state.set_selected_dont_change_pivot(ids);
+            builder_response.output = BuilderActions::None;
         }
-        Output::Select {
+        BuilderActions::Select {
             selection,
             pivot,
             cursor,
             scroll_to_rect,
         } => {
-            ui_data.selected = true;
+            builder_response.selected = true;
             state.set_selected(selection);
             state.set_pivot(Some(pivot));
             state.set_cursor(Some(cursor));
             ui.scroll_to_rect(scroll_to_rect, None);
+            builder_response.output = BuilderActions::None;
         }
-        Output::SetCursor(id, scroll_to_rect) => {
+        BuilderActions::SetCursor(id, scroll_to_rect) => {
             state.set_cursor(Some(id));
             ui.scroll_to_rect(scroll_to_rect, None);
+            builder_response.output = BuilderActions::None;
         }
-        Output::None => (),
+        BuilderActions::None => (),
     }
 
-    state.context_menu_was_open = ui_data.interaction.context_menu_opened();
+    state.context_menu_was_open = builder_response.interaction.context_menu_opened();
 
-    (ui_data, tree_view_rect)
+    (builder_response, tree_view_rect)
 }
 
 /// A position inside a directory node.
@@ -753,18 +759,12 @@ impl DropQuarter {
     }
 }
 
-struct UiData<NodeIdType> {
-    context_menu_was_open: bool,
+struct UiData {
     interaction: Response,
     drag_layer: LayerId,
     drag_layer_offset: Vec2,
     has_focus: bool,
     drop_marker_idx: ShapeIdx,
-    drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
-    drop_on_self: bool,
-    activate: Option<Vec<NodeIdType>>,
-    selected: bool,
-    space_used: Rect,
 }
 
 /// When you ast a rectangle if it contains a point it does so inclusive the upper bound.
@@ -823,23 +823,6 @@ enum Input<NodeIdType> {
     KeyEnter {
         activatable_nodes: Vec<NodeIdType>,
     },
-    None,
-}
-enum Output<NodeIdType> {
-    SetDragged(DragState<NodeIdType>),
-    SetSecondaryClicked(NodeIdType),
-    ActivateSelection(Vec<NodeIdType>),
-    ActivateThis(NodeIdType),
-    SelectOneNode(NodeIdType, Option<Rect>),
-    ShiftSelect(Vec<NodeIdType>),
-    ToggleSelection(NodeIdType, Option<Rect>),
-    Select {
-        selection: Vec<NodeIdType>,
-        pivot: NodeIdType,
-        cursor: NodeIdType,
-        scroll_to_rect: Rect,
-    },
-    SetCursor(NodeIdType, Rect),
     None,
 }
 
