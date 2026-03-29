@@ -3,10 +3,11 @@
 ### New features:
 
 ### Fixes:
+* Opening a context menu on the empty space bellow the tree will now open the fallback context menu for no nodes. Closes #38
 
 ### Changes:
 * Update egui to 0.34
-* When clicking on the empty space bellow the tree, the selection will now be cleared.
+* When clicking on the empty space bellow the tree, the selection will now be cleared. Closes #38
 
 # v0.6.1
 

@@ -38,7 +38,6 @@ struct IndentState<NodeIdType> {
 
 pub(crate) struct TreeViewBuilderResponse<NodeIdType> {
     pub(crate) interaction: Response,
-    pub(crate) context_menu_was_open: bool,
     pub(crate) drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     pub(crate) drop_on_self: bool,
     pub(crate) activate: Option<Vec<NodeIdType>>,
@@ -66,6 +65,9 @@ pub(crate) enum BuilderActions<NodeIdType> {
     SetOpenness(NodeIdType, bool),
     SetLastclicked(NodeIdType),
     ClearSelection,
+    OpenFallbackContextmenu {
+        for_selection: bool,
+    },
     None,
 }
 
@@ -136,7 +138,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         TreeViewBuilderResponse {
             interaction: me.ui_data.interaction,
-            context_menu_was_open: me.context_menu_was_open,
             drop_target: me.drop_target,
             drop_on_self: me.drop_on_self,
             activate: me.activate,
@@ -459,17 +460,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Do input
         self.do_input_output(node, &outer_rect, closer.as_ref());
 
-        // Show the context menu.
-        let was_only_target = !self.state.is_selected(&node.id)
-            || self.state.is_selected(&node.id) && self.state.selected_count() == 1;
-        let should_show_context_menu = match &self.output {
-            BuilderActions::SetSecondaryClicked(id) if id == &node.id => true,
-            BuilderActions::SetSecondaryClicked(_) => false,
-            _ => self.state.is_secondary_selected(&node.id),
+        let should_open_context_menu = match &self.output {
+            BuilderActions::SetSecondaryClicked(id) => id == &node.id,
+            _ => false,
         };
-        if should_show_context_menu && was_only_target && !self.context_menu_was_open {
-            self.context_menu_was_open = node.show_context_menu(&self.ui_data.interaction);
-        }
+        self.context_menu_was_open =
+            node.show_context_menu_popup(self.ui, should_open_context_menu);
 
         // Draw context menu marker
         if self.state.is_secondary_selected(&node.id) && self.context_menu_was_open {
@@ -891,7 +887,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::SecondaryClick(pos) => {
                 if rect_contains_visually(row_rect, pos) {
-                    self.output = BuilderActions::SetSecondaryClicked(node.id.clone());
+                    if self.state.is_selected(&node.id) {
+                        if self.state.selected_count() == 1 {
+                            self.output = BuilderActions::SetSecondaryClicked(node.id.clone());
+                        } else {
+                            self.output = BuilderActions::OpenFallbackContextmenu {
+                                for_selection: true,
+                            };
+                        }
+                    } else {
+                        self.output = BuilderActions::SetSecondaryClicked(node.id.clone());
+                    }
                     self.input = Input::None;
                 }
             }
@@ -1008,6 +1014,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 // Usually this should only happen if the empty space below the tree
                 // was clicked. In this case we clear the selection;
                 self.output = BuilderActions::ClearSelection;
+                self.input = Input::None;
+            }
+            Input::SecondaryClick(_) => {
+                self.output = BuilderActions::OpenFallbackContextmenu {
+                    for_selection: false,
+                };
                 self.input = Input::None;
             }
             _ => (),

@@ -54,8 +54,9 @@ mod node;
 mod state;
 
 use egui::{
-    self, layers::ShapeIdx, vec2, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt, Order,
-    PointerButton, Pos2, Rangef, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
+    self, layers::ShapeIdx, vec2, Align, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
+    Order, PointerButton, Popup, PopupAnchor, PopupKind, Pos2, Rangef, Rect, Response, Sense,
+    Shape, Ui, UiBuilder, Vec2,
 };
 use std::{collections::HashSet, hash::Hash};
 
@@ -398,7 +399,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             .zip(state.get_drag_overlay_offset())
             .map(|((origin, latest), drag_overlay_offset)| (latest - origin) + drag_overlay_offset)
             .unwrap_or_default(),
-        has_focus: ui.memory(|m| m.has_focus(id)) || state.context_menu_was_open,
+        has_focus: ui.memory(|m| m.has_focus(id)),
         drop_marker_idx: ui.painter().add(Shape::Noop),
     };
     // Run the build tree view closure
@@ -426,16 +427,13 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         .at_least(builder_response.space_used.width());
     state.last_height = builder_response.space_used.height();
 
-    // Do context menu
-    if !builder_response.context_menu_was_open {
-        if let Some(fallback_context_menu) = fall_back_context_menu.take() {
-            builder_response.interaction.context_menu(|ui| {
-                fallback_context_menu(ui, state.selected());
-            });
-        }
-    }
-
+    let mut open_fallback_context_menu = false;
     match builder_response.output {
+        BuilderActions::OpenFallbackContextmenu { for_selection } => {
+            open_fallback_context_menu = true;
+            state.show_fallback_context_menu_for_selection = for_selection;
+            builder_response.output = BuilderActions::None;
+        }
         BuilderActions::SetDragged(dragged) => {
             state.set_dragged(dragged);
             builder_response.output = BuilderActions::None;
@@ -508,7 +506,27 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         BuilderActions::None => (),
     }
 
-    state.context_menu_was_open = builder_response.interaction.context_menu_opened();
+    // Do context menu
+    if let Some(fallback_context_menu) = fall_back_context_menu.take() {
+        Popup::new(
+            Id::new(&id).with("egui_ltreeview_context_menu"),
+            ui.ctx().clone(),
+            PopupAnchor::PointerFixed,
+            ui.layer_id(),
+        )
+        .kind(PopupKind::Menu)
+        .layout(Layout::top_down_justified(Align::Min))
+        .style(egui::containers::menu::menu_style)
+        .gap(0.0)
+        .open_memory(open_fallback_context_menu.then_some(egui::SetOpenCommand::Bool(true)))
+        .show(|ui| {
+            if state.show_fallback_context_menu_for_selection {
+                fallback_context_menu(ui, state.selected());
+            } else {
+                fallback_context_menu(ui, &Vec::new());
+            }
+        });
+    }
 
     (builder_response, tree_view_rect)
 }

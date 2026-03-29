@@ -34,12 +34,12 @@ pub struct TreeViewState<NodeIdType: Eq + std::hash::Hash> {
     pub(crate) last_height: f32,
     /// Open states of the dirs in this tree.
     node_states: HashMap<NodeIdType, bool>,
-    /// Wether or not the context menu was open last frame.
-    pub(crate) context_menu_was_open: bool,
     /// The last node that was clicked. Used for double click detection.
     pub(crate) last_clicked_node: Option<NodeIdType>,
     /// If and what is being dragged.
     dragged: Option<DragState<NodeIdType>>,
+    /// Whether to show the selected nodes in the fallback context menu
+    pub(crate) show_fallback_context_menu_for_selection: bool,
 }
 
 impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
@@ -53,8 +53,8 @@ impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
             min_width: 0.0,
             last_height: 0.0,
             node_states: HashMap::new(),
-            context_menu_was_open: false,
             last_clicked_node: None,
+            show_fallback_context_menu_for_selection: false,
         }
     }
 }

@@ -1,6 +1,6 @@
 use egui::{
-    emath, remap, vec2, CursorIcon, Id, Label, Layout, Rect, Response, Shape, Stroke, Ui,
-    UiBuilder, Vec2, WidgetText,
+    emath, remap, vec2, Align, CursorIcon, Id, Label, Layout, Popup, PopupAnchor, PopupKind, Rect,
+    Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
@@ -509,14 +509,23 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
         (closer, icon, label)
     }
 
-    pub(crate) fn show_context_menu(&mut self, response: &Response) -> bool {
+    pub(crate) fn show_context_menu_popup(&mut self, ui: &mut Ui, should_open: bool) -> bool {
         if self.config.has_context_menu() {
-            let mut was_open = false;
-            response.context_menu(|ui| {
+            Popup::new(
+                Id::new(&self.id).with("egui_ltreeview_context_menu"),
+                ui.ctx().clone(),
+                PopupAnchor::PointerFixed,
+                ui.layer_id(),
+            )
+            .kind(PopupKind::Menu)
+            .layout(Layout::top_down_justified(Align::Min))
+            .style(egui::containers::menu::menu_style)
+            .gap(0.0)
+            .open_memory(should_open.then_some(egui::SetOpenCommand::Bool(true)))
+            .show(|ui| {
                 self.config.context_menu(ui);
-                was_open = true;
-            });
-            was_open
+            })
+            .is_some()
         } else {
             false
         }
