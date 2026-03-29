@@ -46,7 +46,6 @@ pub(crate) struct TreeViewBuilderResponse<NodeIdType> {
     pub(crate) space_used: Rect,
     pub(crate) output: BuilderActions<NodeIdType>,
     pub(crate) drop_marker_idx: ShapeIdx,
-    pub(crate) unfinished_input: Input<NodeIdType>,
 }
 
 pub(crate) enum BuilderActions<NodeIdType> {
@@ -66,6 +65,7 @@ pub(crate) enum BuilderActions<NodeIdType> {
     SetCursor(NodeIdType, Rect),
     SetOpenness(NodeIdType, bool),
     SetLastclicked(NodeIdType),
+    ClearSelection,
     None,
 }
 
@@ -132,6 +132,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         user_callback(&mut me);
 
+        me.finish_unfinished_input();
+
         TreeViewBuilderResponse {
             interaction: me.ui_data.interaction,
             context_menu_was_open: me.context_menu_was_open,
@@ -142,7 +144,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             space_used: me.space_used,
             output: me.output,
             drop_marker_idx: me.ui_data.drop_marker_idx,
-            unfinished_input: me.input,
         }
     }
 
@@ -394,8 +395,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
         }
 
-        self.do_output(&node);
-
         (node.is_open, row_rect)
     }
 
@@ -509,11 +508,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::Dragged(_) => (),
             Input::Click { .. } => (),
             Input::SecondaryClick(_) => (),
-            Input::KeyEnter { activatable_nodes } => {
+            Input::CollectActivatableNodes { activatable_nodes } => {
                 if self.state.is_selected(&node.id) && node.activatable {
                     activatable_nodes.push(node.id.clone());
-                    self.output = BuilderActions::ActivateSelection(activatable_nodes.clone());
-                    self.input = Input::None;
                 }
             }
             Input::KeySpace => {
@@ -852,15 +849,17 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 if double_click {
                     if node.activatable {
                         if self.state.is_selected(&node.id) {
-                            self.output =
-                                BuilderActions::ActivateSelection(activatable_nodes.clone());
+                            self.input = Input::CollectActivatableNodes {
+                                activatable_nodes: activatable_nodes.clone(),
+                            };
                         } else {
                             self.output = BuilderActions::ActivateThis(node.id.clone());
+                            self.input = Input::None;
                         }
                     } else {
                         self.output = BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
+                        self.input = Input::None;
                     }
-                    self.input = Input::None;
                     break 'block;
                 }
                 // Single click
@@ -905,23 +904,9 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             Input::KeyDownAndCommand { .. } => (),
             Input::KeyDownAndShift { .. } => (),
             Input::KeySpace => (),
-            Input::KeyEnter { .. } => (),
+            Input::CollectActivatableNodes { .. } => (),
             Input::None => (),
         };
-    }
-
-    fn do_output(&mut self, node: &Node<NodeIdType>) {
-        match &mut self.output {
-            BuilderActions::ActivateSelection(selection) => {
-                if self.state.is_selected(&node.id)
-                    && node.activatable
-                    && !selection.contains(&node.id)
-                {
-                    selection.push(node.id.clone());
-                }
-            }
-            _ => (),
-        }
     }
 
     fn get_drop_position(
@@ -996,5 +981,36 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             return false;
         };
         dir_state.branch_dragged
+    }
+
+    fn finish_unfinished_input(&mut self) {
+        match &self.input {
+            Input::CollectActivatableNodes { activatable_nodes } => {
+                if !activatable_nodes.is_empty() {
+                    self.output = BuilderActions::ActivateSelection(activatable_nodes.clone());
+                }
+                self.input = Input::None;
+            }
+            Input::DragStarted {
+                selected_node_dragged,
+                simplified_dragged,
+                ..
+            } if *selected_node_dragged => {
+                self.output = BuilderActions::SetDragged(DragState {
+                    drag_overlay_offset: self.ui.max_rect().min.to_vec2(),
+                    dragged: self.state.selected().clone(),
+                    simplified: simplified_dragged.clone(),
+                });
+                self.input = Input::None;
+            }
+            Input::Click { .. } => {
+                // This means that the click could not find a node that was clicked.
+                // Usually this should only happen if the empty space below the tree
+                // was clicked. In this case we clear the selection;
+                self.output = BuilderActions::ClearSelection;
+                self.input = Input::None;
+            }
+            _ => (),
+        }
     }
 }

@@ -434,27 +434,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             });
         }
     }
-    // Read out results from inputs
-    match builder_response.unfinished_input {
-        Input::DragStarted {
-            selected_node_dragged,
-            simplified_dragged,
-            ..
-        } if selected_node_dragged => {
-            state.set_dragged(DragState {
-                drag_overlay_offset: builder_ui.max_rect().min.to_vec2(),
-                dragged: state.selected().clone(),
-                simplified: simplified_dragged,
-            });
-            builder_response.unfinished_input = Input::None;
-        }
-        Input::Click { .. } => {
-            builder_response.selected = true;
-            state.set_selected(vec![]);
-            builder_response.unfinished_input = Input::None;
-        }
-        _ => (),
-    };
+
     match builder_response.output {
         BuilderActions::SetDragged(dragged) => {
             state.set_dragged(dragged);
@@ -520,6 +500,10 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         BuilderActions::SetLastclicked(id) => {
             state.set_last_clicked(&id);
             builder_response.output = BuilderActions::None;
+        }
+        BuilderActions::ClearSelection => {
+            state.set_selected(vec![]);
+            builder_response.selected = true;
         }
         BuilderActions::None => (),
     }
@@ -828,7 +812,7 @@ enum Input<NodeIdType> {
         is_next: bool,
     },
     KeySpace,
-    KeyEnter {
+    CollectActivatableNodes {
         activatable_nodes: Vec<NodeIdType>,
     },
     None,
@@ -929,7 +913,7 @@ fn get_input<NodeIdType>(
         return Input::KeySpace;
     }
     if ui.input(|i| i.key_pressed(Key::Enter)) {
-        return Input::KeyEnter {
+        return Input::CollectActivatableNodes {
             activatable_nodes: Vec::new(),
         };
     }
