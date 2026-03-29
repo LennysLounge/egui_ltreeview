@@ -513,6 +513,14 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             ui.scroll_to_rect(scroll_to_rect, None);
             builder_response.output = BuilderActions::None;
         }
+        BuilderActions::SetOpenness(id, is_open) => {
+            state.set_openness(id, is_open);
+            builder_response.output = BuilderActions::None;
+        }
+        BuilderActions::SetLastclicked(id) => {
+            state.set_last_clicked(&id);
+            builder_response.output = BuilderActions::None;
+        }
         BuilderActions::None => (),
     }
 

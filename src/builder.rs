@@ -1,5 +1,4 @@
 use core::f32;
-
 use egui::{
     layers::ShapeIdx, pos2, vec2, Pos2, Rangef, Rect, Response, Shape, Stroke, Ui, UiBuilder, Vec2,
     WidgetText,
@@ -65,6 +64,8 @@ pub(crate) enum BuilderActions<NodeIdType> {
         scroll_to_rect: Rect,
     },
     SetCursor(NodeIdType, Rect),
+    SetOpenness(NodeIdType, bool),
+    SetLastclicked(NodeIdType),
     None,
 }
 
@@ -74,7 +75,7 @@ pub(crate) enum BuilderActions<NodeIdType> {
 pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     ui: &'ui mut Ui,
     drag_layer_ui: Ui,
-    state: &'ui mut TreeViewState<NodeIdType>,
+    state: &'ui TreeViewState<NodeIdType>,
     settings: &'ui TreeViewSettings,
     ui_data: UiData,
     selection_background: Option<(ShapeIdx, Rect)>,
@@ -94,7 +95,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     pub(crate) fn run(
         ui: &'ui mut Ui,
-        state: &'ui mut TreeViewState<NodeIdType>,
+        state: &'ui TreeViewState<NodeIdType>,
         settings: &'ui TreeViewSettings,
         ui_data: UiData,
         input: Input<NodeIdType>,
@@ -526,7 +527,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     self.input = Input::None;
                     if self.state.selected_count() == 1 {
                         if node.is_dir && node.is_open {
-                            self.state.set_openness(node.id.clone(), !node.is_open);
+                            self.output =
+                                BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
                         } else if let Some(dir_state) = self.stack.last() {
                             self.output = BuilderActions::SelectOneNode(
                                 dir_state.id.clone(),
@@ -543,7 +545,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 } else if self.state.is_selected(&node.id) {
                     if self.state.selected_count() == 1 {
                         if node.is_dir && !node.is_open {
-                            self.state.set_openness(node.id.clone(), !node.is_open);
+                            self.output =
+                                BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
                             self.input = Input::None;
                         } else {
                             *select_next = true;
@@ -826,7 +829,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 let closer_clicked =
                     closer.is_some_and(|closer| rect_contains_visually(closer, pos));
                 if closer_clicked {
-                    self.state.set_openness(node.id.clone(), !node.is_open);
+                    self.output = BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
                     self.input = Input::None;
                     break 'block;
                 }
@@ -837,7 +840,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     && !closer_clicked
                     && self.state.was_clicked_last(&node.id);
                 if row_clicked {
-                    self.state.set_last_clicked(&node.id);
+                    self.output = BuilderActions::SetLastclicked(node.id.clone());
                 }
 
                 // upkeep for the activate action
@@ -855,7 +858,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                             self.output = BuilderActions::ActivateThis(node.id.clone());
                         }
                     } else {
-                        self.state.set_openness(node.id.clone(), !node.is_open);
+                        self.output = BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
                     }
                     self.input = Input::None;
                     break 'block;
