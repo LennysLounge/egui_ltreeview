@@ -65,9 +65,9 @@ pub(crate) enum BuilderActions<NodeIdType> {
     SetOpenness(NodeIdType, bool),
     SetLastclicked(NodeIdType),
     ClearSelection,
-    OpenFallbackContextmenu {
-        for_selection: bool,
-    },
+    OpenFallbackContextMenuForSelection,
+    OpenFallbackContextMenuForId(NodeIdType),
+    OpenFallbackContextMenuForNothing,
 }
 
 /// The builder used to construct the tree.
@@ -907,18 +907,24 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::SecondaryClick(pos) => {
                 if rect_contains_visually(row_rect, pos) {
-                    if self.state.is_selected(&node.id) {
-                        if self.state.selected_count() == 1 {
+                    if node.config.has_context_menu() {
+                        if self.state.is_selected(&node.id) {
+                            if self.state.selected_count() == 1 {
+                                self.output
+                                    .push(BuilderActions::SetSecondaryClicked(node.id.clone()));
+                            } else {
+                                self.output
+                                    .push(BuilderActions::OpenFallbackContextMenuForSelection);
+                            }
+                        } else {
                             self.output
                                 .push(BuilderActions::SetSecondaryClicked(node.id.clone()));
-                        } else {
-                            self.output.push(BuilderActions::OpenFallbackContextmenu {
-                                for_selection: true,
-                            });
                         }
                     } else {
                         self.output
-                            .push(BuilderActions::SetSecondaryClicked(node.id.clone()));
+                            .push(BuilderActions::OpenFallbackContextMenuForId(
+                                node.id.clone(),
+                            ));
                     }
                     self.input = Input::None;
                 }
@@ -1040,9 +1046,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 self.input = Input::None;
             }
             Input::SecondaryClick(_) => {
-                self.output.push(BuilderActions::OpenFallbackContextmenu {
-                    for_selection: false,
-                });
+                self.output
+                    .push(BuilderActions::OpenFallbackContextMenuForNothing);
                 self.input = Input::None;
             }
             _ => (),

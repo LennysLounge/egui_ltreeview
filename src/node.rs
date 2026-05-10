@@ -362,7 +362,7 @@ pub(crate) struct Node<'config, NodeIdType> {
     pub activatable: bool,
     pub node_height: f32,
     pub indent: usize,
-    config: &'config mut dyn NodeConfig<NodeIdType>,
+    pub config: &'config mut dyn NodeConfig<NodeIdType>,
 }
 impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
     pub fn from_config(

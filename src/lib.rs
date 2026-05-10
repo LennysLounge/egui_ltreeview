@@ -430,9 +430,17 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     let mut open_fallback_context_menu = false;
     for action in builder_response.output {
         match action {
-            BuilderActions::OpenFallbackContextmenu { for_selection } => {
+            BuilderActions::OpenFallbackContextMenuForSelection => {
                 open_fallback_context_menu = true;
-                state.show_fallback_context_menu_for_selection = for_selection;
+                state.show_fallback_context_menu_state = FallbackContextMenuState::ForSelection;
+            }
+            BuilderActions::OpenFallbackContextMenuForId(id) => {
+                open_fallback_context_menu = true;
+                state.show_fallback_context_menu_state = FallbackContextMenuState::ForId(id);
+            }
+            BuilderActions::OpenFallbackContextMenuForNothing => {
+                open_fallback_context_menu = true;
+                state.show_fallback_context_menu_state = FallbackContextMenuState::ForNothing;
             }
             BuilderActions::SetDragged(dragged) => {
                 state.set_dragged(dragged);
@@ -509,10 +517,14 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         .style(egui::containers::menu::menu_style)
         .gap(0.0)
         .open_memory(open_fallback_context_menu.then_some(egui::SetOpenCommand::Bool(true)))
-        .show(|ui| {
-            if state.show_fallback_context_menu_for_selection {
+        .show(|ui| match &state.show_fallback_context_menu_state {
+            FallbackContextMenuState::ForSelection => {
                 fallback_context_menu(ui, state.selected());
-            } else {
+            }
+            FallbackContextMenuState::ForId(id) => {
+                fallback_context_menu(ui, &vec![id.clone()]);
+            }
+            FallbackContextMenuState::ForNothing => {
                 fallback_context_menu(ui, &Vec::new());
             }
         });

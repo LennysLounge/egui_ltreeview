@@ -12,6 +12,14 @@ pub(crate) struct DragState<NodeIdType> {
     pub simplified: Vec<NodeIdType>,
 }
 
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) enum FallbackContextMenuState<NodeIdType> {
+    ForSelection,
+    ForId(NodeIdType),
+    ForNothing,
+}
+
 /// Represents the state of the tree view.
 ///
 /// This holds which node is selected and the open/close
@@ -39,7 +47,7 @@ pub struct TreeViewState<NodeIdType: Eq + std::hash::Hash> {
     /// If and what is being dragged.
     dragged: Option<DragState<NodeIdType>>,
     /// Whether to show the selected nodes in the fallback context menu
-    pub(crate) show_fallback_context_menu_for_selection: bool,
+    pub(crate) show_fallback_context_menu_state: FallbackContextMenuState<NodeIdType>,
 }
 
 impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
@@ -54,7 +62,7 @@ impl<NodeIdType: NodeId> Default for TreeViewState<NodeIdType> {
             last_height: 0.0,
             node_states: HashMap::new(),
             last_clicked_node: None,
-            show_fallback_context_menu_for_selection: false,
+            show_fallback_context_menu_state: FallbackContextMenuState::ForNothing,
         }
     }
 }
