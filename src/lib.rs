@@ -428,83 +428,73 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     state.last_height = builder_response.space_used.height();
 
     let mut open_fallback_context_menu = false;
-    match builder_response.output {
-        BuilderActions::OpenFallbackContextmenu { for_selection } => {
-            open_fallback_context_menu = true;
-            state.show_fallback_context_menu_for_selection = for_selection;
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::SetDragged(dragged) => {
-            state.set_dragged(dragged);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::SetSecondaryClicked(id) => {
-            state.secondary_selection = Some(id);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::ActivateSelection(selection) => {
-            builder_response.activate = Some(selection);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::ActivateThis(id) => {
-            builder_response.activate = Some(vec![id]);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::SelectOneNode(id, scroll_to_rect) => {
-            builder_response.selected = true;
-            state.set_one_selected(id.clone());
-            state.set_cursor(None);
-            if let Some(scroll_to_rect) = scroll_to_rect {
+    for action in builder_response.output {
+        match action {
+            BuilderActions::OpenFallbackContextmenu { for_selection } => {
+                open_fallback_context_menu = true;
+                state.show_fallback_context_menu_for_selection = for_selection;
+            }
+            BuilderActions::SetDragged(dragged) => {
+                state.set_dragged(dragged);
+            }
+            BuilderActions::SetSecondaryClicked(id) => {
+                state.secondary_selection = Some(id);
+            }
+            BuilderActions::ActivateSelection(selection) => {
+                builder_response.activate = Some(selection);
+            }
+            BuilderActions::ActivateThis(id) => {
+                builder_response.activate = Some(vec![id]);
+            }
+            BuilderActions::SelectOneNode(id, scroll_to_rect) => {
+                builder_response.selected = true;
+                state.set_one_selected(id.clone());
+                state.set_cursor(None);
+                if let Some(scroll_to_rect) = scroll_to_rect {
+                    ui.scroll_to_rect(scroll_to_rect, None);
+                }
+            }
+            BuilderActions::ToggleSelection(id, scroll_to_rect) => {
+                builder_response.selected = true;
+                state.toggle_selected(&id);
+                state.set_pivot(Some(id));
+                if let Some(scroll_to_rect) = scroll_to_rect {
+                    ui.scroll_to_rect(scroll_to_rect, None);
+                }
+            }
+            BuilderActions::ShiftSelect(ids) => {
+                builder_response.selected = true;
+                state.set_selected_dont_change_pivot(ids);
+            }
+            BuilderActions::Select {
+                selection,
+                pivot,
+                cursor,
+                scroll_to_rect,
+            } => {
+                builder_response.selected = true;
+                state.set_selected(selection);
+                state.set_pivot(Some(pivot));
+                state.set_cursor(Some(cursor));
                 ui.scroll_to_rect(scroll_to_rect, None);
             }
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::ToggleSelection(id, scroll_to_rect) => {
-            builder_response.selected = true;
-            state.toggle_selected(&id);
-            state.set_pivot(Some(id));
-            if let Some(scroll_to_rect) = scroll_to_rect {
+            BuilderActions::SetCursor(id, scroll_to_rect) => {
+                state.set_cursor(Some(id));
                 ui.scroll_to_rect(scroll_to_rect, None);
             }
-            builder_response.output = BuilderActions::None;
+            BuilderActions::SetOpenness(id, is_open) => {
+                state.set_openness(id, is_open);
+            }
+            BuilderActions::SetLastclicked(id) => {
+                state.set_last_clicked(&id);
+            }
+            BuilderActions::ClearSelection => {
+                state.set_selected(vec![]);
+                builder_response.selected = true;
+            }
         }
-        BuilderActions::ShiftSelect(ids) => {
-            builder_response.selected = true;
-            state.set_selected_dont_change_pivot(ids);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::Select {
-            selection,
-            pivot,
-            cursor,
-            scroll_to_rect,
-        } => {
-            builder_response.selected = true;
-            state.set_selected(selection);
-            state.set_pivot(Some(pivot));
-            state.set_cursor(Some(cursor));
-            ui.scroll_to_rect(scroll_to_rect, None);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::SetCursor(id, scroll_to_rect) => {
-            state.set_cursor(Some(id));
-            ui.scroll_to_rect(scroll_to_rect, None);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::SetOpenness(id, is_open) => {
-            state.set_openness(id, is_open);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::SetLastclicked(id) => {
-            state.set_last_clicked(&id);
-            builder_response.output = BuilderActions::None;
-        }
-        BuilderActions::ClearSelection => {
-            state.set_selected(vec![]);
-            builder_response.selected = true;
-        }
-        BuilderActions::None => (),
     }
+    builder_response.output = Vec::new();
 
     // Do context menu
     if let Some(fallback_context_menu) = fall_back_context_menu.take() {

@@ -3,6 +3,7 @@
 ### New features:
 
 ### Fixes:
+* Double clicking to activate and to toggle a directory now work again. Closes #45
 
 ### Changes:
 

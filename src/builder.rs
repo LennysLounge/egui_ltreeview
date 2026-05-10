@@ -43,7 +43,7 @@ pub(crate) struct TreeViewBuilderResponse<NodeIdType> {
     pub(crate) activate: Option<Vec<NodeIdType>>,
     pub(crate) selected: bool,
     pub(crate) space_used: Rect,
-    pub(crate) output: BuilderActions<NodeIdType>,
+    pub(crate) output: Vec<BuilderActions<NodeIdType>>,
     pub(crate) drop_marker_idx: ShapeIdx,
 }
 
@@ -68,7 +68,6 @@ pub(crate) enum BuilderActions<NodeIdType> {
     OpenFallbackContextmenu {
         for_selection: bool,
     },
-    None,
 }
 
 /// The builder used to construct the tree.
@@ -91,7 +90,7 @@ pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     activate: Option<Vec<NodeIdType>>,
     selected: bool,
     space_used: Rect,
-    output: BuilderActions<NodeIdType>,
+    output: Vec<BuilderActions<NodeIdType>>,
 }
 
 impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
@@ -127,7 +126,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             activate: None,
             selected: false,
             space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
-            output: BuilderActions::None,
+            output: Vec::new(),
             ui,
             ui_data,
         };
@@ -460,10 +459,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // Do input
         self.do_input_output(node, &outer_rect, closer.as_ref());
 
-        let should_open_context_menu = match &self.output {
-            BuilderActions::SetSecondaryClicked(id) => id == &node.id,
-            _ => false,
-        };
+        let should_open_context_menu = self
+            .output
+            .iter()
+            .any(|a| matches!(a, BuilderActions::SetSecondaryClicked(id) if id == &node.id));
         self.context_menu_was_open =
             node.show_context_menu_popup(self.ui, should_open_context_menu);
 
@@ -511,7 +510,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::KeySpace => {
                 if self.state.is_selection_cursor(&node.id) {
-                    self.output = BuilderActions::ToggleSelection(node.id.clone(), Some(*row_rect));
+                    self.output.push(BuilderActions::ToggleSelection(
+                        node.id.clone(),
+                        Some(*row_rect),
+                    ));
                     self.input = Input::None;
                 }
             }
@@ -520,26 +522,29 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     self.input = Input::None;
                     if self.state.selected_count() == 1 {
                         if node.is_dir && node.is_open {
-                            self.output =
-                                BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
+                            self.output
+                                .push(BuilderActions::SetOpenness(node.id.clone(), !node.is_open));
                         } else if let Some(dir_state) = self.stack.last() {
-                            self.output = BuilderActions::SelectOneNode(
+                            self.output.push(BuilderActions::SelectOneNode(
                                 dir_state.id.clone(),
                                 dir_state.row_rect,
-                            );
+                            ));
                         }
                     }
                 }
             }
             Input::KeyRight { select_next } => {
                 if *select_next {
-                    self.output = BuilderActions::SelectOneNode(node.id.clone(), Some(*row_rect));
+                    self.output.push(BuilderActions::SelectOneNode(
+                        node.id.clone(),
+                        Some(*row_rect),
+                    ));
                     self.input = Input::None;
                 } else if self.state.is_selected(&node.id) {
                     if self.state.selected_count() == 1 {
                         if node.is_dir && !node.is_open {
-                            self.output =
-                                BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
+                            self.output
+                                .push(BuilderActions::SetOpenness(node.id.clone(), !node.is_open));
                             self.input = Input::None;
                         } else {
                             *select_next = true;
@@ -558,8 +563,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 if current_node_is_cursor {
                     if let Some((previous_node, prev_rect)) = previous_node {
-                        self.output =
-                            BuilderActions::SelectOneNode(previous_node.clone(), Some(*prev_rect));
+                        self.output.push(BuilderActions::SelectOneNode(
+                            previous_node.clone(),
+                            Some(*prev_rect),
+                        ));
                         self.input = Input::None;
                         break 'arm;
                     } else {
@@ -578,7 +585,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     .is_some_and(|cursor_id| cursor_id == &node.id);
                 if current_node_is_cursor {
                     if let Some((previous_node, prev_rect)) = previous_node {
-                        self.output = BuilderActions::SetCursor(previous_node.clone(), *prev_rect);
+                        self.output
+                            .push(BuilderActions::SetCursor(previous_node.clone(), *prev_rect));
                     }
                     self.input = Input::None;
                     break 'arm;
@@ -618,12 +626,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 let Some(cursor) = self.state.get_selection_cursor() else {
                     if self.state.is_selection_pivot(&node.id) {
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: vec![previous_node.clone(), node.id.clone()],
                             pivot: pivot.clone(),
                             cursor: previous_node.clone(),
                             scroll_to_rect: previous_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     };
@@ -632,12 +640,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
                 if let Some(nodes_to_select) = nodes_to_select {
                     if cursor == &node.id {
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: previous_node.clone(),
                             scroll_to_rect: previous_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     } else if pivot == &node.id {
@@ -645,12 +653,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         let (next_cursor, next_rect) = next_cursor
                             .clone()
                             .expect("The selection should have started on the cursor which would have se this value");
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: next_cursor,
                             scroll_to_rect: next_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     } else {
@@ -658,12 +666,12 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     }
                 } else {
                     if cursor == &node.id && pivot == &node.id {
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: vec![previous_node.clone(), node.id.clone()],
                             pivot: pivot.clone(),
                             cursor: previous_node.clone(),
                             scroll_to_rect: previous_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     }
@@ -677,7 +685,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::KeyDown(is_next) => 'arm: {
                 if *is_next {
-                    self.output = BuilderActions::SelectOneNode(node.id.clone(), Some(*row_rect));
+                    self.output.push(BuilderActions::SelectOneNode(
+                        node.id.clone(),
+                        Some(*row_rect),
+                    ));
                     self.input = Input::None;
                     break 'arm;
                 }
@@ -689,7 +700,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             Input::KeyDownAndCommand { is_next } => 'arm: {
                 if *is_next {
-                    self.output = BuilderActions::SetCursor(node.id.clone(), *row_rect);
+                    self.output
+                        .push(BuilderActions::SetCursor(node.id.clone(), *row_rect));
                     self.input = Input::None;
                     break 'arm;
                 }
@@ -712,35 +724,35 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 if let Some(nodes_to_select) = nodes_to_select {
                     nodes_to_select.push(node.id.clone());
                     if *is_next {
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: node.id.clone(),
                             scroll_to_rect: *row_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     } else if pivot == &node.id {
                         let (next_cursor, next_rect) = next_cursor
                             .clone()
                             .expect("The selection should have started on the cursor which would have se this value");
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: nodes_to_select.clone(),
                             pivot: pivot.clone(),
                             cursor: next_cursor,
                             scroll_to_rect: next_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     }
                 } else {
                     if *is_next && pivot == &node.id {
-                        self.output = BuilderActions::Select {
+                        self.output.push(BuilderActions::Select {
                             selection: vec![node.id.clone()],
                             pivot: pivot.clone(),
                             cursor: node.id.clone(),
                             scroll_to_rect: *row_rect,
-                        };
+                        });
                         self.input = Input::None;
                         break 'arm;
                     }
@@ -774,11 +786,11 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if self.state.is_selected(&node.id) {
                         *selected_node_dragged = true;
                     } else {
-                        self.output = BuilderActions::SetDragged(DragState {
+                        self.output.push(BuilderActions::SetDragged(DragState {
                             drag_overlay_offset: self.ui.max_rect().min.to_vec2(),
                             dragged: vec![node.id.clone()],
                             simplified: vec![node.id.clone()],
-                        });
+                        }));
                         self.input = Input::None;
                         break 'arm;
                     }
@@ -822,7 +834,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 let closer_clicked =
                     closer.is_some_and(|closer| rect_contains_visually(closer, pos));
                 if closer_clicked {
-                    self.output = BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
+                    self.output
+                        .push(BuilderActions::SetOpenness(node.id.clone(), !node.is_open));
                     self.input = Input::None;
                     break 'block;
                 }
@@ -833,7 +846,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     && !closer_clicked
                     && self.state.was_clicked_last(&node.id);
                 if row_clicked {
-                    self.output = BuilderActions::SetLastclicked(node.id.clone());
+                    self.output
+                        .push(BuilderActions::SetLastclicked(node.id.clone()));
                 }
 
                 // upkeep for the activate action
@@ -849,11 +863,13 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                                 activatable_nodes: activatable_nodes.clone(),
                             };
                         } else {
-                            self.output = BuilderActions::ActivateThis(node.id.clone());
+                            self.output
+                                .push(BuilderActions::ActivateThis(node.id.clone()));
                             self.input = Input::None;
                         }
                     } else {
-                        self.output = BuilderActions::SetOpenness(node.id.clone(), !node.is_open);
+                        self.output
+                            .push(BuilderActions::SetOpenness(node.id.clone(), !node.is_open));
                         self.input = Input::None;
                     }
                     break 'block;
@@ -863,24 +879,28 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                     if let Some(shift_click_nodes) = shift_click_nodes {
                         shift_click_nodes.push(node.id.clone());
                         if row_clicked || self.state.is_selection_pivot(&node.id) {
-                            self.output = BuilderActions::ShiftSelect(shift_click_nodes.clone());
+                            self.output
+                                .push(BuilderActions::ShiftSelect(shift_click_nodes.clone()));
                             self.input = Input::None;
                             break 'block;
                         }
                     } else if row_clicked && self.state.get_selection_pivot().is_none() {
-                        self.output = BuilderActions::SelectOneNode(node.id.clone(), None);
+                        self.output
+                            .push(BuilderActions::SelectOneNode(node.id.clone(), None));
                         self.input = Input::None;
                     } else if row_clicked || self.state.is_selection_pivot(&node.id) {
                         *shift_click_nodes = Some(vec![node.id.clone()]);
                     }
                 } else if modifiers.matches_exact(self.settings.set_selection_modifier) {
                     if row_clicked {
-                        self.output = BuilderActions::ToggleSelection(node.id.clone(), None);
+                        self.output
+                            .push(BuilderActions::ToggleSelection(node.id.clone(), None));
                         self.input = Input::None;
                         break 'block;
                     }
                 } else if row_clicked {
-                    self.output = BuilderActions::SelectOneNode(node.id.clone(), None);
+                    self.output
+                        .push(BuilderActions::SelectOneNode(node.id.clone(), None));
                     self.input = Input::None;
                     break 'block;
                 }
@@ -889,14 +909,16 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 if rect_contains_visually(row_rect, pos) {
                     if self.state.is_selected(&node.id) {
                         if self.state.selected_count() == 1 {
-                            self.output = BuilderActions::SetSecondaryClicked(node.id.clone());
+                            self.output
+                                .push(BuilderActions::SetSecondaryClicked(node.id.clone()));
                         } else {
-                            self.output = BuilderActions::OpenFallbackContextmenu {
+                            self.output.push(BuilderActions::OpenFallbackContextmenu {
                                 for_selection: true,
-                            };
+                            });
                         }
                     } else {
-                        self.output = BuilderActions::SetSecondaryClicked(node.id.clone());
+                        self.output
+                            .push(BuilderActions::SetSecondaryClicked(node.id.clone()));
                     }
                     self.input = Input::None;
                 }
@@ -993,7 +1015,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         match &self.input {
             Input::CollectActivatableNodes { activatable_nodes } => {
                 if !activatable_nodes.is_empty() {
-                    self.output = BuilderActions::ActivateSelection(activatable_nodes.clone());
+                    self.output
+                        .push(BuilderActions::ActivateSelection(activatable_nodes.clone()));
                 }
                 self.input = Input::None;
             }
@@ -1002,24 +1025,24 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 simplified_dragged,
                 ..
             } if *selected_node_dragged => {
-                self.output = BuilderActions::SetDragged(DragState {
+                self.output.push(BuilderActions::SetDragged(DragState {
                     drag_overlay_offset: self.ui.max_rect().min.to_vec2(),
                     dragged: self.state.selected().clone(),
                     simplified: simplified_dragged.clone(),
-                });
+                }));
                 self.input = Input::None;
             }
             Input::Click { .. } => {
                 // This means that the click could not find a node that was clicked.
                 // Usually this should only happen if the empty space below the tree
                 // was clicked. In this case we clear the selection;
-                self.output = BuilderActions::ClearSelection;
+                self.output.push(BuilderActions::ClearSelection);
                 self.input = Input::None;
             }
             Input::SecondaryClick(_) => {
-                self.output = BuilderActions::OpenFallbackContextmenu {
+                self.output.push(BuilderActions::OpenFallbackContextmenu {
                     for_selection: false,
-                };
+                });
                 self.input = Input::None;
             }
             _ => (),
