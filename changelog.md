@@ -1,6 +1,12 @@
-# v0.7.1
+# v0.7.2-dev
 
 ### New features:
+
+### Fixes:
+
+### Changes:
+
+# v0.7.1
 
 ### Fixes:
 * Double clicking to activate and to toggle a directory now work again. Closes #45
