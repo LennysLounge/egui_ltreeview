@@ -6,6 +6,7 @@
 * Double clicking to activate and to toggle a directory now work again. Closes #45
 * Triggering a context menu on a single node that does not define its own context menu now correctly 
 calls the fallback context menu again. Closes #46
+* Fixes a crash when the tree view is inside a collapsible header and scrolled when the collapsable header is collapsed. Closes #47
 
 ### Changes:
 

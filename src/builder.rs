@@ -211,7 +211,8 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn draw_indent_hint(&mut self, indent: &IndentState<NodeIdType>) {
-        let top = self.ui.clip_rect().clamp(pos2(
+        let clip_rect = normalize_rect(&self.ui.clip_rect());
+        let top = clip_rect.clamp(pos2(
             self.ui.cursor().min.x
                 + self.ui.spacing().item_spacing.x
                 + self.ui.spacing().icon_width * 0.5
@@ -222,10 +223,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         .unwrap_or(self.ui.spacing().indent),
             indent.anchor.center() + self.ui.spacing().icon_width * 0.5 + 2.0,
         ));
-        let bottom = self
-            .ui
-            .clip_rect()
-            .clamp(pos2(top.x, self.space_used.bottom()));
+        let bottom = clip_rect.clamp(pos2(top.x, self.space_used.bottom()));
 
         match self.settings.indent_hint_style {
             IndentHintStyle::None => (),
@@ -1052,5 +1050,21 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             }
             _ => (),
         }
+    }
+}
+
+/// Sometimes there is an invalid rect where the min is actually larger than the max.
+/// This function returns a normalized rect where min is always <= max.
+/// This means that the height/width that was previously negative is then collapsed to zero.
+fn normalize_rect(rect: &Rect) -> Rect {
+    Rect {
+        min: Pos2 {
+            x: rect.min.x.min(rect.max.x),
+            y: rect.min.y.min(rect.max.y),
+        },
+        max: Pos2 {
+            x: rect.min.x.max(rect.max.x),
+            y: rect.min.y.max(rect.max.y),
+        },
     }
 }
