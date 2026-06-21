@@ -7,6 +7,8 @@
 * Triggering a context menu on a single node that does not define its own context menu now correctly 
 calls the fallback context menu again. Closes #46
 * Fixes a crash when the tree view is inside a collapsible header and scrolled when the collapsable header is collapsed. Closes #47
+* Showing the same nodes in two tree would previously cause an id collision when opening the context menu of either of the nodes.
+This is now fixed and id of the source tree view is correctly passed as a salt. Closes #48
 
 ### Changes:
 

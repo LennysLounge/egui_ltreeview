@@ -512,7 +512,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
     pub(crate) fn show_context_menu_popup(&mut self, ui: &mut Ui, should_open: bool) -> bool {
         if self.config.has_context_menu() {
             Popup::new(
-                Id::new(&self.id).with("egui_ltreeview_context_menu"),
+                ui.id().with(&self.id).with("egui_ltreeview_context_menu"),
                 ui.ctx().clone(),
                 PopupAnchor::PointerFixed,
                 ui.layer_id(),

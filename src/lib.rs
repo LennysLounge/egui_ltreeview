@@ -406,6 +406,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     let mut builder_ui = ui.new_child(
         UiBuilder::new()
+            .id_salt(ui.id())
             .layout(Layout::top_down(egui::Align::Min))
             .max_rect(interaction_rect),
     );
