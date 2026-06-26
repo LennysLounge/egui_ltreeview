@@ -40,7 +40,7 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::left(Id::new("left")).show_inside(ui, |ui| {
+        Panel::left(Id::new("left")).show(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(
                     ui,
@@ -65,7 +65,7 @@ impl eframe::App for MyApp {
                 );
             });
         });
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.checkbox(&mut self.should_open_dirs, "Should open directories");
             if ui.button("select next").clicked() {
                 let selected_index = (self.tree.selected().last().unwrap_or(&0) + 1) % 11;

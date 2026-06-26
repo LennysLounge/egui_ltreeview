@@ -44,7 +44,7 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::left(Id::new("left")).show_inside(ui, |ui| {
+        Panel::left(Id::new("left")).show(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 let (_response, actions) = TreeView::new(ui.make_persistent_id("Names tree view"))
                     .show_state(ui, &mut self.tree, |builder| {
@@ -78,7 +78,7 @@ impl eframe::App for MyApp {
                 }
             });
         });
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.label("Activate selections by pressing enter or double-clicking.");
             ui.separator();
             ui.label("History");

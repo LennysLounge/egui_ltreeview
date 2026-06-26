@@ -28,7 +28,7 @@ impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         ui.set_zoom_factor(2.0);
         //ctx.style_mut(|s| s.spacing.item_spacing.y = 10.0);
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(25.0);
 
             let rect = Rect::from_min_size(ui.cursor().min, vec2(200.0, 200.0));

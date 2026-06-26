@@ -806,7 +806,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                 }
             }
             Input::Dragged(pos) => {
-                let pos = pos.clone();
+                let pos = *pos;
                 if rect_contains_visually(row_rect, &pos) && !self.current_branch_dragged() {
                     self.drop_on_self = self.state.is_dragged(&node.id);
                     if !self.drop_on_self {
