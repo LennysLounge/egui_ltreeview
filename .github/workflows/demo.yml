@@ -5,6 +5,11 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+  # Runs when a commit is tagged with a release-style tag (e.g. v1.0.0)
+  push:
+    tags:
+      - 'release_*'
+
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
