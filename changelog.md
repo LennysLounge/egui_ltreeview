@@ -6,6 +6,7 @@
 
 ### Changes:
 * Update egui to 0.35
+  * Node ids must now also implement the `Debug` trait. This is because of a change in egui where inputs into an `Id` must now also implement `Debug`
 
 # v0.7.1
 

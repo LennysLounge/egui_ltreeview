@@ -79,12 +79,12 @@ impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
 pub trait NodeId:
-    Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize
+    Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug
 {
 }
 #[cfg(feature = "persistence")]
 impl<T> NodeId for T where
-    T: Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize
+    T: Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug
 {
 }
 
