@@ -113,10 +113,10 @@ In most cases a tree view is placed in a scroll area in a left hand side panel. 
 ```
 # use egui_ltreeview::*;
 # use egui::*;
-# fn ui(ctx: &mut egui::Context){
-egui::SidePanel::left(Id::new("tree view panel"))
+# fn ui(ui: &mut egui::Ui){
+egui::Panel::left(Id::new("tree view panel"))
     .resizable(true)
-    .show(ctx, |ui| {
+    .show(ui, |ui| {
         ScrollArea::both().show(ui, |ui| {
             TreeView::new(Id::new("tree view")).show(ui, |builder|{
                 # builder.leaf(0, "");
