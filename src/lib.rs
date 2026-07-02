@@ -84,7 +84,13 @@ pub trait NodeId:
 }
 #[cfg(feature = "persistence")]
 impl<T> NodeId for T where
-    T: Clone + PartialEq + Eq + Hash + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug
+    T: Clone
+        + PartialEq
+        + Eq
+        + Hash
+        + serde::de::DeserializeOwned
+        + serde::Serialize
+        + std::fmt::Debug
 {
 }
 
