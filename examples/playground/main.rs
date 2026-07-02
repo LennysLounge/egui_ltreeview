@@ -132,12 +132,12 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::bottom(Id::new("footer")).show_inside(ui, |ui| {
+        Panel::bottom(Id::new("footer")).show(ui, |ui| {
             ui.label(format!("App version: {}", env!("CARGO_PKG_VERSION")))
         });
         Panel::left(Id::new("tree view"))
             .resizable(true)
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 ScrollArea::both()
                     .scroll([
                         self.settings.scroll_horizontal,
@@ -150,7 +150,7 @@ impl eframe::App for MyApp {
                         show_tree_view(ui, self);
                     });
             });
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             if self.tree_view_state.selected().len() > 1 {
                 ui.label("Multiple nodes selected");
                 egui::Grid::new("settings grid").show(ui, |ui| {

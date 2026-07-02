@@ -23,7 +23,7 @@ struct MyApp {}
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::left("tree panel").show_inside(ui, |ui| {
+        Panel::left("tree panel").show(ui, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
                 TreeView::new(ui.make_persistent_id("Names tree view")).show(ui, |builder| {
                     for val in 1..100 {
@@ -34,6 +34,6 @@ impl eframe::App for MyApp {
                 });
             });
         });
-        egui::CentralPanel::default().show_inside(ui, |_ui| {});
+        egui::CentralPanel::default().show(ui, |_ui| {});
     }
 }

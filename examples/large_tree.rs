@@ -64,7 +64,7 @@ fn init_state(state: &mut TreeViewState<Uuid>, node: &Node) {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::bottom("bottom panel").show_inside(ui, |ui|{
+        Panel::bottom("bottom panel").show(ui, |ui|{
             let dt = ui.input(|i| i.stable_dt);
             ui.label(format!(
                 "last frame: {:.0}ms, {}fps, tree view builder avgerage: {:.3}ms, min: {:.3}ms, max: {:.3}ms",
@@ -84,7 +84,7 @@ impl eframe::App for MyApp {
             );
         }
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 let start = Instant::now();
                 TreeView::new(ui.make_persistent_id("Names tree view")).show_state(

@@ -69,9 +69,9 @@ pub use state::*;
 /// This is just a trait alias for the collection of necessary traits that a node id
 /// must implement.
 #[cfg(not(feature = "persistence"))]
-pub trait NodeId: Clone + PartialEq + Eq + Hash {}
+pub trait NodeId: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
 #[cfg(not(feature = "persistence"))]
-impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash {}
+impl<T> NodeId for T where T: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
 
 #[cfg(feature = "persistence")]
 /// A node in the tree is identified by an id that must implement this trait.
@@ -508,7 +508,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     // Do context menu
     if let Some(fallback_context_menu) = fall_back_context_menu.take() {
         Popup::new(
-            Id::new(&id).with("egui_ltreeview_context_menu"),
+            Id::new(id).with("egui_ltreeview_context_menu"),
             ui.ctx().clone(),
             PopupAnchor::PointerFixed,
             ui.layer_id(),
