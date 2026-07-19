@@ -31,7 +31,7 @@ fn main() -> Result<(), eframe::Error> {
 #[derive(Default)]
 struct MyApp;
 
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct Node(i32);
 
 impl eframe::App for MyApp {
