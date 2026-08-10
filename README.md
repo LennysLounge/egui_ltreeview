@@ -3,7 +3,7 @@
 [![github](https://img.shields.io/badge/github-LennysLounge/egui_ltreeview-8da0cb?logo=github)](https://github.com/LennysLounge/egui_ltreeview)
 [![crates.io](https://img.shields.io/crates/v/egui_ltreeview)](https://crates.io/crates/egui_ltreeview)
 [![docs.rs](https://img.shields.io/docsrs/egui_ltreeview)](https://docs.rs/egui_ltreeview)
-[![egui_version](https://img.shields.io/badge/egui-0.35-blue)](https://github.com/emilk/egui)
+[![egui_version](https://img.shields.io/badge/egui-0.36-blue)](https://github.com/emilk/egui)
 
 This tree view widget implements all the common features of a tree view to get you
 up and running as fast as possible.
@@ -44,7 +44,8 @@ It also contains a [`playground`](https://github.com/LennysLounge/egui_ltreeview
 
 |egui Version   | compatible up to
 |--------------:|-----------------:
-|0.35           | current
+|0.36           | current
+|0.35           | up to 0.8.0
 |0.34           | up to 0.7.1
 |0.33           | up to 0.6.1
 |0.32           | up to 0.5.3
