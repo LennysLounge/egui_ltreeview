@@ -429,9 +429,9 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     ui.allocate_rect(tree_view_rect, Sense::hover());
 
     // Remember width of the tree view for next frame
-    state.min_width = state
-        .min_width
-        .at_least(builder_response.space_used.width());
+    if builder_response.space_used.width() > interaction_rect.width() {
+        state.min_width = builder_response.space_used.width();
+    }
     state.last_height = builder_response.space_used.height();
 
     let mut open_fallback_context_menu = false;
