@@ -1,10 +1,11 @@
-# v0.8.1-dev
+# v0.9.0-dev
 
 ### New features:
 
 ### Fixes:
 
 ### Changes:
+* Update egui to 0.36
 
 # v0.8.0
 
