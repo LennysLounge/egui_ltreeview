@@ -31,13 +31,13 @@ web-sys = "0.3.70"
 
 [features]
 default = []
-persistence = ["dep:serde", "egui/persistence", "uuid/serde"]
+persistence = ["dep:serde", "egui/persistence", "uuid/serde", "eframe/persistence"]
 doc = ["dep:make_table_of_contents"]
 
 [[example]]
 name = "persistence_without_tree"
-required-features = ["eframe/persistence"]
+
 
 [[example]]
 name = "persistence_with_tree"
-required-features = ["eframe/persistence", "persistence"]
+required-features = ["persistence"]

@@ -4,6 +4,7 @@
 
 ### Fixes:
 * When opening the fallback context menu for a selected node, it will now be supplied with the full list of selected ids instead of just the id of the clicked node. Closes #52
+* Fix a compile error in the persistence_with_tree example. Thanks to @XCemaXX for pointing this out.
 
 ### Changes:
 * Update egui to 0.36
