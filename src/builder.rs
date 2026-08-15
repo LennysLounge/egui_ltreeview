@@ -919,10 +919,15 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                                 .push(BuilderActions::SetSecondaryClicked(node.id.clone()));
                         }
                     } else {
-                        self.output
-                            .push(BuilderActions::OpenFallbackContextMenuForId(
-                                node.id.clone(),
-                            ));
+                        if self.state.is_selected(&node.id) {
+                            self.output
+                                .push(BuilderActions::OpenFallbackContextMenuForSelection);
+                        } else {
+                            self.output
+                                .push(BuilderActions::OpenFallbackContextMenuForId(
+                                    node.id.clone(),
+                                ));
+                        }
                     }
                     self.input = Input::None;
                 }
