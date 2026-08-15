@@ -14,7 +14,7 @@ include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "src/doc/doc.md"]
 features = ["doc"]
 
 [dependencies]
-egui = { version = "0.36" }
+egui = { version = "0.36", default-features = false }
 serde = { version = "1", features = ["derive"], optional = true }
 make_table_of_contents = { path = "make_table_of_contents", version = "0.1.0", optional = true }
 

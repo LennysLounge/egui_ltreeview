@@ -8,6 +8,7 @@
 
 ### Changes:
 * Update egui to 0.36
+* Disabled the default egui features to not force those onto a downstream user. Closes #50
 
 # v0.8.0
 
