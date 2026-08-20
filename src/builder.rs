@@ -402,7 +402,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             .settings
             .override_striped
             .unwrap_or(self.ui.visuals().striped);
-        if self.striped && is_striped {
+        if self.striped && is_striped && !self.state.is_selected(&node.id) {
             self.ui.painter().rect(
                 outer_rect,
                 self.ui.visuals().widgets.active.corner_radius,
