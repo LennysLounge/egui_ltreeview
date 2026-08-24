@@ -102,6 +102,8 @@ struct Settings {
     range_selection_modifier: Modifiers,
     set_selection_modifier: Modifiers,
     allow_drag_and_drop: bool,
+    fill_available_width: bool,
+    fill_available_height: bool,
 }
 
 enum ContextMenuActions {
@@ -122,6 +124,8 @@ impl Default for MyApp {
                 scroll_vertical: true,
                 range_selection_modifier: Modifiers::SHIFT,
                 set_selection_modifier: Modifiers::COMMAND,
+                fill_available_height: true,
+                fill_available_width: true,
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
@@ -149,6 +153,7 @@ impl eframe::App for MyApp {
                     .show(ui, |ui| {
                         show_tree_view(ui, self);
                     });
+                ui.take_available_width();
             });
         egui::CentralPanel::default().show(ui, |ui| {
             if self.tree_view_state.selected().len() > 1 {
@@ -215,6 +220,8 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
         } else {
             0.0
         })
+        .fill_available_width(app.settings.fill_available_width)
+        .fill_available_height(app.settings.fill_available_height)
         .allow_multi_selection(app.settings.allow_multi_select)
         .range_selection_modifier(app.settings.range_selection_modifier)
         .set_selection_modifier(app.settings.set_selection_modifier)
@@ -599,6 +606,14 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
                 egui::DragValue::new(&mut settings.min_height).range(0.0..=f32::INFINITY),
             );
         });
+        ui.end_row();
+
+        ui.label("fill available width");
+        ui.checkbox(&mut settings.fill_available_width, "");
+        ui.end_row();
+
+        ui.label("fill available height");
+        ui.checkbox(&mut settings.fill_available_height, "");
         ui.end_row();
     });
 }

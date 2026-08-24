@@ -54,9 +54,9 @@ mod node;
 mod state;
 
 use egui::{
-    self, layers::ShapeIdx, vec2, Align, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
-    Order, PointerButton, Popup, PopupAnchor, PopupKind, Pos2, Rangef, Rect, Response, Sense,
-    Shape, Ui, UiBuilder, Vec2,
+    self, layers::ShapeIdx, vec2, Align, Color32, EventFilter, Id, Key, LayerId, Layout, Modifiers,
+    NumExt, Order, PointerButton, Popup, PopupAnchor, PopupKind, Pos2, Rangef, Rect, Response,
+    Sense, Shape, Ui, UiBuilder, Vec2,
 };
 use std::{collections::HashSet, hash::Hash};
 
@@ -376,6 +376,18 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self.settings.min_height = height;
         self
     }
+
+    /// Set if the width of the tree view will automatically fill the available width.
+    pub fn fill_available_width(mut self, fill_available_width: bool) -> Self {
+        self.settings.fill_available_width = fill_available_width;
+        self
+    }
+
+    /// Set if the width of the tree view will automatically fill the available height.
+    pub fn fill_available_height(mut self, fill_available_height: bool) -> Self {
+        self.settings.fill_available_height = fill_available_height;
+        self
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -390,9 +402,18 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     // Calculate the desired size of the tree view widget.
     let interaction_rect = Rect::from_min_size(
         ui.cursor().min,
-        ui.available_size()
-            .at_least(vec2(settings.min_width, settings.min_height))
-            .at_least(vec2(state.min_width, state.last_height)),
+        vec2(
+            settings
+                .fill_available_width
+                .then_some(ui.available_width())
+                .unwrap_or(0.0),
+            settings
+                .fill_available_height
+                .then_some(ui.available_height())
+                .unwrap_or(0.0),
+        )
+        .at_least(vec2(settings.min_width, settings.min_height))
+        .at_least(vec2(state.min_width, state.last_height)),
     );
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
     let input = get_input::<NodeIdType>(ui, &interaction, id, settings);
@@ -431,7 +452,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     // Remember width of the tree view for next frame
     state.min_width = state
         .min_width
-        .at_least(builder_response.space_used.width());
+        .at_least(builder_response.space_used.width() + ui.style().spacing.item_spacing.x);
     state.last_height = builder_response.space_used.height();
 
     let mut open_fallback_context_menu = false;
@@ -579,6 +600,13 @@ pub struct TreeViewSettings {
     pub min_width: f32,
     /// The minimum height the tree can have.
     pub min_height: f32,
+    /// If the width of the tree view will automatically fill the available width.
+    /// This option will never cause the tree to appear wider than the maximum width.
+    /// Default is true.
+    pub fill_available_width: bool,
+    /// If the height of the tree view will automatically fill the available height.
+    /// Default is true.
+    pub fill_available_height: bool,
     /// If the tree view is allowed to select multiple nodes at once.
     /// Default is true.
     pub allow_multi_select: bool,
@@ -607,6 +635,8 @@ impl Default for TreeViewSettings {
             row_layout: Default::default(),
             min_width: 0.0,
             min_height: 0.0,
+            fill_available_width: true,
+            fill_available_height: true,
             allow_multi_select: true,
             range_selection_modifier: Modifiers::SHIFT,
             set_selection_modifier: Modifiers::COMMAND,
