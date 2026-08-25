@@ -393,7 +393,10 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
     ) -> (Option<Rect>, Option<Rect>, Rect) {
         let mut ui = ui.new_child(
             UiBuilder::new()
-                .max_rect(row_rect)
+                .max_rect(row_rect.expand2(vec2(
+                    -ui.spacing().item_spacing.x,
+                    -ui.spacing().item_spacing.y / 2.0,
+                )))
                 .layout(Layout::left_to_right(egui::Align::Center)),
         );
 
@@ -431,9 +434,6 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
                 (true, self.is_dir, true, self.config.has_custom_icon())
             }
         };
-
-        ui.set_height(self.node_height);
-        ui.add_space(original_item_spacing.x);
 
         // Add a little space so the closer/icon/label doesnt touch the left side
         // and add the indentation space.

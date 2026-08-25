@@ -95,6 +95,8 @@ struct Settings {
     row_layout: RowLayout,
     min_width_enabled: bool,
     min_width: f32,
+    max_width_enabled: bool,
+    max_width: f32,
     min_height_enabled: bool,
     min_height: f32,
     show_size: bool,
@@ -126,6 +128,7 @@ impl Default for MyApp {
                 set_selection_modifier: Modifiers::COMMAND,
                 fill_available_height: true,
                 fill_available_width: true,
+                max_width: 500.0,
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
@@ -214,6 +217,11 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             app.settings.min_width
         } else {
             0.0
+        })
+        .max_width(if app.settings.max_width_enabled {
+            app.settings.max_width
+        } else {
+            f32::INFINITY
         })
         .min_height(if app.settings.min_height_enabled {
             app.settings.min_height
@@ -383,7 +391,10 @@ fn show_file(
         .expect("All nodes should have a parent")
         .clone();
     let mut node = NodeBuilder::leaf(file.id)
-        .label(&file.name)
+        //.label(&file.name)
+        .label_ui(|ui| {
+            ui.add(egui::Label::new(&file.name).selectable(false).truncate());
+        })
         .activatable(file.activatable)
         .context_menu(|ui| {
             ui.set_width(100.0);
@@ -594,6 +605,16 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             ui.add_enabled(
                 settings.min_width_enabled,
                 egui::DragValue::new(&mut settings.min_width).range(0.0..=f32::INFINITY),
+            );
+        });
+        ui.end_row();
+
+        ui.label("max width");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut settings.max_width_enabled, "");
+            ui.add_enabled(
+                settings.max_width_enabled,
+                egui::DragValue::new(&mut settings.max_width).range(0.0..=f32::INFINITY),
             );
         });
         ui.end_row();

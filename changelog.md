@@ -4,6 +4,7 @@
 * Added options to control if the tree view will expand to take the available width or height
   * `fill_available_width` controls if the tree will automatically expand to take up the available width. Default is true.
   * `fill_available_height` controls if the tree will automatically expand to take up the available height. Default is true.
+* Added a `max_width` option to the tree view.
   
 ### Fixes:
 

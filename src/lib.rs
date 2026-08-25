@@ -371,6 +371,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self
     }
 
+    /// Set the maximum width the tree can have.
+    pub fn max_width(mut self, width: f32) -> Self {
+        self.settings.max_width = width;
+        self
+    }
+
     /// Set the minimum height the tree can have.
     pub fn min_height(mut self, height: f32) -> Self {
         self.settings.min_height = height;
@@ -413,7 +419,8 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
                 .unwrap_or(0.0),
         )
         .at_least(vec2(settings.min_width, settings.min_height))
-        .at_least(vec2(state.min_width, state.last_height)),
+        .at_least(vec2(state.min_width, state.last_height))
+        .at_most(vec2(settings.max_width, f32::INFINITY)),
     );
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
     let input = get_input::<NodeIdType>(ui, &interaction, id, settings);
@@ -437,6 +444,8 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             .layout(Layout::top_down(egui::Align::Min))
             .max_rect(interaction_rect),
     );
+    builder_ui.shrink_clip_rect(interaction_rect);
+    
     let mut builder_response = TreeViewBuilder::run(
         &mut builder_ui,
         state,
@@ -598,6 +607,8 @@ pub struct TreeViewSettings {
     pub row_layout: RowLayout,
     /// The minimum width the tree can have.
     pub min_width: f32,
+    /// The maximum width the tree can have.
+    pub max_width: f32,
     /// The minimum height the tree can have.
     pub min_height: f32,
     /// If the width of the tree view will automatically fill the available width.
@@ -634,6 +645,7 @@ impl Default for TreeViewSettings {
             indent_hint_style: Default::default(),
             row_layout: Default::default(),
             min_width: 0.0,
+            max_width: f32::INFINITY,
             min_height: 0.0,
             fill_available_width: true,
             fill_available_height: true,
