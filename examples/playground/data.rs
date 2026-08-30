@@ -18,12 +18,16 @@ pub struct Directory {
     pub custom_closer: bool,
     pub icon: bool,
     pub activatable: bool,
+    pub show_accessory: bool,
+    pub accessory_text: String,
 }
 pub struct File {
     pub id: Uuid,
     pub name: String,
     pub icon: bool,
     pub activatable: bool,
+    pub show_accessory: bool,
+    pub accessory_text: String,
 }
 
 impl Node {
@@ -35,6 +39,8 @@ impl Node {
             custom_closer: true,
             icon: false,
             activatable: false,
+            show_accessory: true,
+            accessory_text: "folder".to_owned(),
         })
     }
 
@@ -44,6 +50,8 @@ impl Node {
             name: String::from(name),
             icon: true,
             activatable: true,
+            show_accessory: false,
+            accessory_text: "sample".to_owned(),
         })
     }
 

@@ -376,6 +376,14 @@ fn show_dir(
             }
         });
     }
+    if dir.show_accessory {
+        node = node.accessory(|ui| {
+            ui.add_enabled(
+                false,
+                egui::Label::new(&dir.accessory_text).selectable(false),
+            );
+        });
+    }
     builder.node(node);
 
     for node in dir.children.iter() {
@@ -429,6 +437,14 @@ fn show_file(
             egui::Image::new(egui::include_image!("user.png"))
                 .tint(ui.visuals().widgets.noninteractive.fg_stroke.color)
                 .paint_at(ui, ui.max_rect());
+        });
+    }
+    if file.show_accessory {
+        node = node.accessory(|ui| {
+            ui.add_enabled(
+                false,
+                egui::Label::new(&file.accessory_text).selectable(false),
+            );
         });
     }
     builder.node(node);
@@ -678,6 +694,14 @@ fn show_node_content(ui: &mut Ui, node: &mut Node) {
                 ui.label("activatable");
                 ui.checkbox(&mut dir.activatable, "");
                 ui.end_row();
+
+                ui.label("show accessory");
+                ui.checkbox(&mut dir.show_accessory, "");
+                ui.end_row();
+
+                ui.label("accessory text");
+                ui.text_edit_singleline(&mut dir.accessory_text);
+                ui.end_row();
             }
             Node::File(file) => {
                 ui.label("Name");
@@ -690,6 +714,14 @@ fn show_node_content(ui: &mut Ui, node: &mut Node) {
 
                 ui.label("activatable");
                 ui.checkbox(&mut file.activatable, "");
+                ui.end_row();
+
+                ui.label("show accessory");
+                ui.checkbox(&mut file.show_accessory, "");
+                ui.end_row();
+
+                ui.label("accessory text");
+                ui.text_edit_singleline(&mut file.accessory_text);
                 ui.end_row();
             }
         }
