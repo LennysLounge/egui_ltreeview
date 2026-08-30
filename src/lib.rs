@@ -425,10 +425,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
                 .unwrap_or(0.0),
         )
         .at_least(vec2(settings.min_width, settings.min_height))
-        .at_least(vec2(
-            state.min_width,
-            state.last_height,
-        ))
+        .at_least(vec2(state.min_width, state.last_height))
         .at_most(vec2(settings.max_width, f32::INFINITY)),
     );
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
@@ -454,7 +451,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
             .max_rect(interaction_rect),
     );
     builder_ui.shrink_clip_rect(interaction_rect);
-    
+
     let mut builder_response = TreeViewBuilder::run(
         &mut builder_ui,
         state,
@@ -469,8 +466,8 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     // Remember width of the tree view for next frame
     state.min_width = state
-            .min_width
-            .at_least(builder_response.space_used.width());
+        .min_width
+        .at_least(builder_response.space_used.width());
     state.last_height = builder_response.space_used.height();
 
     let mut open_fallback_context_menu = false;
