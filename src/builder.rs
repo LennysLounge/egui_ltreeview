@@ -446,7 +446,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         // }
 
         // Draw node
-        let (closer, icon, label) = node.show_node(
+        let node_response = node.show_node(
             self.ui,
             self.settings,
             outer_rect,
@@ -455,7 +455,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         );
 
         // Do input
-        self.do_input_output(node, &outer_rect, closer.as_ref());
+        self.do_input_output(node, &outer_rect, node_response.closer_rect.as_ref());
 
         let should_open_context_menu = self
             .output
@@ -486,12 +486,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
 
         // Save position for indent hint
         if let Some(indent) = self.indents.last_mut() {
-            indent
-                .positions
-                .push(closer.or(icon).unwrap_or(label).left_center());
+            indent.positions.push(node_response.indent_anchor);
         }
 
-        label.right() - outer_rect.left()
+        node_response.desired_width
     }
 
     fn do_input_structually_visible(&mut self, node: &Node<NodeIdType>, row_rect: &Rect) {

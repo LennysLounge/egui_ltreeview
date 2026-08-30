@@ -54,9 +54,9 @@ mod node;
 mod state;
 
 use egui::{
-    self, layers::ShapeIdx, vec2, Align, Color32, EventFilter, Id, Key, LayerId, Layout, Modifiers,
-    NumExt, Order, PointerButton, Popup, PopupAnchor, PopupKind, Pos2, Rangef, Rect, Response,
-    Sense, Shape, Ui, UiBuilder, Vec2,
+    self, layers::ShapeIdx, vec2, Align, EventFilter, Id, Key, LayerId, Layout, Modifiers, NumExt,
+    Order, PointerButton, Popup, PopupAnchor, PopupKind, Pos2, Rangef, Rect, Response, Sense,
+    Shape, Ui, UiBuilder, Vec2,
 };
 use std::{collections::HashSet, hash::Hash};
 
@@ -394,6 +394,12 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
         self.settings.fill_available_height = fill_available_height;
         self
     }
+
+    /// Set the gap between elements within a node.
+    pub fn node_element_gap(mut self, node_element_gap: f32) -> Self {
+        self.settings.node_element_gap = node_element_gap;
+        self
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -419,7 +425,10 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
                 .unwrap_or(0.0),
         )
         .at_least(vec2(settings.min_width, settings.min_height))
-        .at_least(vec2(state.min_width, state.last_height))
+        .at_least(vec2(
+            state.min_width,
+            state.last_height,
+        ))
         .at_most(vec2(settings.max_width, f32::INFINITY)),
     );
     let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
@@ -460,8 +469,8 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     // Remember width of the tree view for next frame
     state.min_width = state
-        .min_width
-        .at_least(builder_response.space_used.width() + ui.style().spacing.item_spacing.x);
+            .min_width
+            .at_least(builder_response.space_used.width());
     state.last_height = builder_response.space_used.height();
 
     let mut open_fallback_context_menu = false;
@@ -635,6 +644,8 @@ pub struct TreeViewSettings {
     /// The default height of a node.
     /// If none is set the default height will be `interact_size.y` from `egui::style::Spacing`.
     pub default_node_height: Option<f32>,
+    /// The gap between elements within a node.
+    pub node_element_gap: f32,
 }
 
 impl Default for TreeViewSettings {
@@ -654,6 +665,7 @@ impl Default for TreeViewSettings {
             set_selection_modifier: Modifiers::COMMAND,
             allow_drag_and_drop: true,
             default_node_height: None,
+            node_element_gap: 2.0,
         }
     }
 }

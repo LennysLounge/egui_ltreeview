@@ -106,6 +106,7 @@ struct Settings {
     allow_drag_and_drop: bool,
     fill_available_width: bool,
     fill_available_height: bool,
+    node_element_gap: f32,
 }
 
 enum ContextMenuActions {
@@ -129,6 +130,7 @@ impl Default for MyApp {
                 fill_available_height: true,
                 fill_available_width: true,
                 max_width: 500.0,
+                node_element_gap: 2.0,
                 ..Default::default()
             },
             tree_view_state: TreeViewState::default(),
@@ -241,6 +243,7 @@ fn show_tree_view(ui: &mut Ui, app: &mut MyApp) -> Response {
             }
         })
         .allow_drag_and_drop(app.settings.allow_drag_and_drop)
+        .node_element_gap(app.settings.node_element_gap)
         .show_state(ui, &mut app.tree_view_state, |mut builder| {
             builder.node(
                 NodeBuilder::leaf(app.settings_id)
@@ -453,6 +456,15 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
             });
         });
         ui.end_row();
+
+        ui.label("Icon width:");
+        let mut icon_width = ui.global_style().spacing.icon_width;
+        ui.add(DragValue::new(&mut icon_width).range(0.0..=f32::INFINITY));
+        ui.global_style_mut(|style| {
+            style.spacing.icon_width = icon_width;
+        });
+        ui.end_row();
+
         ui.label("Scroll horizontal:");
         ui.checkbox(&mut settings.scroll_horizontal, "");
         ui.end_row();
@@ -635,6 +647,10 @@ fn show_settings(ui: &mut Ui, settings: &mut Settings) {
 
         ui.label("fill available height");
         ui.checkbox(&mut settings.fill_available_height, "");
+        ui.end_row();
+
+        ui.label("node element gap");
+        ui.add(DragValue::new(&mut settings.node_element_gap));
         ui.end_row();
     });
 }

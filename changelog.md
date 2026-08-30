@@ -1,6 +1,12 @@
 # v0.9.1-dev
 
 ### New features:
+* Added an accessory to a node.  
+An accessory is an area to the right of a nodes label and right aligned. Its primarily used to add
+buttons or extra information to a row. For example a 3d editor might have a "hide" button next to an object to hide this object in the rendered view.
+A text editor might use the accessory to show an indicator that the file has unsaved changes.
+  * To add an accessory to a node simply use the `NodeBuilder::accessory` method or implement the `NodeConfig::accessory` directly.
+  * In the render order the accessory is always rendered before the label of the node. This is to make the label correctly truncate its text when there is not enough space to show the full label.
 * Added options to control if the tree view will expand to take the available width or height
   * `fill_available_width` controls if the tree will automatically expand to take up the available width. Default is true.
   * `fill_available_height` controls if the tree will automatically expand to take up the available height. Default is true.
@@ -9,6 +15,8 @@
 ### Fixes:
 
 ### Changes:
+* The default label for a `NodeBuilder::label` now also truncates the label in adition to making it not selectable. The label is only truncated if the maximum width of the tree is small enough that the label cannot be shown in its full length.  
+This does not apply to custom labels using `NodeBuilder::label_ui`, there you will have to add truncation yourself.
 
 # v0.9.0
 

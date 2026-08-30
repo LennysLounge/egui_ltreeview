@@ -1,6 +1,6 @@
 use egui::{
-    emath, remap, vec2, Align, CursorIcon, Id, Label, Layout, Popup, PopupAnchor, PopupKind, Rect,
-    Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
+    emath, pos2, remap, vec2, Align, CursorIcon, Id, Label, Layout, Popup, PopupAnchor, PopupKind,
+    Pos2, Rect, Shape, Stroke, Ui, UiBuilder, Vec2, WidgetText,
 };
 
 use crate::{NodeId, RowLayout, TreeViewSettings};
@@ -18,6 +18,9 @@ pub trait NodeConfig<NodeIdType> {
     fn is_dir(&self) -> bool;
     /// Renders the label of this node
     fn label(&mut self, ui: &mut Ui);
+    /// Renders the right aligned accessory of this node.
+    #[allow(unused)]
+    fn accessory(&mut self, ui: &mut Ui) {}
     /// Whether or not the directory should be flattened into the parent directiron.
     ///
     /// A directory that is flattened is not visible in the tree and cannot be navigated to.
@@ -138,6 +141,8 @@ pub struct NodeBuilder<'add_ui, NodeIdType> {
     #[allow(clippy::type_complexity)]
     label: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
     #[allow(clippy::type_complexity)]
+    accessory: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
+    #[allow(clippy::type_complexity)]
     context_menu: Option<Box<dyn FnMut(&mut Ui) + 'add_ui>>,
 }
 impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
@@ -153,6 +158,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             icon: None,
             closer: None,
             label: None,
+            accessory: None,
             context_menu: None,
             default_open: true,
         }
@@ -170,6 +176,7 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
             icon: None,
             closer: None,
             label: None,
+            accessory: None,
             context_menu: None,
             default_open: true,
         }
@@ -258,7 +265,9 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
     pub fn label(self, text: impl Into<WidgetText> + 'add_ui) -> Self {
         let widget_text = text.into();
         self.label_ui(move |ui| {
-            ui.add(Label::new(widget_text.clone()).selectable(false));
+            //println!("available: {:?}", ui.available_width());
+            ui.add(Label::new(widget_text.clone()).selectable(false).truncate());
+            //println!("\tlabel width: {:?}", ui.min_rect().width());
         })
     }
 
@@ -268,6 +277,15 @@ impl<'add_ui, NodeIdType: NodeId> NodeBuilder<'add_ui, NodeIdType> {
         add_label: impl FnMut(&mut Ui) + 'add_ui,
     ) -> NodeBuilder<'add_ui, NodeIdType> {
         self.label = Some(Box::new(add_label));
+        self
+    }
+
+    /// Add a accessory to this node.
+    pub fn accessory(
+        mut self,
+        add_accessory: impl FnMut(&mut Ui) + 'add_ui,
+    ) -> NodeBuilder<'add_ui, NodeIdType> {
+        self.accessory = Some(Box::new(add_accessory));
         self
     }
 
@@ -343,6 +361,12 @@ impl<NodeIdType: NodeId> NodeConfig<NodeIdType> for NodeBuilder<'_, NodeIdType> 
         }
     }
 
+    fn accessory(&mut self, ui: &mut Ui) {
+        if let Some(accessory) = &mut self.accessory {
+            (accessory)(ui);
+        }
+    }
+
     fn has_context_menu(&self) -> bool {
         self.context_menu.is_some()
     }
@@ -390,7 +414,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
         row_rect: Rect,
         selected: bool,
         has_focus: bool,
-    ) -> (Option<Rect>, Option<Rect>, Rect) {
+    ) -> NodeResponse {
         let mut ui = ui.new_child(
             UiBuilder::new()
                 .max_rect(row_rect.expand2(vec2(
@@ -435,13 +459,11 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
             }
         };
 
-        // Add a little space so the closer/icon/label doesnt touch the left side
         // and add the indentation space.
-        ui.add_space(ui.spacing().item_spacing.x);
         ui.add_space(self.indent as f32 * settings.override_indent.unwrap_or(ui.spacing().indent));
 
         // Draw the closer
-        let closer = draw_closer.then(|| {
+        let closer_rect = if draw_closer {
             let (small_rect, big_rect) = ui
                 .spacing()
                 .icon_rectangles(ui.available_rect_before_wrap());
@@ -468,45 +490,109 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
                 }
                 ui.allocate_space(ui.available_size_before_wrap());
             });
-            res.response.rect
-        });
-        if closer.is_none() && reserve_closer {
-            ui.add_space(ui.spacing().icon_width);
-        }
+            ui.add_space(settings.node_element_gap);
+            Some(res.response.rect)
+        } else {
+            if reserve_closer {
+                ui.add_space(ui.spacing().icon_width);
+            }
+            None
+        };
+
+        // if let Some(closer_rect) = closer {
+        //     ui.painter()
+        //         .rect_filled(closer_rect, 0.0, Color32::YELLOW.linear_multiply(0.5));
+        // }
 
         // Draw icon
-        let icon = if draw_icon && self.config.has_custom_icon() {
+        let icon_rect = if draw_icon && self.config.has_custom_icon() {
             let (_, big_rect) = ui
                 .spacing()
                 .icon_rectangles(ui.available_rect_before_wrap());
-            Some(
-                ui.scope_builder(UiBuilder::new().max_rect(big_rect), |ui| {
-                    ui.set_min_size(big_rect.size());
-                    self.config.icon(ui);
-                })
-                .response
-                .rect,
-            )
+            let res = ui.scope_builder(UiBuilder::new().max_rect(big_rect), |ui| {
+                ui.set_min_size(big_rect.size());
+                self.config.icon(ui);
+            });
+            ui.add_space(settings.node_element_gap);
+            Some(res.response.rect)
         } else {
+            if reserve_icon {
+                ui.add_space(ui.spacing().icon_width + settings.node_element_gap);
+            }
             None
         };
-        if icon.is_none() && reserve_icon {
-            ui.add_space(ui.spacing().icon_width);
+
+        // if let Some(icon_rect) = icon {
+        //     ui.painter()
+        //         .rect_filled(icon_rect, 0.0, Color32::GREEN.linear_multiply(0.5));
+        // }
+
+        // We draw the accessory first so that we can get correct truncation behavior for the label
+        // when the max width of the tree is not wide enough.
+        // If instead the accessor should be truncated then the label would have to be drawn first.
+        // At this point the layout of the ui isnt really helpfull anymore so we layout completely ourself.
+
+        let mut label_rect = ui.available_rect_before_wrap();
+
+        // In order to let the tree view grow its width correctly between the minimal and maximal width
+        // we have to render the label and the accessory at the given position but with the width
+        // of the maximum width.
+        let mut max_width = if settings.max_width.is_infinite() {
+            f32::INFINITY
+        } else {
+            debug_assert!(row_rect.width().is_finite(), "tree view max width is finite but row rect width was infinit, that cant be and is bug");
+            debug_assert!(ui.available_width().is_finite(), "tree view width is finite but row available width was infinit, that cant be and is bug");
+            settings.max_width - (row_rect.width() - ui.available_width())
+        };
+
+        let accessory_rect = if max_width.is_infinite() {
+            Rect::from_min_max(
+                pos2(f32::NEG_INFINITY, label_rect.min.y),
+                label_rect.right_bottom(),
+            )
+        } else {
+            Rect::from_min_size(
+                label_rect.right_top() - vec2(max_width, 0.0),
+                vec2(max_width, label_rect.height()),
+            )
+        };
+
+        let mut accessory_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(accessory_rect)
+                .layout(Layout::right_to_left(Align::Center)),
+        );
+        accessory_ui.spacing_mut().item_spacing = original_item_spacing;
+        self.config.accessory(&mut accessory_ui);
+
+        if accessory_ui.min_rect().width() > 0.0 {
+            let width_used = accessory_ui.min_rect().width() + settings.node_element_gap;
+            *label_rect.right_mut() -= width_used;
+            max_width -= width_used;
         }
 
-        ui.add_space(2.0);
         // Draw label
-        let label = ui
-            .scope(|ui| {
-                ui.spacing_mut().item_spacing = original_item_spacing;
-                self.config.label(ui);
-            })
-            .response
-            .rect;
+        let mut label_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(Rect::from_min_size(
+                    label_rect.min,
+                    vec2(max_width, label_rect.height()),
+                ))
+                .layout(Layout::left_to_right(Align::Center)),
+        );
+        label_ui.spacing_mut().item_spacing = original_item_spacing;
+        self.config.label(&mut label_ui);
 
-        ui.add_space(original_item_spacing.x);
+        *label_rect.left_mut() += label_ui.min_rect().width();
 
-        (closer, icon, label)
+        NodeResponse {
+            closer_rect: closer_rect,
+            indent_anchor: closer_rect
+                .or(icon_rect)
+                .unwrap_or(label_ui.min_rect())
+                .left_center(),
+            desired_width: row_rect.width() - label_rect.width(),
+        }
     }
 
     pub(crate) fn show_context_menu_popup(&mut self, ui: &mut Ui, should_open: bool) -> bool {
@@ -564,4 +650,10 @@ pub struct CloserState {
     pub is_open: bool,
     /// Wether the pointer is hovering over the closer.
     pub is_hovered: bool,
+}
+
+pub(crate) struct NodeResponse {
+    pub closer_rect: Option<Rect>,
+    pub indent_anchor: Pos2,
+    pub desired_width: f32,
 }
