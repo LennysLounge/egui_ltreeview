@@ -13,6 +13,7 @@ A text editor might use the accessory to show an indicator that the file has uns
 * Added a `max_width` option to the tree view.
   
 ### Fixes:
+* Fixes an issue when striping is active where the first node in a selection would cover the striping. Closes #57.
 
 ### Changes:
 * The default label for a `NodeBuilder::label` now also truncates the label in adition to making it not selectable. The label is only truncated if the maximum width of the tree is small enough that the label cannot be shown in its full length.  

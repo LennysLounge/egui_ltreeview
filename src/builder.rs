@@ -397,22 +397,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
     }
 
     fn node_visible_in_clip_rect(&mut self, node: &mut Node<NodeIdType>, outer_rect: Rect) -> f32 {
-        // Add striping
-        let is_striped = self
-            .settings
-            .override_striped
-            .unwrap_or(self.ui.visuals().striped);
-        if self.striped && is_striped {
-            self.ui.painter().rect(
-                outer_rect,
-                self.ui.visuals().widgets.active.corner_radius,
-                self.ui.visuals().faint_bg_color,
-                Stroke::NONE,
-                egui::StrokeKind::Inside,
-            );
-        }
-        self.striped = !self.striped;
-
         // Draw background
         if self.state.is_selected(&node.id) {
             let (shape_idx, rect) = self
@@ -432,6 +416,22 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         } else {
             self.selection_background = None;
         }
+
+        // Add striping
+        let is_striped = self
+            .settings
+            .override_striped
+            .unwrap_or(self.ui.visuals().striped);
+        if self.striped && is_striped {
+            self.ui.painter().rect(
+                outer_rect,
+                self.ui.visuals().widgets.active.corner_radius,
+                self.ui.visuals().faint_bg_color,
+                Stroke::NONE,
+                egui::StrokeKind::Inside,
+            );
+        }
+        self.striped = !self.striped;
 
         // Draw pivot and cursor for debugging
         // if self.state.is_selection_pivot(&node.id) {
