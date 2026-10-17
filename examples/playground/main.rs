@@ -141,10 +141,10 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::bottom(Id::new("footer")).show(ui, |ui| {
+        Panel::bottom(Id::unique("footer")).show(ui, |ui| {
             ui.label(format!("App version: {}", env!("CARGO_PKG_VERSION")))
         });
-        Panel::left(Id::new("tree view"))
+        Panel::left(Id::unique("tree view"))
             .resizable(true)
             .show(ui, |ui| {
                 ScrollArea::both()
@@ -194,7 +194,7 @@ impl eframe::App for MyApp {
             let mut open = true;
             self.tree.find_mut(&node_id, &mut |node| {
                 egui::Window::new(node.name())
-                    .id(Id::new(node_id))
+                    .id(Id::unique(node_id))
                     .open(&mut open)
                     .show(ui, |ui| {
                         show_node_content(ui, node);

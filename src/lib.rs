@@ -446,7 +446,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
 
     let mut builder_ui = ui.new_child(
         UiBuilder::new()
-            .id_salt(ui.id())
+            .id_salt(ui.scope_id())
             .layout(Layout::top_down(egui::Align::Min))
             .max_rect(interaction_rect),
     );
@@ -550,7 +550,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     // Do context menu
     if let Some(fallback_context_menu) = fall_back_context_menu.take() {
         Popup::new(
-            Id::new(id).with("egui_ltreeview_context_menu"),
+            id.with("egui_ltreeview_context_menu"),
             ui.ctx().clone(),
             PopupAnchor::PointerFixed,
             ui.layer_id(),

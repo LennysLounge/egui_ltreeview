@@ -44,7 +44,7 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        Panel::left(Id::new("left")).show(ui, |ui| {
+        Panel::left(Id::unique("left")).show(ui, |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 let (_response, actions) = TreeView::new(ui.make_persistent_id("Names tree view"))
                     .show_state(ui, &mut self.tree, |builder| {
