@@ -1,7 +1,4 @@
-use std::{
-    time::{Duration, Instant},
-    u64,
-};
+use std::time::{Duration, Instant};
 
 use egui::{Label, NumExt, Panel, ThemePreference};
 use egui_ltreeview::{NodeConfig, TreeView, TreeViewBuilder, TreeViewState};
