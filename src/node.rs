@@ -484,7 +484,7 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
                         },
                     );
                 } else {
-                    let icon_id = Id::new(&self.id).with("tree view closer icon");
+                    let icon_id = Id::unique(&self.id).with("tree view closer icon");
                     let openness = ui.ctx().animate_bool(icon_id, self.is_open);
                     paint_default_icon(ui, openness, &small_rect, is_hovered);
                 }
@@ -598,7 +598,9 @@ impl<'config, NodeIdType: NodeId> Node<'config, NodeIdType> {
     pub(crate) fn show_context_menu_popup(&mut self, ui: &mut Ui, should_open: bool) -> bool {
         if self.config.has_context_menu() {
             Popup::new(
-                ui.id().with(&self.id).with("egui_ltreeview_context_menu"),
+                ui.scope_id()
+                    .with(&self.id)
+                    .with("egui_ltreeview_context_menu"),
                 ui.ctx().clone(),
                 PopupAnchor::PointerFixed,
                 ui.layer_id(),
