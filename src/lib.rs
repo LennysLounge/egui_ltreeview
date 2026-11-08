@@ -165,22 +165,131 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             )
         });
 
-        let (builder_response, tree_view_rect) = draw_foreground(
-            ui,
-            id,
-            &settings,
-            state,
-            build_tree_view,
-            &mut fallback_context_menu,
-        );
+        let builder_response = draw_foreground(ui, id, &settings, state, build_tree_view);
+
+        // Remember width of the tree view for next frame
+        state.min_width = state
+            .min_width
+            .at_least(builder_response.space_used.width());
+        state.last_height = builder_response.space_used.height();
+
+        let mut actions = Vec::new();
+        let mut open_fallback_context_menu = false;
+        for action in builder_response.output {
+            match action {
+                BuilderActions::OpenFallbackContextMenuForSelection => {
+                    open_fallback_context_menu = true;
+                    state.show_fallback_context_menu_state = FallbackContextMenuState::ForSelection;
+                }
+                BuilderActions::OpenFallbackContextMenuForId(id) => {
+                    open_fallback_context_menu = true;
+                    state.show_fallback_context_menu_state = FallbackContextMenuState::ForId(id);
+                }
+                BuilderActions::OpenFallbackContextMenuForNothing => {
+                    open_fallback_context_menu = true;
+                    state.show_fallback_context_menu_state = FallbackContextMenuState::ForNothing;
+                }
+                BuilderActions::SetDragged(dragged) => {
+                    state.set_dragged(dragged);
+                }
+                BuilderActions::SetSecondaryClicked(id) => {
+                    state.secondary_selection = Some(id);
+                }
+                BuilderActions::ActivateSelection(selection) => {
+                    actions.push(Action::Activate(Activate {
+                        selected: selection.clone(),
+                        modifiers: ui.ctx().input(|i| i.modifiers),
+                    }));
+                }
+                BuilderActions::ActivateThis(id) => {
+                    actions.push(Action::Activate(Activate {
+                        selected: vec![id],
+                        modifiers: ui.ctx().input(|i| i.modifiers),
+                    }));
+                }
+                BuilderActions::SelectOneNode(id, scroll_to_rect) => {
+                    state.set_one_selected(id.clone());
+                    state.set_cursor(None);
+                    if let Some(scroll_to_rect) = scroll_to_rect {
+                        ui.scroll_to_rect(scroll_to_rect, None);
+                    }
+                    actions.push(Action::SetSelected(state.selected().clone()));
+                }
+                BuilderActions::ToggleSelection(id, scroll_to_rect) => {
+                    state.toggle_selected(&id);
+                    state.set_pivot(Some(id));
+                    if let Some(scroll_to_rect) = scroll_to_rect {
+                        ui.scroll_to_rect(scroll_to_rect, None);
+                    }
+                    actions.push(Action::SetSelected(state.selected().clone()));
+                }
+                BuilderActions::ShiftSelect(ids) => {
+                    state.set_selected_dont_change_pivot(ids);
+                    actions.push(Action::SetSelected(state.selected().clone()));
+                }
+                BuilderActions::Select {
+                    selection,
+                    pivot,
+                    cursor,
+                    scroll_to_rect,
+                } => {
+                    state.set_selected(selection);
+                    state.set_pivot(Some(pivot));
+                    state.set_cursor(Some(cursor));
+                    ui.scroll_to_rect(scroll_to_rect, None);
+                    actions.push(Action::SetSelected(state.selected().clone()));
+                }
+                BuilderActions::SetCursor(id, scroll_to_rect) => {
+                    state.set_cursor(Some(id));
+                    ui.scroll_to_rect(scroll_to_rect, None);
+                }
+                BuilderActions::SetOpenness(id, is_open) => {
+                    state.set_openness(id.clone(), is_open);
+                    if is_open {
+                        actions.push(Action::DirOpened(id));
+                    } else {
+                        actions.push(Action::DirClosed(id));
+                    }
+                }
+                BuilderActions::SetLastclicked(id) => {
+                    state.set_last_clicked(&id);
+                }
+                BuilderActions::ClearSelection => {
+                    state.set_selected(vec![]);
+                    actions.push(Action::SetSelected(state.selected().clone()));
+                }
+            }
+        }
+
+        // Do context menu
+        if let Some(fallback_context_menu) = fallback_context_menu.take() {
+            Popup::new(
+                id.with("egui_ltreeview_context_menu"),
+                ui.ctx().clone(),
+                PopupAnchor::PointerFixed,
+                ui.layer_id(),
+            )
+            .kind(PopupKind::Menu)
+            .layout(Layout::top_down_justified(Align::Min))
+            .style(egui::containers::menu::menu_style)
+            .gap(0.0)
+            .open_memory(open_fallback_context_menu.then_some(egui::SetOpenCommand::Bool(true)))
+            .show(|ui| match &state.show_fallback_context_menu_state {
+                FallbackContextMenuState::ForSelection => {
+                    fallback_context_menu(ui, state.selected());
+                }
+                FallbackContextMenuState::ForId(id) => {
+                    fallback_context_menu(ui, &vec![id.clone()]);
+                }
+                FallbackContextMenuState::ForNothing => {
+                    fallback_context_menu(ui, &Vec::new());
+                }
+            });
+        }
 
         if !settings.allow_multi_select {
             state.prune_selection_to_single_id();
         }
-        // Remember the size of the tree for next frame.
-        //state.size = response.rect.size();
-
-        //draw_background(ui, &ui_data);
 
         if ui.memory(|m| m.has_focus(id)) {
             // If the widget is focused but no node is selected we want to select any node
@@ -197,7 +306,6 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             ui.memory_mut(|m| m.request_focus(id));
         }
 
-        let mut actions = Vec::new();
         // Create a drag or move action.
         if builder_response.interaction.dragged() {
             if let Some((drop_id, position)) = &builder_response.drop_target {
@@ -234,23 +342,14 @@ impl<'context_menu, NodeIdType: NodeId> TreeView<'context_menu, NodeIdType> {
             }
         }
 
-        if builder_response.selected {
-            actions.push(Action::SetSelected(state.selected().clone()));
-        }
-
-        if let Some(nodes_to_activate) = builder_response.activate {
-            actions.push(Action::Activate(Activate {
-                selected: nodes_to_activate.clone(),
-                modifiers: ui.ctx().input(|i| i.modifiers),
-            }));
-        }
-
         if builder_response.interaction.drag_stopped() {
             state.reset_dragged();
         }
 
         (
-            builder_response.interaction.with_new_rect(tree_view_rect),
+            builder_response
+                .interaction
+                .with_new_rect(builder_response.allocated_space),
             actions,
         )
     }
@@ -409,8 +508,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     settings: &TreeViewSettings,
     state: &mut TreeViewState<NodeIdType>,
     build_tree_view: impl FnOnce(&mut TreeViewBuilder<'_, NodeIdType>),
-    fall_back_context_menu: &mut Option<Box<dyn FnOnce(&mut Ui, &Vec<NodeIdType>) + 'context_menu>>,
-) -> (TreeViewBuilderResponse<NodeIdType>, Rect) {
+) -> TreeViewBuilderResponse<NodeIdType> {
     // Calculate the desired size of the tree view widget.
     let interaction_rect = Rect::from_min_size(
         ui.cursor().min,
@@ -428,7 +526,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         .at_least(vec2(state.min_width, state.last_height))
         .at_most(vec2(settings.max_width, f32::INFINITY)),
     );
-    let interaction = interact_no_expansion(ui, interaction_rect, id, Sense::click_and_drag());
+    let interaction = ui.interact(interaction_rect, id, Sense::click_and_drag());
     let input = get_input::<NodeIdType>(ui, &interaction, id, settings);
     let ui_data = UiData {
         interaction,
@@ -452,7 +550,7 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
     );
     builder_ui.shrink_clip_rect(interaction_rect);
 
-    let mut builder_response = TreeViewBuilder::run(
+    let builder_response = TreeViewBuilder::run(
         &mut builder_ui,
         state,
         settings,
@@ -460,120 +558,9 @@ fn draw_foreground<'context_menu, NodeIdType: NodeId>(
         input,
         build_tree_view,
     );
+    ui.allocate_rect(builder_response.allocated_space, Sense::hover());
 
-    let tree_view_rect = builder_response.space_used.union(interaction_rect);
-    ui.allocate_rect(tree_view_rect, Sense::hover());
-
-    // Remember width of the tree view for next frame
-    state.min_width = state
-        .min_width
-        .at_least(builder_response.space_used.width());
-    state.last_height = builder_response.space_used.height();
-
-    let mut open_fallback_context_menu = false;
-    for action in builder_response.output {
-        match action {
-            BuilderActions::OpenFallbackContextMenuForSelection => {
-                open_fallback_context_menu = true;
-                state.show_fallback_context_menu_state = FallbackContextMenuState::ForSelection;
-            }
-            BuilderActions::OpenFallbackContextMenuForId(id) => {
-                open_fallback_context_menu = true;
-                state.show_fallback_context_menu_state = FallbackContextMenuState::ForId(id);
-            }
-            BuilderActions::OpenFallbackContextMenuForNothing => {
-                open_fallback_context_menu = true;
-                state.show_fallback_context_menu_state = FallbackContextMenuState::ForNothing;
-            }
-            BuilderActions::SetDragged(dragged) => {
-                state.set_dragged(dragged);
-            }
-            BuilderActions::SetSecondaryClicked(id) => {
-                state.secondary_selection = Some(id);
-            }
-            BuilderActions::ActivateSelection(selection) => {
-                builder_response.activate = Some(selection);
-            }
-            BuilderActions::ActivateThis(id) => {
-                builder_response.activate = Some(vec![id]);
-            }
-            BuilderActions::SelectOneNode(id, scroll_to_rect) => {
-                builder_response.selected = true;
-                state.set_one_selected(id.clone());
-                state.set_cursor(None);
-                if let Some(scroll_to_rect) = scroll_to_rect {
-                    ui.scroll_to_rect(scroll_to_rect, None);
-                }
-            }
-            BuilderActions::ToggleSelection(id, scroll_to_rect) => {
-                builder_response.selected = true;
-                state.toggle_selected(&id);
-                state.set_pivot(Some(id));
-                if let Some(scroll_to_rect) = scroll_to_rect {
-                    ui.scroll_to_rect(scroll_to_rect, None);
-                }
-            }
-            BuilderActions::ShiftSelect(ids) => {
-                builder_response.selected = true;
-                state.set_selected_dont_change_pivot(ids);
-            }
-            BuilderActions::Select {
-                selection,
-                pivot,
-                cursor,
-                scroll_to_rect,
-            } => {
-                builder_response.selected = true;
-                state.set_selected(selection);
-                state.set_pivot(Some(pivot));
-                state.set_cursor(Some(cursor));
-                ui.scroll_to_rect(scroll_to_rect, None);
-            }
-            BuilderActions::SetCursor(id, scroll_to_rect) => {
-                state.set_cursor(Some(id));
-                ui.scroll_to_rect(scroll_to_rect, None);
-            }
-            BuilderActions::SetOpenness(id, is_open) => {
-                state.set_openness(id, is_open);
-            }
-            BuilderActions::SetLastclicked(id) => {
-                state.set_last_clicked(&id);
-            }
-            BuilderActions::ClearSelection => {
-                state.set_selected(vec![]);
-                builder_response.selected = true;
-            }
-        }
-    }
-    builder_response.output = Vec::new();
-
-    // Do context menu
-    if let Some(fallback_context_menu) = fall_back_context_menu.take() {
-        Popup::new(
-            id.with("egui_ltreeview_context_menu"),
-            ui.ctx().clone(),
-            PopupAnchor::PointerFixed,
-            ui.layer_id(),
-        )
-        .kind(PopupKind::Menu)
-        .layout(Layout::top_down_justified(Align::Min))
-        .style(egui::containers::menu::menu_style)
-        .gap(0.0)
-        .open_memory(open_fallback_context_menu.then_some(egui::SetOpenCommand::Bool(true)))
-        .show(|ui| match &state.show_fallback_context_menu_state {
-            FallbackContextMenuState::ForSelection => {
-                fallback_context_menu(ui, state.selected());
-            }
-            FallbackContextMenuState::ForId(id) => {
-                fallback_context_menu(ui, &vec![id.clone()]);
-            }
-            FallbackContextMenuState::ForNothing => {
-                fallback_context_menu(ui, &Vec::new());
-            }
-        });
-    }
-
-    (builder_response, tree_view_rect)
+    builder_response
 }
 
 /// A position inside a directory node.
@@ -749,6 +736,10 @@ pub enum Action<NodeIdType> {
     /// Indicates that the nodes should be moved to an
     /// external target (e.g., another panel).
     MoveExternal(DragAndDropExternal<NodeIdType>),
+    /// Triggered when a directory is opened.
+    DirOpened(NodeIdType),
+    /// Triggered when a directory is closed.
+    DirClosed(NodeIdType),
 }
 
 /// Represents a drag-and-drop interaction where nodes are dragged outside the TreeView.
@@ -791,15 +782,6 @@ pub struct Activate<NodeIdType> {
     pub selected: Vec<NodeIdType>,
     /// The modifiers that were active when this action was generated.
     pub modifiers: Modifiers,
-}
-
-/// Interact with the ui without egui adding any extra space.
-fn interact_no_expansion(ui: &mut Ui, rect: Rect, id: Id, sense: Sense) -> Response {
-    let spacing_before = ui.spacing().clone();
-    ui.spacing_mut().item_spacing = Vec2::ZERO;
-    let res = ui.interact(rect, id, sense);
-    *ui.spacing_mut() = spacing_before;
-    res
 }
 
 enum DropQuarter {

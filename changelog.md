@@ -1,6 +1,7 @@
 # v.0.10.1-dev
 
 ### New features:
+* Added actions `DirOpened(NodeIdType)` and `DirClosed(NodeIdType)` which are produced whenever a directory toggles its openness state. Closes #63.
 
 ### Fixes:
 

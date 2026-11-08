@@ -37,14 +37,13 @@ struct IndentState<NodeIdType> {
 }
 
 pub(crate) struct TreeViewBuilderResponse<NodeIdType> {
-    pub(crate) interaction: Response,
-    pub(crate) drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
-    pub(crate) drop_on_self: bool,
-    pub(crate) activate: Option<Vec<NodeIdType>>,
-    pub(crate) selected: bool,
-    pub(crate) space_used: Rect,
-    pub(crate) output: Vec<BuilderActions<NodeIdType>>,
-    pub(crate) drop_marker_idx: ShapeIdx,
+    pub interaction: Response,
+    pub drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
+    pub drop_on_self: bool,
+    pub space_used: Rect,
+    pub allocated_space: Rect,
+    pub output: Vec<BuilderActions<NodeIdType>>,
+    pub drop_marker_idx: ShapeIdx,
 }
 
 pub(crate) enum BuilderActions<NodeIdType> {
@@ -87,8 +86,6 @@ pub struct TreeViewBuilder<'ui, NodeIdType: NodeId> {
     context_menu_was_open: bool,
     drop_target: Option<(NodeIdType, DirPosition<NodeIdType>)>,
     drop_on_self: bool,
-    activate: Option<Vec<NodeIdType>>,
-    selected: bool,
     space_used: Rect,
     output: Vec<BuilderActions<NodeIdType>>,
 }
@@ -123,8 +120,6 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
             context_menu_was_open: false,
             drop_target: None,
             drop_on_self: false,
-            activate: None,
-            selected: false,
             space_used: Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
             output: Vec::new(),
             ui,
@@ -136,11 +131,10 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
         me.finish_unfinished_input();
 
         TreeViewBuilderResponse {
+            allocated_space: me.space_used.union(me.ui_data.interaction.rect),
             interaction: me.ui_data.interaction,
             drop_target: me.drop_target,
             drop_on_self: me.drop_on_self,
-            activate: me.activate,
-            selected: me.selected,
             space_used: me.space_used,
             output: me.output,
             drop_marker_idx: me.ui_data.drop_marker_idx,
