@@ -235,7 +235,7 @@ impl<'ui, NodeIdType: NodeId> TreeViewBuilder<'ui, NodeIdType> {
                         // this dir doesnt have children so we just return
                         return;
                     };
-                    self.ui.clip_rect().clamp(pos2(top.x, last_child.y))
+                    clip_rect.clamp(pos2(top.x, last_child.y))
                 };
                 self.ui.painter().line_segment(
                     [top, bottom],

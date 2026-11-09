@@ -4,6 +4,7 @@
 * Added actions `DirOpened(NodeIdType)` and `DirClosed(NodeIdType)` which are produced whenever a directory toggles its openness state. Closes #63.
 
 ### Fixes:
+* Fixes a panic when shrinking the tree view horizontally to zero width. Closes #64
 
 ### Changes:
 
